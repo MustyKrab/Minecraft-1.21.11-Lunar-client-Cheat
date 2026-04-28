@@ -1,12 +1,10 @@
 package jack.client.gui;
 
 import jack.client.JackClient;
-import jack.client.module.Category;
 import jack.client.module.Module;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
-import org.lwjgl.glfw.GLFW;
 
 public class ClickGUI extends Screen {
     private int x = 100;
@@ -41,11 +39,8 @@ public class ClickGUI extends Screen {
             context.drawText(client.textRenderer, module.getName(), x + 10, moduleY, color, true);
             moduleY += 15;
         }
-
-        super.render(context, mouseX, mouseY, delta);
     }
 
-    @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button == 0) { // Left click
             // Header drag check
@@ -66,25 +61,23 @@ public class ClickGUI extends Screen {
                 moduleY += 15;
             }
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return false;
     }
 
-    @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         if (button == 0) {
             dragging = false;
         }
-        return super.mouseReleased(mouseX, mouseY, button);
+        return false;
     }
 
-    @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
         if (dragging) {
             x = (int) (mouseX - dragX);
             y = (int) (mouseY - dragY);
             return true;
         }
-        return super.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
+        return false;
     }
 
     @Override

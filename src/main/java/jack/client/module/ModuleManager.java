@@ -3,7 +3,6 @@ package jack.client.module;
 import jack.client.module.modules.combat.Killaura;
 import jack.client.module.modules.combat.Velocity;
 import jack.client.module.modules.player.NoFall;
-import jack.client.module.modules.render.ESP;
 import net.minecraft.network.packet.Packet;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,9 +11,6 @@ public class ModuleManager {
     private final List<Module> modules = new ArrayList<>();
 
     public void init() {
-        // Render
-        modules.add(new ESP());
-        
         // Combat
         modules.add(new Velocity());
         modules.add(new Killaura());

@@ -31,7 +31,7 @@ public class JackClient implements ModInitializer {
             "key.jackclient.gui",
             InputUtil.Type.KEYSYM,
             GLFW.GLFW_KEY_RIGHT_SHIFT,
-            "category.jackclient.main"
+            "jackclient"
         ));
 
         // Register Tick Event to check for keybinds
