@@ -1,5 +1,6 @@
 package jack.client.module;
 
+import jack.client.module.modules.combat.Killaura;
 import jack.client.module.modules.combat.Velocity;
 import jack.client.module.modules.player.NoFall;
 import jack.client.module.modules.render.ESP;
@@ -16,6 +17,7 @@ public class ModuleManager {
         
         // Combat
         modules.add(new Velocity());
+        modules.add(new Killaura());
         
         // Player
         modules.add(new NoFall());
@@ -42,7 +44,6 @@ public class ModuleManager {
         }
     }
 
-    // Returns true if the packet should be cancelled
     public boolean onSendPacket(Packet<?> packet) {
         for (Module module : modules) {
             if (module.isEnabled()) {
@@ -54,7 +55,6 @@ public class ModuleManager {
         return false;
     }
 
-    // Returns true if the packet should be cancelled
     public boolean onReceivePacket(Packet<?> packet) {
         for (Module module : modules) {
             if (module.isEnabled()) {
