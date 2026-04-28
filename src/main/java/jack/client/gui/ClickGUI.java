@@ -44,7 +44,7 @@ public class ClickGUI extends Screen {
                 dragging = true;
                 dragX = mouseX - x;
                 dragY = mouseY - y;
-            } els if (mouseX >= sliderX && mouseX <= sliderX + sliderWidth && mouseY >= sliderY && mouseY <= sliderY + sliderHeight) {
+            } else if (mouseX >= sliderX && mouseX <= sliderX + sliderWidth && mouseY >= sliderY && mouseY <= sliderY + sliderHeight) {
                 draggingSlider = true;
             } else {
                 int moduleY = y + 25;
@@ -66,7 +66,7 @@ public class ClickGUI extends Screen {
         }
 
         if (draggingSlider && killaura != null) {
-            float pick = (&loat) (mouseX - sliderX) / (float) sliderWidth;
+            float pick = (float) (mouseX - sliderX) / (float) sliderWidth;
             if (pick < 0.0f) pick = 0.0f;
             if (pick > 1.0f) pick = 1.0f;
             float newReach = 3.0f + (pick * 3.0f); // 3.0 to 6.0
@@ -93,8 +93,8 @@ public class ClickGUI extends Screen {
         // Draw Slider
         if (killaura != null) {
             context.fill(sliderX, sliderY, sliderX + sliderWidth, sliderY + sliderHeight, 0xFF555555);
-            float pick = (killaura.getReach() -  3.0f) / 3.0f;
-            context.fill(sliderX, sliderY, sliderX + (int((sliderWidth * pick)), sliderY + sliderHeight, 0xFF00FF00);
+            float pick = (killaura.getReach() - 3.0f) / 3.0f;
+            context.fill(sliderX, sliderY, slidex + (int)(sliderWidth * pick), sliderY + sliderHeight, 0xFF00FF00);
             context.drawText(client.textRenderer, "Killaura Reach: " + String.format("%.2f", killaura.getReach()), sliderX, sliderY - 10, 0xFFFFFFFF, true);
         }
     }
