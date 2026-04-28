@@ -44,7 +44,7 @@ public class ClickGUI extends Screen {
                 dragging = true;
                 dragX = mouseX - x;
                 dragY = mouseY - y;
-            } else if (mouseX >= sliderX && mouseX <= sliderX + sliderWidth && mouseY >= sliderY && mouseY <= sliderY + sliderHeight) {
+            } els if (mouseX >= sliderX && mouseX <= sliderX + sliderWidth && mouseY >= sliderY && mouseY <= sliderY + sliderHeight) {
                 draggingSlider = true;
             } else {
                 int moduleY = y + 25;
@@ -93,7 +93,7 @@ public class ClickGUI extends Screen {
         // Draw Slider
         if (killaura != null) {
             context.fill(sliderX, sliderY, sliderX + sliderWidth, sliderY + sliderHeight, 0xFF555555);
-            float pick = (killaura.getReach() - 3.0f) / 3.0f;
+            float pick = (killaura.getReach() -  3.0f) / 3.0f;
             context.fill(sliderX, sliderY, slidex + (int)(sliderWidth * pick), sliderY + sliderHeight, 0xFF00FF00);
             context.drawText(client.textRenderer, "Killaura Reach: " + String.format("%.2f", killaura.getReach()), sliderX, sliderY - 10, 0xFFFFFFFF, true);
         }
