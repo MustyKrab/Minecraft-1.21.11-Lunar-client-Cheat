@@ -2,8 +2,6 @@ package jack.client.module;
 
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.render.Camera;
-import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.network.packet.Packet;
 
 public abstract class Module {
@@ -49,7 +47,6 @@ public abstract class Module {
     
     public void onTick() {}
     public void onRender(DrawContext context, float tickDelta) {}
-    public void onWorldRender(MatrixStack matrices, Camera camera) {}
 
     // Packet hooks. Return true to cancel the packet.
     public boolean onSendPacket(Packet<?> packet) { return false; }

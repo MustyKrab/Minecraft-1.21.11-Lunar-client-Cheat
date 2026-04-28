@@ -9,8 +9,6 @@ import java.util.ArrayList;
 import java.util.List;
 import jack.client.module.modules.render.Tracers;
 import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.render.Camera;
-import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.network.packet.Packet;
 
 public class ModuleManager {
@@ -55,14 +53,6 @@ public class ModuleManager {
         for (Module module : modules) {
             if (module.isEnabled()) {
                 module.onRender(context, tickDelta);
-            }
-        }
-    }
-    
-    public void onWorldRender(MatrixStack matrices, Camera camera) {
-        for (Module module : modules) {
-            if (module.isEnabled()) {
-                module.onWorldRender(matrices, camera);
             }
         }
     }
