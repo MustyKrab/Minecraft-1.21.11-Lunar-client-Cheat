@@ -19,7 +19,7 @@ public class ClickGUI extends Screen {
     private boolean draggingSlider = false;
 
     public ClickGUI() {
-        super(Text.literal("Jack Client GUI"));
+        super(Text.literal("Musty Client GUI"));
     }
 
     @Override
@@ -80,7 +80,7 @@ public class ClickGUI extends Screen {
         
         // Draw header
         context.fill(x, y, x + width, y + 20, 0xFF333333);
-        context.drawText(client.textRenderer, "Jack Client 1.21.11", x + 5, y + 6, 0xFFFFFFFF, true);
+        context.drawText(client.textRenderer, "Musty Client 1.21.11", x + 5, y + 6, 0xFFFFFFFF, true);
 
         // Draw Modules
         int moduleY = y + 25;

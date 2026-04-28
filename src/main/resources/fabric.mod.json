@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "jackclient",
   "version": "1.0.0",
-  "name": "Jack Client",
+  "name": "Musty Client",
   "description": "Internal 1.21.11 Fabric Client",
   "authors": [
-    "Jack & Fox"
+    "MustyKrab & Fox"
   ],
   "contact": {},
   "license": "MIT",

@@ -4,7 +4,6 @@ import jack.client.module.Category;
 import jack.client.module.Module;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.math.Vec3d;
 
@@ -20,8 +19,9 @@ public class HealthBars extends Module {
         int width = mc.getWindow().getScaledWidth();
         int height = mc.getWindow().getScaledHeight();
         
-        // Use player's camera pos instead of gameRenderer.getCamera().getPos() to avoid mapping issues
         Vec3d cameraPos = mc.player.getCameraPosVec(tickDelta);
+        float yaw = mc.player.getYaw(tickDelta);
+        float pitch = mc.player.getPitch(tickDelta);
 
         for (Entity entity : mc.world.getEntities()) {
             if (entity instanceof PlayerEntity && entity != mc.player) {
@@ -29,17 +29,24 @@ public class HealthBars extends Module {
                 Vec3d entityPos = entity.getLerpedPos(tickDelta);
                 
                 Vec3d diff = entityPos.subtract(cameraPos);
-                Vec3d look = mc.player.getRotationVec(tickDelta);
                 
-                if (diff.normalize().dotProduct(look) > 0) {
-                    double yawDiff = Math.toDegrees(Math.atan2(diff.z, diff.x)) - 90 - mc.player.getYaw(tickDelta);
-                    double pitchDiff = Math.toDegrees(Math.atan2(-diff.y, Math.sqrt(diff.x*diff.x + diff.z*diff.z))) - mc.player.getPitch(tickDelta);
+                // Calculate yaw and pitch to the entity
+                double diffXZ = Math.sqrt(diff.x * diff.x + diff.z * diff.z);
+                float yawToEntity = (float) Math.toDegrees(Math.atan2(diff.z, diff.x)) - 90.0f;
+                float pitchToEntity = (float) -Math.toDegrees(Math.atan2(diff.y, diffXZ));
+                
+                // Calculate relative angles
+                float relativeYaw = wrapDegrees(yawToEntity - yaw);
+                float relativePitch = wrapDegrees(pitchToEntity - pitch);
+                
+                // Only draw if entity is somewhat in front of us (within 90 degrees)
+                if (Math.abs(relativeYaw) < 90.0f) {
+                    // Simple projection: map degrees to screen pixels
+                    float fov = mc.options.getFov().getValue().floatValue();
+                    float pixelsPerDegree = (width / fov);
                     
-                    while (yawDiff <= -180) yawDiff += 360;
-                    while (yawDiff > 180) yawDiff -= 360;
-                    
-                    int screenX = width / 2 + (int)(yawDiff * 10);
-                    int screenY = height / 2 + (int)(pitchDiff * 10);
+                    int screenX = (width / 2) + (int)(relativeYaw * pixelsPerDegree);
+                    int screenY = (height / 2) + (int)(relativePitch * pixelsPerDegree);
                     
                     float hp = player.getHealth();
                     float maxHp = player.getMaxHealth();
@@ -48,7 +55,7 @@ public class HealthBars extends Module {
                     int barWidth = 30;
                     int barHeight = 4;
                     int barX = screenX - (barWidth / 2);
-                    int barY = screenY - 20; // Draw above the "tracer" dot
+                    int barY = screenY - 20; // Draw above the entity center
                     
                     // Draw background
                     context.fill(barX, barY, barX + barWidth, barY + barHeight, 0xFF000000);
@@ -59,5 +66,16 @@ public class HealthBars extends Module {
                 }
             }
         }
+    }
+    
+    private float wrapDegrees(float degrees) {
+        float f = degrees % 360.0F;
+        if (f >= 180.0F) {
+            f -= 360.0F;
+        }
+        if (f < -180.0F) {
+            f += 360.0F;
+        }
+        return f;
     }
 }

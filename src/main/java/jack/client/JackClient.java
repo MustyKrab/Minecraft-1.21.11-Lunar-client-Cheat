@@ -19,7 +19,7 @@ public class JackClient implements ModInitializer {
 
     @Override
     public void onInitialize() {
-        LOGGER.info("Jack Client Initializing...");
+        LOGGER.info("Musty Client Initializing...");
         
         moduleManager = new ModuleManager();
         moduleManager.init();
@@ -38,6 +38,6 @@ public class JackClient implements ModInitializer {
             }
         });
         
-        LOGGER.info("Jack Client Initialized!");
+        LOGGER.info("Musty Client Initialized!");
     }
 }
