@@ -25,9 +25,18 @@ public class Killaura extends Module {
     private float serverYaw;
     private float serverPitch;
     private Entity target;
+    private float reach = 4.5f;
 
     public Killaura() {
         super("Killaura", Category.COMBAT, 0);
+    }
+
+    public float getReach() {
+        return reach;
+    }
+
+    public void setReach(float reach) {
+        this.reach = reach;
     }
 
     @Override
@@ -96,7 +105,7 @@ public class Killaura extends Module {
         List<Entity> entities = StreamSupport.stream(mc.world.getEntities().spliterator(), false)
                 .filter(e -> e instanceof LivingEntity)
                 .filter(e -> e != mc.player)
-                .filter(e -> mc.player.distanceTo(e) <= 4.5f)
+                .filter(e -> mc.player.distanceTo(e) <= reach)
                 .filter(e -> ((LivingEntity) e).getHealth() > 0)
                 .sorted(Comparator.comparingDouble(e -> mc.player.distanceTo(e)))
                 .collect(Collectors.toList());
@@ -106,6 +115,7 @@ public class Killaura extends Module {
 
     private float[] getRotations(Entity target) {
         Vec3d playerPos = mc.player.getEyePos();
+        // Aim at the center of the target's bounding box
         Vec3d targetPos = target.getBoundingBox().getCenter();
 
         double diffX = targetPos.x - playerPos.x;

@@ -9,7 +9,8 @@
   "client": [
     "MixinMinecraftClient",
     "MixinClientBrandRetriever",
-    "MixinClientConnection"
+    "MixinClientConnection",
+    "MixinEntity"
   ],
   "injectors": {
     "defaultRequire": 1
