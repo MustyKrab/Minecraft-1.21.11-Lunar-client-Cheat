@@ -44,7 +44,7 @@ public class ClickGUI extends Screen {
                 dragging = true;
                 dragX = mouseX - x;
                 dragY = mouseY - y;
-            } els if (mouseX >= sliderX && mouseX <= sliderX + sliderWidth && mouseY >= sliderY && mouseY <= sliderY + sliderHeight) {
+            } else if (mouseX >= sliderX && mouseX <= sliderX + sliderWidth && mouseY >= sliderY && mouseY <= sliderY + sliderHeight) {
                 draggingSlider = true;
             } else {
                 int moduleY = y + 25;
@@ -66,7 +66,7 @@ public class ClickGUI extends Screen {
         }
 
         if (draggingSlider && killaura != null) {
-            float pick = (&loat) (mouseX - sliderX) / (float) sliderWidth;
+            float pick = (float) (mouseX - sliderX) / (float) sliderWidth;
             if (pick < 0.0f) pick = 0.0f;
             if (pick > 1.0f) pick = 1.0f;
             float newReach = 3.0f + (pick * 3.0f); // 3.0 to 6.0
@@ -79,7 +79,7 @@ public class ClickGUI extends Screen {
         context.fill(x, y, x + width, y + height, 0xAA000000); // Argb black
         
         // Draw header
-        context.fill(x, y, x + width, y + 20, 0xFFF333333);
+        context.fill(x, y, x + width, y + 20, 0xFF333333);
         context.drawText(client.textRenderer, "Jack Client 1.21.11", x + 5, y + 6, 0xFFFFFFFF, true);
 
         // Draw Modules
