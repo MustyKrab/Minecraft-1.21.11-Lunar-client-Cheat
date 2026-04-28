@@ -31,7 +31,7 @@ public class JackClient implements ModInitializer {
                 if (isPressed && !wasPressed) {
                     if (client.currentScreen == null) {
                         client.setScreen(new ClickGUI());
-                    } els if (client.currentScreen instanceof ClickGUI) {
+                    } else if (client.currentScreen instanceof ClickGUI) {
                         client.setScreen(null);
                     }
                 }
