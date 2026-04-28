@@ -19,18 +19,22 @@ public class Tracers extends Module {
     public void onWorldRender(MatrixStack matrices, Camera camera) {
         if (mc.world == null || mc.player == null) return;
 
-        Vec3d cameraPos = camera.getPos();
+        // Use player's camera pos to avoid Camera mapping issues
+        Vec3d cameraPos = mc.player.getCameraPosVec(1.0f);
         Vec3d start = new Vec3d(0, 0, 1)
-                .rotateX(-camera.getPitch() * (float) (Math.PI / 180.0))
-                .rotateY(-camera.getYaw() * (float) (Math.PI / 180.0))
+                .rotateX(-mc.player.getPitch() * (float) (Math.PI / 180.0))
+                .rotateY(-mc.player.getYaw() * (float) (Math.PI / 180.0))
                 .add(cameraPos);
 
         RenderSystem.depthMask(false);
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
-        RenderSystem.setShader(GameRenderer::getPositionColorShaderProgram);
+        
+        // In 1.21, it's usually getPositionColorProgram
+        RenderSystem.setShader(GameRenderer::getPositionColorProgram);
 
         Tessellator tessellator = Tessellator.getInstance();
+        // In 1.21, VertexFormat.DrawMode might be VertexFormat.DrawMode.DEBUG_LINES or just DrawMode.DEBUG_LINES
         BufferBuilder buffer = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
 
         Matrix4f matrix = matrices.peek().getPositionMatrix();
@@ -52,7 +56,8 @@ public class Tracers extends Module {
             }
         }
 
-        BufferRenderer.drawWithShader(buffer.end());
+        // In 1.21, it's drawWithGlobalProgram
+        BufferRenderer.drawWithGlobalProgram(buffer.end());
         RenderSystem.depthMask(true);
     }
 }
