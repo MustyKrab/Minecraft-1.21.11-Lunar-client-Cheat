@@ -1,14 +1,11 @@
 package jack.client.module.modules.render;
 
-import com.mojang.blaze3d.systems.RenderSystem;
 import jack.client.module.Category;
 import jack.client.module.Module;
-import net.minecraft.client.render.*;
-import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.math.Vec3d;
-import org.joml.Matrix4f;
 
 public class Tracers extends Module {
     public Tracers() {
@@ -16,48 +13,87 @@ public class Tracers extends Module {
     }
 
     @Override
-    public void onWorldRender(MatrixStack matrices, Camera camera) {
+    public void onRender(DrawContext context, float tickDelta) {
         if (mc.world == null || mc.player == null) return;
 
-        // Use player's camera pos to avoid Camera mapping issues
-        Vec3d cameraPos = mc.player.getCameraPosVec(1.0f);
-        Vec3d start = new Vec3d(0, 0, 1)
-                .rotateX(-mc.player.getPitch() * (float) (Math.PI / 180.0))
-                .rotateY(-mc.player.getYaw() * (float) (Math.PI / 180.0))
-                .add(cameraPos);
-
-        RenderSystem.depthMask(false);
-        RenderSystem.enableBlend();
-        RenderSystem.defaultBlendFunc();
+        int width = mc.getWindow().getScaledWidth();
+        int height = mc.getWindow().getScaledHeight();
         
-        // In 1.21, it's usually getPositionColorProgram
-        RenderSystem.setShader(GameRenderer::getPositionColorProgram);
-
-        Tessellator tessellator = Tessellator.getInstance();
-        // In 1.21, VertexFormat.DrawMode might be VertexFormat.DrawMode.DEBUG_LINES or just DrawMode.DEBUG_LINES
-        BufferBuilder buffer = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
-
-        Matrix4f matrix = matrices.peek().getPositionMatrix();
+        Vec3d cameraPos = mc.player.getCameraPosVec(tickDelta);
+        float yaw = mc.player.getYaw(tickDelta);
+        float pitch = mc.player.getPitch(tickDelta);
 
         for (Entity entity : mc.world.getEntities()) {
             if (entity instanceof PlayerEntity && entity != mc.player) {
-                Vec3d ePos = entity.getLerpedPos(1.0f);
-
-                float x1 = (float) (start.x - cameraPos.x);
-                float y1 = (float) (start.y - cameraPos.y);
-                float z1 = (float) (start.z - cameraPos.z);
-
-                float x2 = (float) (ePos.x - cameraPos.x);
-                float y2 = (float) (ePos.y - cameraPos.y);
-                float z2 = (float) (ePos.z - cameraPos.z);
-
-                buffer.vertex(matrix, x1, y1, z1).color(255, 0, 0, 255);
-                buffer.vertex(matrix, x2, y2, z2).color(255, 0, 0, 255);
+                Vec3d entityPos = entity.getLerpedPos(tickDelta);
+                
+                Vec3d diff = entityPos.subtract(cameraPos);
+                
+                // Calculate yaw and pitch to the entity
+                double diffXZ = Math.sqrt(diff.x * diff.x + diff.z * diff.z);
+                float yawToEntity = (float) Math.toDegrees(Math.atan2(diff.z, diff.x)) - 90.0f;
+                float pitchToEntity = (float) -Math.toDegrees(Math.atan2(diff.y, diffXZ));
+                
+                // Calculate relative angles
+                float relativeYaw = wrapDegrees(yawToEntity - yaw);
+                float relativePitch = wrapDegrees(pitchToEntity - pitch);
+                
+                // Only draw if entity is somewhat in front of us (within 90 degrees)
+                if (Math.abs(relativeYaw) < 90.0f) {
+                    // Simple projection: map degrees to screen pixels
+                    // Assuming roughly 90 FOV for simplicity
+                    float fov = mc.options.getFov().getValue().floatValue();
+                    float pixelsPerDegree = (width / fov);
+                    
+                    int screenX = (width / 2) + (int)(relativeYaw * pixelsPerDegree);
+                    int screenY = (height / 2) + (int)(relativePitch * pixelsPerDegree);
+                    
+                    // Draw a line from bottom center of screen to the entity
+                    int startX = width / 2;
+                    int startY = height;
+                    
+                    // Since DrawContext doesn't have drawLine, we draw a series of dots
+                    drawLine(context, startX, startY, screenX, screenY, 0xFFFF0000);
+                }
             }
         }
+    }
+    
+    private void drawLine(DrawContext context, int x1, int y1, int x2, int y2, int color) {
+        int dx = Math.abs(x2 - x1);
+        int dy = Math.abs(y2 - y1);
+        int sx = x1 < x2 ? 1 : -1;
+        int sy = y1 < y2 ? 1 : -1;
+        int err = dx - dy;
+        
+        // Limit the number of dots to prevent lag if line is too long
+        int maxDots = 1000;
+        int dots = 0;
 
-        // In 1.21, it's drawWithGlobalProgram
-        BufferRenderer.drawWithGlobalProgram(buffer.end());
-        RenderSystem.depthMask(true);
+        while (dots < maxDots) {
+            context.fill(x1, y1, x1 + 1, y1 + 1, color);
+            if (x1 == x2 && y1 == y2) break;
+            int e2 = 2 * err;
+            if (e2 > -dy) {
+                err -= dy;
+                x1 += sx;
+            }
+            if (e2 < dx) {
+                err += dx;
+                y1 += sy;
+            }
+            dots++;
+        }
+    }
+    
+    private float wrapDegrees(float degrees) {
+        float f = degrees % 360.0F;
+        if (f >= 180.0F) {
+            f -= 360.0F;
+        }
+        if (f < -180.0F) {
+            f += 360.0F;
+        }
+        return f;
     }
 }
