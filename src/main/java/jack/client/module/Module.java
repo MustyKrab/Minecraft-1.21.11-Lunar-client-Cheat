@@ -1,6 +1,7 @@
 package jack.client.module;
 
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.network.packet.Packet;
 
 public abstract class Module {
     protected static final MinecraftClient mc = MinecraftClient.getInstance();
@@ -44,4 +45,8 @@ public abstract class Module {
     protected void onDisable() {}
     
     public void onTick() {}
+
+    // Packet hooks. Return true to cancel the packet.
+    public boolean onSendPacket(Packet<?> packet) { return false; }
+    public boolean onReceivePacket(Packet<?> packet) { return false; }
 }

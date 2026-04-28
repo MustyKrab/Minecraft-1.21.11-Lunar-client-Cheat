@@ -1,6 +1,9 @@
 package jack.client.module;
 
+import jack.client.module.modules.combat.Velocity;
+import jack.client.module.modules.player.NoFall;
 import jack.client.module.modules.render.ESP;
+import net.minecraft.network.packet.Packet;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -11,7 +14,11 @@ public class ModuleManager {
         // Render
         modules.add(new ESP());
         
-        // Add more modules here
+        // Combat
+        modules.add(new Velocity());
+        
+        // Player
+        modules.add(new NoFall());
     }
 
     public List<Module> getModules() {
@@ -33,5 +40,29 @@ public class ModuleManager {
                 module.onTick();
             }
         }
+    }
+
+    // Returns true if the packet should be cancelled
+    public boolean onSendPacket(Packet<?> packet) {
+        for (Module module : modules) {
+            if (module.isEnabled()) {
+                if (module.onSendPacket(packet)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // Returns true if the packet should be cancelled
+    public boolean onReceivePacket(Packet<?> packet) {
+        for (Module module : modules) {
+            if (module.isEnabled()) {
+                if (module.onReceivePacket(packet)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }
