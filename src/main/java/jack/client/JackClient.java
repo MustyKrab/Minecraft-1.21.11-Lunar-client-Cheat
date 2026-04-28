@@ -4,6 +4,7 @@ import jack.client.gui.ClickGUI;
 import jack.client.module.ModuleManager;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.util.InputUtil;
 import org.lwjgl.glfw.GLFW;
@@ -24,7 +25,6 @@ public class JackClient implements ModInitializer {
         moduleManager = new ModuleManager();
         moduleManager.init();
 
-        // Register Tick Event to check for the Left Bracket ([) key directly
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client.getWindow() != null) {
                 boolean isPressed = GLFW.glfwGetKey(client.getWindow().getHandle(), GLFW.GLFW_KEY_LEFT_BRACKET) == GLFW.GLFW_PRESS;
@@ -36,6 +36,12 @@ public class JackClient implements ModInitializer {
                     }
                 }
                 wasPressed = isPressed;
+            }
+        });
+        
+        WorldRenderEvents.LAST.register(context -> {
+            if (moduleManager != null) {
+                moduleManager.onWorldRender(context.matrixStack(), context.camera());
             }
         });
         
