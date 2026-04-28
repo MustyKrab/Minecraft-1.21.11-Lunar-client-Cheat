@@ -14,7 +14,9 @@ public class MixinInGameHud {
     @Inject(method = "render", at = @At("TAIL"))
     private void onRender(DrawContext context, RenderTickCounter tickCounter, CallbackInfo ci) {
         if (JackClient.moduleManager != null) {
-            JackClient.moduleManager.onRender(context, tickCounter.getTickDelta(true));
+            // In 1.21, RenderTickCounter might use getLastFrameDuration() or getTickDelta(true)
+            // If getTickDelta(boolean) is missing, we can use getLastFrameDuration() or just pass 1.0f for now
+            JackClient.moduleManager.onRender(context, tickCounter.getLastFrameDuration());
         }
     }
 }

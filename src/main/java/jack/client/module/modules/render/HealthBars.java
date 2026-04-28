@@ -20,7 +20,8 @@ public class HealthBars extends Module {
         int width = mc.getWindow().getScaledWidth();
         int height = mc.getWindow().getScaledHeight();
         
-        Vec3d cameraPos = mc.gameRenderer.getCamera().getPos();
+        // Use player's camera pos instead of gameRenderer.getCamera().getPos() to avoid mapping issues
+        Vec3d cameraPos = mc.player.getCameraPosVec(tickDelta);
 
         for (Entity entity : mc.world.getEntities()) {
             if (entity instanceof PlayerEntity && entity != mc.player) {
