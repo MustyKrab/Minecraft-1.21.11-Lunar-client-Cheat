@@ -37,9 +37,9 @@ public class Velocity extends Module {
             double verticalScale = 1.0;
             
             mc.player.setVelocity(
-                mc.player.getVelocity().x\n                        + (explosionPacket.getPlayerVelocityX() * horizontalScale),
-                mc.player.getVelocity().y\n                        + (explosionPacket.getPlayerVelocityY() * verticalScale),
-                mc.player.getVelocity().z\n                        + (explosionPacket.getPlayerVelocityZ() * horizontalScale)
+                mc.player.getVelocity().x + (explosionPacket.getPlayerVelocityX() * horizontalScale),
+                mc.player.getVelocity().y + (explosionPacket.getPlayerVelocityY() * verticalScale),
+                mc.player.getVelocity().z + (explosionPacket.getPlayerVelocityZ() * horizontalScale)
             );
             return true;
         }
