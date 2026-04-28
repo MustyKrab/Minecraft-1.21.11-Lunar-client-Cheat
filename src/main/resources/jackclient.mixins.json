@@ -10,7 +10,8 @@
     "MixinMinecraftClient",
     "MixinClientBrandRetriever",
     "MixinClientConnection",
-    "MixinEntity"
+    "MixinEntity",
+    "MixinInGameHud"
   ],
   "injectors": {
     "defaultRequire": 1

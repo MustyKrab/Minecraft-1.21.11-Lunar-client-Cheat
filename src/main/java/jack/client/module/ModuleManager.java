@@ -8,6 +8,7 @@ import jack.client.module.modules.render.HealthBars;
 import java.util.ArrayList;
 import java.util.List;
 import jack.client.module.modules.render.Tracers;
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.network.packet.Packet;
 
 public class ModuleManager {
@@ -44,6 +45,14 @@ public class ModuleManager {
         for (Module module : modules) {
             if (module.isEnabled()) {
                 module.onTick();
+            }
+        }
+    }
+
+    public void onRender(DrawContext context, float tickDelta) {
+        for (Module module : modules) {
+            if (module.isEnabled()) {
+                module.onRender(context, tickDelta);
             }
         }
     }

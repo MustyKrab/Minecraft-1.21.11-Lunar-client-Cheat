@@ -1,6 +1,7 @@
 package jack.client.module;
 
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.network.packet.Packet;
 
 public abstract class Module {
@@ -45,6 +46,7 @@ public abstract class Module {
     protected void onDisable() {}
     
     public void onTick() {}
+    public void onRender(DrawContext context, float tickDelta) {}
 
     // Packet hooks. Return true to cancel the packet.
     public boolean onSendPacket(Packet<?> packet) { return false; }
