@@ -24,10 +24,10 @@ public class JackClient implements ModInitializer {
         moduleManager = new ModuleManager();
         moduleManager.init();
 
-        // Register Tick Event to check for Right Shift directly
+        // Register Tick Event to check for the Left Bracket ([) key directly
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client.getWindow() != null) {
-                boolean isPressed = GLFW.glfwGetKey(client.getWindow().getHandle(), GLFW.GLFW_KEY_RIGHT_SHIFT) == GLFW.GLFW_PRESS;
+                boolean isPressed = GLFW.glfwGetKey(client.getWindow().getHandle(), GLFW.GLFW_KEY_LEFT_BRACKET) == GLFW.GLFW_PRESS;
                 if (isPressed && !wasPressed) {
                     if (client.currentScreen == null) {
                         client.setScreen(new ClickGUI());
