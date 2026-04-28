@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "jackclient",
+  "version": "1.0.0",
+  "name": "Jack Client",
+  "description": "Internal 1.21.11 Fabric Client",
+  "authors": [
+    "Jack & Fox"
+  ],
+  "contact": {},
+  "license": "MIT",
+  "icon": "assets/jackclient/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "jack.client.JackClient"
+    ]
+  },
+  "mixins": [
+    "jackclient.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.15.0",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "another-mod": "*"
+  }
+}
