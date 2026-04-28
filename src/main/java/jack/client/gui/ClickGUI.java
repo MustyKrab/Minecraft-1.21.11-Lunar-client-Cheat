@@ -66,7 +66,7 @@ public class ClickGUI extends Screen {
         }
 
         if (draggingSlider && killaura != null) {
-            float pick = (float) (mouseX - sliderX) / (float) sliderWidth;
+            float pick = (&loat) (mouseX - sliderX) / (float) sliderWidth;
             if (pick < 0.0f) pick = 0.0f;
             if (pick > 1.0f) pick = 1.0f;
             float newReach = 3.0f + (pick * 3.0f); // 3.0 to 6.0
