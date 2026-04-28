@@ -4,9 +4,7 @@ import jack.client.gui.ClickGUI;
 import jack.client.module.ModuleManager;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
@@ -17,7 +15,7 @@ public class JackClient implements ModInitializer {
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
     
     public static ModuleManager moduleManager;
-    private static KeyBinding guiKeybind;
+    private boolean wasPressed = false;
 
     @Override
     public void onInitialize() {
@@ -26,22 +24,18 @@ public class JackClient implements ModInitializer {
         moduleManager = new ModuleManager();
         moduleManager.init();
 
-        // Register GUI Keybind (Right Shift)
-        guiKeybind = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-            "key.jackclient.gui",
-            InputUtil.Type.KEYSYM,
-            GLFW.GLFW_KEY_RIGHT_SHIFT,
-            "jackclient"
-        ));
-
-        // Register Tick Event to check for keybinds
+        // Register Tick Event to check for Right Shift directly
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            while (guiKeybind.wasPressed()) {
-                if (client.currentScreen == null) {
-                    client.setScreen(new ClickGUI());
-                } else {
-                    client.setScreen(null);
+            if (client.getWindow() != null) {
+                boolean isPressed = InputUtil.isKeyPressed(client.getWindow().getHandle(), GLFW.GLFW_KEY_RIGHT_SHIFT);
+                if (isPressed && !wasPressed) {
+                    if (client.currentScreen == null) {
+                        client.setScreen(new ClickGUI());
+                    } else if (client.currentScreen instanceof ClickGUI) {
+                        client.setScreen(null);
+                    }
                 }
+                wasPressed = isPressed;
             }
         });
         
