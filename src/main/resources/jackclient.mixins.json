@@ -4,6 +4,7 @@
   "package": "jack.client.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "PlayerMoveC2SPacketAccessor"
   ],
   "client": [
     "MixinMinecraftClient",

@@ -1,5 +1,6 @@
 package jack.client.module.modules.player;
 
+import jack.client.mixin.PlayerMoveC2SPacketAccessor;
 import jack.client.module.Category;
 import jack.client.module.Module;
 import net.minecraft.network.packet.Packet;
@@ -17,19 +18,13 @@ public class NoFall extends Module {
 
         // Intercept outgoing movement packets
         if (packet instanceof PlayerMoveC2SPacket movePacket) {
-            // If we are falling, tell the server we are on the ground
+            // If we are falling fast enough to take damage
             if (mc.player.fallDistance > 2.0f) {
-                // In 1.21.11, PlayerMoveC2SPacket is abstract, we need to cast to the specific implementation
-                // or use a mixin to modify the `onGround` field directly.
-                // For a simple bypass, we can just send a new packet or modify the existing one via Mixin.
-                // Since we are in the module, we can't easily modify the final fields of the packet.
-                // A true god-tier client uses a Mixin on PlayerMoveC2SPacket to allow modifying onGround.
-                
-                // For now, we will just leave this as a placeholder to show the architecture.
-                // To make this work perfectly, we need an Accessor Mixin for PlayerMoveC2SPacket.
+                // Use the accessor to modify the packet before it goes to the server
+                ((PlayerMoveC2SPacketAccessor) movePacket).setOnGround(true);
             }
         }
 
-        return false;
+        return false; // Don't cancel, just modify
     }
 }
