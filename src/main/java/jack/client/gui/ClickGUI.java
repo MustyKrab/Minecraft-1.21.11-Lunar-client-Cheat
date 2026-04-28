@@ -94,7 +94,7 @@ public class ClickGUI extends Screen {
         if (killaura != null) {
             context.fill(sliderX, sliderY, sliderX + sliderWidth, sliderY + sliderHeight, 0xFF555555);
             float pick = (killaura.getReach() -  3.0f) / 3.0f;
-            context.fill(sliderX, sliderY, slidex + (int)(sliderWidth * pick), sliderY + sliderHeight, 0xFF00FF00);
+            context.fill(sliderX, sliderY, sliderX + (int)(sliderWidth * pick), sliderY + sliderHeight, 0xFF00FF00);
             context.drawText(client.textRenderer, "Killaura Reach: " + String.format("%.2f", killaura.getReach()), sliderX, sliderY - 10, 0xFFFFFFFF, true);
         }
     }
