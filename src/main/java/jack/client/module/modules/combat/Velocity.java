@@ -16,16 +16,32 @@ public class Velocity extends Module {
     public boolean onReceivePacket(Packet<?> packet) {
         if (mc.player == null) return false;
 
-        // Cancel standard entity velocity updates (Knockback from hits)
         if (packet instanceof EntityVelocityUpdateS2CPacket velocityPacket) {
             if (velocityPacket.getEntityId() == mc.player.getId()) {
-                return true; // Cancel packet
+                // Instead of cancelling, we scale the velocity down.
+                // This bypasses AntiKnockback checks because we still take some knockback.
+                double horizontalScale = 0.8; // 80% horizontal knockback
+                double verticalScale = 1.0;  // 100% vertical knockback
+                
+                mc.player.setVelocity(
+                    (velocityPacket.getVelocityX() / 8000.0D) * horizontalScale,
+                    (velocityPacket.getVelocityY() / 8000.0D) * verticalScale,
+                    (velocityPacket.getVelocityZ() / 8000.0D) * horizontalScale
+                );
+                return true; // Cancel the original packet since we applied it manually
             }
         }
 
-        // Cancel explosion knockback
-        if (packet instanceof ExplosionS2CPacket) {
-            return true; // Cancel packet
+        if (packet instanceof ExplosionS2CPacket explosionPacket) {
+            double horizontalScale = 0.8;
+            double verticalScale = 1.0;
+            
+            mc.player.setVelocity(
+                mc.player.getVelocity().x\n                        + (explosionPacket.getPlayerVelocityX() * horizontalScale),
+                mc.player.getVelocity().y\n                        + (explosionPacket.getPlayerVelocityY() * verticalScale),
+                mc.player.getVelocity().z\n                        + (explosionPacket.getPlayerVelocityZ() * horizontalScale)
+            );
+            return true;
         }
 
         return false;

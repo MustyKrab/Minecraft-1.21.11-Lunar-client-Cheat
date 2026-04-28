@@ -9,8 +9,11 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.network.packet.Packet;
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
 import net.minecraft.util.Hand;
+import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.RaycastContext;
 
 import java.util.Comparator;
 import java.util.List;
@@ -22,7 +25,6 @@ public class Killaura extends Module {
     private float serverYaw;
     private float serverPitch;
     private Entity target;
-    private int hitDelay = 0;
 
     public Killaura() {
         super("Killaura", Category.COMBAT, 0);
@@ -40,7 +42,6 @@ public class Killaura extends Module {
             float[] rotations = getRotations(target);
             
             // Apply GCD fix (Greatest Common Divisor) to simulate real mouse movements
-            // Anticheats flag perfect floating point rotations.
             float f = (float) (mc.options.getMouseSensitivity().getValue() * 0.6F + 0.2F);
             float gcd = f * f * f * 1.2F;
             
@@ -52,10 +53,11 @@ public class Killaura extends Module {
 
             // 3. Attack logic (respecting cooldowns for 1.21.11 combat)
             if (mc.player.getAttackCooldownProgress(0.5f) >= 1.0f) {
-                // In a true ghost client, we might want to raytrace here to ensure we are actually looking at the hitbox
-                // before sending the attack packet, but for a blatant aura, we just attack.
-                mc.interactionManager.attackEntity(mc.player, target);
-                mc.player.swingHand(Hand.MAIN_HAND);
+                // Raytrace check to prevent hitting through walls
+                if (isVisible(target)) {
+                    mc.interactionManager.attackEntity(mc.player, target);
+                    mc.player.swingHand(Hand.MAIN_HAND);
+                }
             }
         }
     }
@@ -65,27 +67,38 @@ public class Killaura extends Module {
         if (mc.player == null || target == null) return false;
 
         // 4. Silent Rotation (Spoofing)
-        // We modify the outgoing movement packets to send our calculated yaw/pitch to the server
-        // while our actual client camera remains unaffected.
         if (packet instanceof PlayerMoveC2SPacket movePacket) {
             if (movePacket.changesLook()) {
                 ((PlayerMoveC2SPacketAccessor) movePacket).setYaw(serverYaw);
                 ((PlayerMoveC2SPacketAccessor) movePacket).setPitch(serverPitch);
-            } else {
-                // If the packet doesn't have look data, we might need to force send a Look packet
-                // or upgrade it to a PositionAndLook packet depending on the strictness of the AC.
             }
         }
         return false;
+    }
+
+    private boolean isVisible(Entity entity) {
+        Vec3d playerEyes = mc.player.getEyePos();
+        Vec3d entityCenter = entity.getBoundingBox().getCenter();
+        
+        RaycastContext context = new RaycastContext(
+            playerEyes, 
+            entityCenter, 
+            RaycastContext.ShapeType.COLLIDER, 
+            RaycastContext.FluidHandling.NONE, 
+            mc.player
+        );
+        
+        BlockHitResult result = mc.world.raycast(context);
+        return result.getType() == HitResult.Type.MISS;
     }
 
     private Entity findTarget() {
         List<Entity> entities = StreamSupport.stream(mc.world.getEntities().spliterator(), false)
                 .filter(e -> e instanceof LivingEntity)
                 .filter(e -> e != mc.player)
-                .filter(e -> mc.player.distanceTo(e) <= 4.5f) // Range check
-                .filter(e -> ((LivingEntity) e).getHealth() > 0) // Alive check
-                .sorted(Comparator.comparingDouble(e -> mc.player.distanceTo(e))) // Sort by distance
+                .filter(e -> mc.player.distanceTo(e) <= 4.5f)
+                .filter(e -> ((LivingEntity) e).getHealth() > 0)
+                .sorted(Comparator.comparingDouble(e -> mc.player.distanceTo(e)))
                 .collect(Collectors.toList());
 
         return entities.isEmpty() ? null : entities.get(0);
@@ -93,8 +106,7 @@ public class Killaura extends Module {
 
     private float[] getRotations(Entity target) {
         Vec3d playerPos = mc.player.getEyePos();
-        // Aim at the center of the target's bounding box
-        Vec3d targetPos = target.getPos().add(0, target.getHeight() / 2.0, 0);
+        Vec3d targetPos = target.getBoundingBox().getCenter();
 
         double diffX = targetPos.x - playerPos.x;
         double diffY = targetPos.y - playerPos.y;
@@ -103,11 +115,7 @@ public class Killaura extends Module {
         double dist = Math.sqrt(diffX * diffX + diffZ * diffZ);
 
         float yaw = (float) (Math.atan2(diffZ, diffX) * 180.0D / Math.PI) - 90.0F;
-        float pitch = (float) -(Math.atan2(diffY, dist) * 180.0D / Math.PI);
-
-        // Add slight randomization to bypass heuristic checks
-        yaw += (Math.random() - 0.5) * 2.0;
-        pitch += (Math.random() - 0.5) * 2.0;
+        float pitch = (float) (-Math.atan2(diffY, dist) * 180.0D / Math.PI);
 
         return new float[]{
                 mc.player.getYaw() + MathHelper.wrapDegrees(yaw - mc.player.getYaw()),
