@@ -6,7 +6,9 @@
   "mixins": [
   ],
   "client": [
-    "MixinMinecraftClient"
+    "MixinMinecraftClient",
+    "MixinClientBrandRetriever",
+    "MixinClientConnection"
   ],
   "injectors": {
     "defaultRequire": 1
