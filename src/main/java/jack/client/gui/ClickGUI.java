@@ -5,6 +5,7 @@ import jack.client.module.Module;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
+import org.lwjgl.glfw.GLFW;
 
 public class ClickGUI extends Screen {
     private int x = 100;
@@ -13,6 +14,7 @@ public class ClickGUI extends Screen {
     private int height = 300;
     private boolean dragging = false;
     private int dragX, dragY;
+    private boolean wasClicked = false;
 
     public ClickGUI() {
         super(Text.literal("Jack Client GUI"));
@@ -25,11 +27,40 @@ public class ClickGUI extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+        // Handle mouse input manually to avoid Version-specific Screen method changes
+        boolean isClicked = GLFW.glfwGetMouseButton(client.getWindow().getHandle(), GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
+        
+        if (isClicked && !wasClicked) {
+            // On Initial Click
+            if (mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + 20) {
+                dragging = true;
+                dragX = mouseX - x;
+                dragY = mouseY - y;
+            } else {
+                int moduleY = y + 25;
+                for (Module module : JackClient.moduleManager.getModules()) {
+                    if (mouseX >= x + 10 && mouseX <= x + 100 && mouseY >= moduleY && mouseY <= moduleY + 10) {
+                        module.toggle();
+                    }
+                    moduleY += 15;
+                }
+            }
+        } else if (!isClicked) {
+            dragging = false;
+        }
+
+        if (dragging) {
+            x = mouseX - dragX;
+            y = mouseY - dragY;
+        }
+
+        wasClicked = isClicked;
+
         // Draw background
-        context.fill(x, y, x + width, y + height, 0xAA000000);
+        context.fill(x, y, x + width, y + height, 0xAA<<24 | 0x000000); // Argb black
         
         // Draw header
-        context.fill(x, y, x + width, y + 20, 0xFF333333);
+        context.fill(x, y, x + width, y + 20, 0xFF<<24 | 0x333333);
         context.drawText(client.textRenderer, "Jack Client 1.21.11", x + 5, y + 6, 0xFFFFFFFF, true);
 
         // Draw Modules
@@ -39,45 +70,6 @@ public class ClickGUI extends Screen {
             context.drawText(client.textRenderer, module.getName(), x + 10, moduleY, color, true);
             moduleY += 15;
         }
-    }
-
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (button == 0) { // Left click
-            // Header drag check
-            if (mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + 20) {
-                dragging = true;
-                dragX = (int) (mouseX - x);
-                dragY = (int) (mouseY - y);
-                return true;
-            }
-
-            // Module toggle check
-            int moduleY = y + 25;
-            for (Module module : JackClient.moduleManager.getModules()) {
-                if (mouseX >= x + 10 && mouseX <= x + 100 && mouseY >= moduleY && mouseY <= moduleY + 10) {
-                    module.toggle();
-                    return true;
-                }
-                moduleY += 15;
-            }
-        }
-        return false;
-    }
-
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (button == 0) {
-            dragging = false;
-        }
-        return false;
-    }
-
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
-        if (dragging) {
-            x = (int) (mouseX - dragX);
-            y = (int) (mouseY - dragY);
-            return true;
-        }
-        return false;
     }
 
     @Override
