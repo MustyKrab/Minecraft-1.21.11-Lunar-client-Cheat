@@ -27,7 +27,7 @@ public class JackClient implements ModInitializer {
         // Register Tick Event to check for Right Shift directly
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client.getWindow() != null) {
-                boolean isPressed = InputUtil.isKeyPressed(client.getWindow().getHandle(), GLFW.GLFW_KEY_RIGHT_SHIFT);
+                boolean isPressed = GLFW.glfwGetKey(client.getWindow().getHandle(), GLFW.GLFW_KEY_RIGHT_SHIFT) == GLFW.GLFW_PRESS;
                 if (isPressed && !wasPressed) {
                     if (client.currentScreen == null) {
                         client.setScreen(new ClickGUI());
