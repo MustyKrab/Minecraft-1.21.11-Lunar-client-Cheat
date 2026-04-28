@@ -68,6 +68,13 @@ goto fail
 :execute
 @rem Setup the command line
 
+@rem Auto-download gradle-wrapper.jar if missing
+if not exist "%APP_HOME%\gradle\wrapper\gradle-wrapper.jar" (
+    echo Downloading missing gradle-wrapper.jar...
+    if not exist "%APP_HOME%\gradle\wrapper" mkdir "%APP_HOME%\gradle\wrapper"
+    powershell -Command "Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/gradle/gradle/master/gradle/wrapper/gradle-wrapper.jar' -OutFile '%APP_HOME%\gradle\wrapper\gradle-wrapper.jar'"
+)
+
 @rem Execute Gradle
 "%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" -jar "%APP_HOME%\gradle\wrapper\gradle-wrapper.jar" %*
 
