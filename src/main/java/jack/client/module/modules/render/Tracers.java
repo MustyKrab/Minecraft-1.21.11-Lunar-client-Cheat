@@ -25,10 +25,10 @@ public class Tracers extends Module {
                 .rotateY(-camera.getYaw() * (float) (Math.PI / 180.0))
                 .add(cameraPos);
 
-        RenderSystem.disableDepthTest();
+        RenderSystem.depthMask(false);
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
-        RenderSystem.setShader(GameRenderer::getPositionColorProgram);
+        RenderSystem.setShader(GameRenderer::getPositionColorShaderProgram);
 
         Tessellator tessellator = Tessellator.getInstance();
         BufferBuilder buffer = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
@@ -52,7 +52,7 @@ public class Tracers extends Module {
             }
         }
 
-        BufferRenderer.drawWithGlobalProgram(buffer.end());
-        RenderSystem.enableDepthTest();
+        BufferRenderer.drawWithShader(buffer.end());
+        RenderSystem.depthMask(true);
     }
 }

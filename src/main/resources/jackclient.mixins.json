@@ -11,7 +11,8 @@
     "MixinClientBrandRetriever",
     "MixinClientConnection",
     "MixinEntity",
-    "MixinInGameHud"
+    "MixinInGameHud",
+    "MixinWorldRenderer"
   ],
   "injectors": {
     "defaultRequire": 1
