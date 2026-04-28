@@ -3,17 +3,21 @@ package jack.client.module;
 import jack.client.module.modules.combat.Killaura;
 import jack.client.module.modules.combat.Velocity;
 import jack.client.module.modules.player.NoFall;
-import jack.client.module.modules.render.ESP;
-import net.minecraft.network.packet.Packet;
+import jack.client.module.modules.render.GlowESP;
+import jack.client.module.modules.render.HealthBars;
 import java.util.ArrayList;
 import java.util.List;
+import jack.client.module.modules.render.Tracers;
+import net.minecraft.network.packet.Packet;
 
 public class ModuleManager {
     private final List<Module> modules = new ArrayList<>();
 
     public void init() {
         // Render
-        modules.add(new ESP());
+        modules.add(new GlowESP());
+        modules.add(new Tracers());
+        modules.add(new HealthBars());
         
         // Combat
         modules.add(new Velocity());
