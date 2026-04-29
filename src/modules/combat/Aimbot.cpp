@@ -2,6 +2,7 @@
 #include "../../core/JNIHelper.h"
 #include <iostream>
 #include <cmath>
+#include <windows.h>
 
 static bool aimbotMappingsLoaded = false;
 static jclass mcClass, worldClass, entityClass, livingClass, playerClass, optionsClass, doubleOptionClass;
