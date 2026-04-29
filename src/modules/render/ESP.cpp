@@ -276,7 +276,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
                 Killaura* ka = (Killaura*)mod;
                 if (ka) {
                     float r = ka->GetReach();
-                    y += DrawSlider(L"Reach", r, 3.0f, 6.0f, draggingSlider, 130, y);
+                    y += DrawSlider(L"Reach", r, 3.0f, 10.0f, draggingSlider, 130, y);
                     ka->SetReach(r);
                 }
             } else if (mod->GetName() == "Aimbot") {
@@ -307,7 +307,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
                 Reach* rm = (Reach*)mod;
                 if (rm) {
                     float r = rm->GetReach();
-                    y += DrawSlider(L"Reach Distance", r, 3.0f, 6.0f, draggingReachSlider, 130, y);
+                    y += DrawSlider(L"Reach Distance", r, 3.0f, 10.0f, draggingReachSlider, 130, y);
                     rm->SetReach(r);
                 }
             }
