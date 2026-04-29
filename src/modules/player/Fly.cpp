@@ -1,64 +1,54 @@
-#include "Fly.h"
-#include "../../core/JNIHelper.h"
-#include <iostream>
-
-static bool flyMappingsLoaded = false;
-static jclass mcClass, playerClass, abilitiesClass;
-static jfieldID instanceField, playerField, abilitiesField, flyingField;
-
-Fly::Fly() : Module("Fly") {}
-
-void Fly::OnTick() {
-    JNIEnv* env = JNIHelper::env;
-    if (!env) return;
-
-    if (!flyMappingsLoaded) {
-        mcClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_310;", "net/minecraft/client/MinecraftClient");
-        playerClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_746;", "net/minecraft/client/network/ClientPlayerEntity");
-        abilitiesClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_1656;", "net/minecraft/entity/player/PlayerAbilities");
-
-        if (!mcClass || !playerClass || !abilitiesClass) return;
-
-        instanceField = JNIHelper::GetStaticFieldSafe(mcClass, "field_1700", "Lnet/minecraft/class_310;", "instance");
-        playerField = JNIHelper::GetFieldSafe(mcClass, "field_1724", "Lnet/minecraft/class_746;", "player");
-        abilitiesField = JNIHelper::GetFieldSafe(playerClass, "field_7500", "Lnet/minecraft/class_1656;", "abilities");
-        flyingField = JNIHelper::GetFieldSafe(abilitiesClass, "field_7478", "Z", "flying");
-
-        flyMappingsLoaded = true;
-    }
-
-    if (!instanceField || !playerField || !abilitiesField || !flyingField) return;
-
-    jobject mc = env->GetStaticObjectField(mcClass, instanceField);
-    if (!mc) return;
-
-    jobject player = env->GetObjectField(mc, playerField);
-    if (player) {
-        jobject abilities = env->GetObjectField(player, abilitiesField);
-        if (abilities) {
-            env->SetBooleanField(abilities, flyingField, JNI_TRUE);
-            env->DeleteLocalRef(abilities);
-        }
-        env->DeleteLocalRef(player);
-    }
-    env->DeleteLocalRef(mc);
-}
-
-void Fly::OnDisable() {
-    JNIEnv* env = JNIHelper::env;
-    if (!env || !flyMappingsLoaded) return;
-
-    jobject mc = env->GetStaticObjectField(mcClass, instanceField);
-    if (!mc) return;
-
-    jobject player = env->GetObjectField(mc, playerField);
-    if (player) {
-        jobject abilities = env->GetObjectField(player, abilitiesField);
-        if (abilities) {
-            env->SetBooleanField(abilities, flyingField, JNI_FALSE);
-            env->DeleteLocalRef(abilities);
-        }
-        env->DeleteLocalRef(player);
-    }
-    env->DeleteLocalRef(mc);
-}
+I2luY2x1ZGUgIkZseS5oIgojaW5jbHVkZSAiLi4vLi4vY29yZS9KTklIZWxw
+ZXIuaCIKI2luY2x1ZGUgPGlvc3RyZWFtPgoKc3RhdGljIGJvb2wgZmx5TWFw
+cGluZ3NMb2FkZWQgPSBmYWxzZTsKc3RhdGljIGpjbGFzcyBtY0NsYXNzLCBw
+bGF5ZXJDbGFzcywgYWJpbGl0aWVzQ2xhc3M7CnN0YXRpYyBqZmllbGRJRCBp
+bnN0YW5jZUZpZWxkLCBwbGF5ZXJGaWVsZCwgYWJpbGl0aWVzRmllbGQsIGZs
+eWluZ0ZpZWxkOwoKRmx5OjpGbHkoKSA6IE1vZHVsZSgiRmx5Iikge30KCnZv
+aWQgRmx5OjpPblRpY2soKSB7CiAgICBKTklFbnYqIGVudiA9IEpOSUhlbHBl
+cjo6ZW52OwogICAgaWYgKCFlbnYpIHJldHVybjsKCiAgICBpZiAoIWZseU1h
+cHBpbmdzTG9hZGVkKSB7CiAgICAgICAgbWNDbGFzcyA9IEpOSUhlbHBlcjo6
+RmluZENsYXNzU2FmZSgiTG5ldC9taW5lY3JhZnQvY2xhc3NfMzEwOyIsICJu
+ZXQvbWluZWNyYWZ0L2NsaWVudC9NaW5lY3JhZnRDbGllbnQiKTsKICAgICAg
+ICBwbGF5ZXJDbGFzcyA9IEpOSUhlbHBlcjo6RmluZENsYXNzU2FmZSgiTG5l
+dC9taW5lY3JhZnQvY2xhc3NfNzQ2OyIsICJuZXQvbWluZWNyYWZ0L2NsaWVu
+dC9uZXR3b3JrL0NsaWVudFBsYXllckVudGl0eSIpOwogICAgICAgIGFiaWxp
+dGllc0NsYXNzID0gSk5JSGVscGVyOjpGaW5kQ2xhc3NTYWZlKCJMbmV0L21p
+bmVjcmFmdC9jbGFzc18xNjU2OyIsICJuZXQvbWluZWNyYWZ0L2VudGl0eS9w
+bGF5ZXIvUGxheWVyQWJpbGl0aWVzIik7CgogICAgICAgIGlmICghbWNDbGFz
+cyB8fCAhcGxheWVyQ2xhc3MgfHwgIWFiaWxpdGllc0NsYXNzKSByZXR1cm47
+CgogICAgICAgIGluc3RhbmNlRmllbGQgPSBKTklIZWxwZXI6OkdldFN0YXRp
+Y0ZpZWxkU2FmZShtY0NsYXNzLCAiZmllbGRfMTcwMCIsICJMbmV0L21pbmVj
+cmFmdC9jbGFzc18zMTA7IiwgImluc3RhbmNlIik7CiAgICAgICAgcGxheWVy
+RmllbGQgPSBKTklIZWxwZXI6OkdldEZpZWxkU2FmZShtY0NsYXNzLCAiZmll
+bGRfMTcyNCIsICJMbmV0L21pbmVjcmFmdC9jbGFzc183NDY7IiwgInBsYXll
+ciIpOwogICAgICAgIGFiaWxpdGllc0ZpZWxkID0gSk5JSGVscGVyOjpHZXRG
+aWVsZFNhZmUocGxheWVyQ2xhc3MsICJmaWVsZF83NTAwIiwgIkxuZXQvbWlu
+ZWNyYWZ0L2NsYXNzXzE2NTY7IiwgImFiaWxpdGllcyIpOwogICAgICAgIGZs
+eWluZ0ZpZWxkID0gSk5JSGVscGVyOjpHZXRGaWVsZFNhZmUoYWJpbGl0aWVz
+Q2xhc3MsICJmaWVsZF83NDc4IiwgIloiLCAiZmx5aW5nIik7CgogICAgICAg
+IGZseU1hcHBpbmdzTG9hZGVkID0gdHJ1ZTsKICAgIH0KCiAgICBpZiAoIWlu
+c3RhbmNlRmllbGQgfHwgIXBsYXllckZpZWxkIHx8ICFhYmlsaXRpZXNGaWVs
+ZCB8fCAhZmx5aW5nRmllbGQpIHJldHVybjsKCiAgICBqb2JqZWN0IG1jID0g
+ZW52LT5HZXRTdGF0aWNPYmplY3RGaWVsZChtY0NsYXNzLCBpbnN0YW5jZUZp
+ZWxkKTsKICAgIGlmICghbWMpIHJldHVybjsKCiAgICBqb2JqZWN0IHBsYXll
+ciA9IGVudi0+R2V0T2JqZWN0RmllbGQobWMsIHBsYXllckZpZWxkKTsKICAg
+IGlmIChwbGF5ZXIpIHsKICAgICAgICBqb2JqZWN0IGFiaWxpdGllcyA9IGVu
+di0+R2V0T2JqZWN0RmllbGQocGxheWVyLCBhYmlsaXRpZXNGaWVsZCk7CiAg
+ICAgICAgaWYgKGFiaWxpdGllcykgewogICAgICAgICAgICBlbnYtPlNldEJv
+b2xlYW5GaWVsZChhYmlsaXRpZXMsIGZseWluZ0ZpZWxkLCBKTklfVFJVRSk7
+CiAgICAgICAgICAgIGVudi0+RGVsZXRlTG9jYWxSZWYoYWJpbGl0aWVzKTsK
+ICAgICAgICB9CiAgICAgICAgZW52LT5EZWxldGVMb2NhbFJlZihwbGF5ZXIp
+OwogICAgfQogICAgZW52LT5EZWxldGVMb2NhbFJlZihtYyk7Cn0KCnZvaWQg
+Rmx5OjpPbkRpc2FibGUoKSB7CiAgICBKTklFbnYqIGVudiA9IEpOSUhlbHBl
+cjo6ZW52OwogICAgaWYgKCFlbnYgfHwgIWZseU1hcHBpbmdzTG9hZGVkKSBy
+ZXR1cm47CgogICAgam9iamVjdCBtYyA9IGVudi0+R2V0U3RhdGljT2JqZWN0
+RmllbGQobWNDbGFzcywgaW5zdGFuY2VGaWVsZCk7CiAgICBpZiAoIW1jKSBy
+ZXR1cm47CgogICAgam9iamVjdCBwbGF5ZXIgPSBlbnYtPkdldE9iamVjdEZp
+ZWxkKG1jLCBwbGF5ZXJGaWVsZCk7CiAgICBpZiAocGxheWVyKSB7CiAgICAg
+ICAgam9iamVjdCBhYmlsaXRpZXMgPSBlbnYtPkdldE9iamVjdEZpZWxkKHBs
+YXllciwgYWJpbGl0aWVzRmllbGQpOwogICAgICAgIGlmIChhYmlsaXRpZXMp
+IHsKICAgICAgICAgICAgZW52LT5TZXRCb29sZWFuRmllbGQoYWJpbGl0aWVz
+LCBmbHlpbmdGaWVsZCwgSk5JX0ZBTFNFKTsKICAgICAgICAgICAgZW52LT5E
+ZWxldGVMb2NhbFJlZihhYmlsaXRpZXMpOwogICAgICAgIH0KICAgICAgICBl
+bnYtPkRlbGV0ZUxvY2FsUmVmKHBsYXllcik7CiAgICB9CiAgICBlbnYtPkRl
+bGV0ZUxvY2FsUmVmKG1jKTsKfQo=
