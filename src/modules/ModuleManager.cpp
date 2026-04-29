@@ -6,6 +6,7 @@
 #include "combat/AutoClicker.h"
 #include "render/ESP.h"
 #include "render/XRay.h"
+#include "render/SkeletonESP.h"
 #include "player/Fly.h"
 
 std::vector<Module*> ModuleManager::modules;
@@ -17,6 +18,7 @@ void ModuleManager::Initialize() {
     modules.push_back(new Reach());
     modules.push_back(new WTap());
     modules.push_back(new ESP());
+    modules.push_back(new SkeletonESP());
     modules.push_back(new XRay());
     modules.push_back(new Fly());
     
