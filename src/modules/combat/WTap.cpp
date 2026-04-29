@@ -1,6 +1,7 @@
 #include "WTap.h"
 #include "../../core/JNIHelper.h"
 #include <iostream>
+#include <windows.h>
 
 static bool wtapMappingsLoaded = false;
 static jclass mcClass, playerClass, optionsClass, keyBindingClass;

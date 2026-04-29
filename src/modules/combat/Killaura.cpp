@@ -70,74 +70,76 @@ void Killaura::OnTick() {
         return;
     }
 
-    double px = env->GetDoubleField(player, entX);
-    double py = env->GetDoubleField(player, entY);
-    double pz = env->GetDoubleField(player, entZ);
+    {
+        double px = env->GetDoubleField(player, entX);
+        double py = env->GetDoubleField(player, entY);
+        double pz = env->GetDoubleField(player, entZ);
 
-    jobject playersList = env->GetObjectField(world, playersField);
-    if (!playersList) goto cleanup;
+        jobject playersList = env->GetObjectField(world, playersField);
+        if (!playersList) goto cleanup;
 
-    int size = env->CallIntMethod(playersList, listSize);
-    jobject bestTarget = nullptr;
-    double bestDist = reach;
+        int size = env->CallIntMethod(playersList, listSize);
+        jobject bestTarget = nullptr;
+        double bestDist = reach;
 
-    for (int i = 0; i < size; i++) {
-        jobject target = env->CallObjectMethod(playersList, listGet, i);
-        if (!target) continue;
+        for (int i = 0; i < size; i++) {
+            jobject target = env->CallObjectMethod(playersList, listGet, i);
+            if (!target) continue;
 
-        if (env->IsSameObject(player, target)) {
-            env->DeleteLocalRef(target);
-            continue;
-        }
-
-        double tx = env->GetDoubleField(target, entX);
-        double ty = env->GetDoubleField(target, entY);
-        double tz = env->GetDoubleField(target, entZ);
-
-        double dist = std::sqrt(std::pow(tx - px, 2) + std::pow(ty - py, 2) + std::pow(tz - pz, 2));
-        
-        if (dist <= bestDist) {
-            float hp = env->CallFloatMethod(target, getHealth);
-            if (hp > 0.0f) {
-                bestDist = dist;
-                if (bestTarget) env->DeleteLocalRef(bestTarget);
-                bestTarget = env->NewLocalRef(target);
+            if (env->IsSameObject(player, target)) {
+                env->DeleteLocalRef(target);
+                continue;
             }
-        }
-        env->DeleteLocalRef(target);
-    }
 
-    if (bestTarget) {
-        // Rotations
-        double tx = env->GetDoubleField(bestTarget, entX);
-        double ty = env->GetDoubleField(bestTarget, entY);
-        double tz = env->GetDoubleField(bestTarget, entZ);
+            double tx = env->GetDoubleField(target, entX);
+            double ty = env->GetDoubleField(target, entY);
+            double tz = env->GetDoubleField(target, entZ);
 
-        double diffX = tx - px;
-        double diffY = (ty + 1.0) - (py + 1.62); // Aim at chest
-        double diffZ = tz - pz;
-        double distXZ = std::sqrt(diffX * diffX + diffZ * diffZ);
-
-        float yaw = (float)(std::atan2(diffZ, diffX) * 180.0 / 3.14159265) - 90.0f;
-        float pitch = (float)-(std::atan2(diffY, distXZ) * 180.0 / 3.14159265);
-
-        env->SetFloatField(player, yawField, yaw);
-        env->SetFloatField(player, pitchField, pitch);
-
-        // Attack (respect cooldown)
-        float cooldown = env->CallFloatMethod(player, getCooldownMethod, 0.5f);
-        if (cooldown >= 1.0f) {
-            env->CallVoidMethod(interactionManager, attackMethod, player, bestTarget);
+            double dist = std::sqrt(std::pow(tx - px, 2) + std::pow(ty - py, 2) + std::pow(tz - pz, 2));
             
-            jobject mainHand = env->GetStaticObjectField(handClass, mainHandField);
-            env->CallVoidMethod(player, swingMethod, mainHand);
-            env->DeleteLocalRef(mainHand);
+            if (dist <= bestDist) {
+                float hp = env->CallFloatMethod(target, getHealth);
+                if (hp > 0.0f) {
+                    bestDist = dist;
+                    if (bestTarget) env->DeleteLocalRef(bestTarget);
+                    bestTarget = env->NewLocalRef(target);
+                }
+            }
+            env->DeleteLocalRef(target);
         }
 
-        env->DeleteLocalRef(bestTarget);
-    }
+        if (bestTarget) {
+            // Rotations
+            double tx = env->GetDoubleField(bestTarget, entX);
+            double ty = env->GetDoubleField(bestTarget, entY);
+            double tz = env->GetDoubleField(bestTarget, entZ);
 
-    env->DeleteLocalRef(playersList);
+            double diffX = tx - px;
+            double diffY = (ty + 1.0) - (py + 1.62); // Aim at chest
+            double diffZ = tz - pz;
+            double distXZ = std::sqrt(diffX * diffX + diffZ * diffZ);
+
+            float yaw = (float)(std::atan2(diffZ, diffX) * 180.0 / 3.14159265) - 90.0f;
+            float pitch = (float)-(std::atan2(diffY, distXZ) * 180.0 / 3.14159265);
+
+            env->SetFloatField(player, yawField, yaw);
+            env->SetFloatField(player, pitchField, pitch);
+
+            // Attack (respect cooldown)
+            float cooldown = env->CallFloatMethod(player, getCooldownMethod, 0.5f);
+            if (cooldown >= 1.0f) {
+                env->CallVoidMethod(interactionManager, attackMethod, player, bestTarget);
+                
+                jobject mainHand = env->GetStaticObjectField(handClass, mainHandField);
+                env->CallVoidMethod(player, swingMethod, mainHand);
+                env->DeleteLocalRef(mainHand);
+            }
+
+            env->DeleteLocalRef(bestTarget);
+        }
+
+        env->DeleteLocalRef(playersList);
+    }
 
 cleanup:
     env->DeleteLocalRef(interactionManager);

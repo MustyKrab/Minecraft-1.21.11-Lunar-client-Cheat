@@ -76,102 +76,104 @@ void Aimbot::OnTick() {
         return;
     }
 
-    double px = env->GetDoubleField(player, entX);
-    double py = env->GetDoubleField(player, entY);
-    double pz = env->GetDoubleField(player, entZ);
-    float currentYaw = env->GetFloatField(player, yawField);
-    float currentPitch = env->GetFloatField(player, pitchField);
+    {
+        double px = env->GetDoubleField(player, entX);
+        double py = env->GetDoubleField(player, entY);
+        double pz = env->GetDoubleField(player, entZ);
+        float currentYaw = env->GetFloatField(player, yawField);
+        float currentPitch = env->GetFloatField(player, pitchField);
 
-    jobject playersList = env->GetObjectField(world, playersField);
-    if (!playersList) goto cleanup;
+        jobject playersList = env->GetObjectField(world, playersField);
+        if (!playersList) goto cleanup;
 
-    int size = env->CallIntMethod(playersList, listSize);
-    jobject bestTarget = nullptr;
-    double bestDist = 6.0; // Max aim assist range
-    float bestYawDiff = fov;
+        int size = env->CallIntMethod(playersList, listSize);
+        jobject bestTarget = nullptr;
+        double bestDist = 6.0; // Max aim assist range
+        float bestYawDiff = fov;
 
-    for (int i = 0; i < size; i++) {
-        jobject target = env->CallObjectMethod(playersList, listGet, i);
-        if (!target) continue;
+        for (int i = 0; i < size; i++) {
+            jobject target = env->CallObjectMethod(playersList, listGet, i);
+            if (!target) continue;
 
-        if (env->IsSameObject(player, target)) {
-            env->DeleteLocalRef(target);
-            continue;
-        }
+            if (env->IsSameObject(player, target)) {
+                env->DeleteLocalRef(target);
+                continue;
+            }
 
-        double tx = env->GetDoubleField(target, entX);
-        double ty = env->GetDoubleField(target, entY);
-        double tz = env->GetDoubleField(target, entZ);
+            double tx = env->GetDoubleField(target, entX);
+            double ty = env->GetDoubleField(target, entY);
+            double tz = env->GetDoubleField(target, entZ);
 
-        double dist = std::sqrt(std::pow(tx - px, 2) + std::pow(ty - py, 2) + std::pow(tz - pz, 2));
-        
-        if (dist <= bestDist) {
-            float hp = env->CallFloatMethod(target, getHealth);
-            if (hp > 0.0f) {
-                double diffX = tx - px;
-                double diffZ = tz - pz;
-                float targetYaw = (float)(std::atan2(diffZ, diffX) * 180.0 / 3.14159265) - 90.0f;
-                
-                float yawDiff = targetYaw - currentYaw;
-                while (yawDiff <= -180.0f) yawDiff += 360.0f;
-                while (yawDiff > 180.0f) yawDiff -= 360.0f;
-                
-                if (std::abs(yawDiff) < bestYawDiff) {
-                    bestYawDiff = std::abs(yawDiff);
-                    if (bestTarget) env->DeleteLocalRef(bestTarget);
-                    bestTarget = env->NewLocalRef(target);
+            double dist = std::sqrt(std::pow(tx - px, 2) + std::pow(ty - py, 2) + std::pow(tz - pz, 2));
+            
+            if (dist <= bestDist) {
+                float hp = env->CallFloatMethod(target, getHealth);
+                if (hp > 0.0f) {
+                    double diffX = tx - px;
+                    double diffZ = tz - pz;
+                    float targetYaw = (float)(std::atan2(diffZ, diffX) * 180.0 / 3.14159265) - 90.0f;
+                    
+                    float yawDiff = targetYaw - currentYaw;
+                    while (yawDiff <= -180.0f) yawDiff += 360.0f;
+                    while (yawDiff > 180.0f) yawDiff -= 360.0f;
+                    
+                    if (std::abs(yawDiff) < bestYawDiff) {
+                        bestYawDiff = std::abs(yawDiff);
+                        if (bestTarget) env->DeleteLocalRef(bestTarget);
+                        bestTarget = env->NewLocalRef(target);
+                    }
                 }
             }
+            env->DeleteLocalRef(target);
         }
-        env->DeleteLocalRef(target);
+
+        if (bestTarget) {
+            double tx = env->GetDoubleField(bestTarget, entX);
+            double ty = env->GetDoubleField(bestTarget, entY);
+            double tz = env->GetDoubleField(bestTarget, entZ);
+
+            double diffX = tx - px;
+            double diffY = (ty + 1.0) - (py + 1.62); // Aim at chest
+            double diffZ = tz - pz;
+            double distXZ = std::sqrt(diffX * diffX + diffZ * diffZ);
+
+            float targetYaw = (float)(std::atan2(diffZ, diffX) * 180.0 / 3.14159265) - 90.0f;
+            float targetPitch = (float)-(std::atan2(diffY, distXZ) * 180.0 / 3.14159265);
+
+            // Smooth interpolation (slerp)
+            float yawDiff = targetYaw - currentYaw;
+            while (yawDiff <= -180.0f) yawDiff += 360.0f;
+            while (yawDiff > 180.0f) yawDiff -= 360.0f;
+
+            float pitchDiff = targetPitch - currentPitch;
+            
+            float newYaw = currentYaw + (yawDiff * smoothSpeed);
+            float newPitch = currentPitch + (pitchDiff * smoothSpeed);
+
+            // Apply GCD (Greatest Common Divisor) fix to bypass server-side rotation checks
+            jobject sensObj = env->GetObjectField(options, sensitivityField);
+            jobject sensDoubleObj = env->CallObjectMethod(sensObj, getDoubleValue);
+            
+            jclass doubleClass = env->FindClass("java/lang/Double");
+            jmethodID doubleValueMethod = env->GetMethodID(doubleClass, "doubleValue", "()D");
+            double sens = env->CallDoubleMethod(sensDoubleObj, doubleValueMethod);
+            
+            float f = (float)(sens * 0.6 + 0.2);
+            float gcd = f * f * f * 1.2f;
+
+            newYaw -= std::fmod(newYaw, gcd);
+            newPitch -= std::fmod(newPitch, gcd);
+
+            env->SetFloatField(player, yawField, newYaw);
+            env->SetFloatField(player, pitchField, newPitch);
+
+            env->DeleteLocalRef(sensDoubleObj);
+            env->DeleteLocalRef(sensObj);
+            env->DeleteLocalRef(bestTarget);
+        }
+
+        env->DeleteLocalRef(playersList);
     }
-
-    if (bestTarget) {
-        double tx = env->GetDoubleField(bestTarget, entX);
-        double ty = env->GetDoubleField(bestTarget, entY);
-        double tz = env->GetDoubleField(bestTarget, entZ);
-
-        double diffX = tx - px;
-        double diffY = (ty + 1.0) - (py + 1.62); // Aim at chest
-        double diffZ = tz - pz;
-        double distXZ = std::sqrt(diffX * diffX + diffZ * diffZ);
-
-        float targetYaw = (float)(std::atan2(diffZ, diffX) * 180.0 / 3.14159265) - 90.0f;
-        float targetPitch = (float)-(std::atan2(diffY, distXZ) * 180.0 / 3.14159265);
-
-        // Smooth interpolation (slerp)
-        float yawDiff = targetYaw - currentYaw;
-        while (yawDiff <= -180.0f) yawDiff += 360.0f;
-        while (yawDiff > 180.0f) yawDiff -= 360.0f;
-
-        float pitchDiff = targetPitch - currentPitch;
-        
-        float newYaw = currentYaw + (yawDiff * smoothSpeed);
-        float newPitch = currentPitch + (pitchDiff * smoothSpeed);
-
-        // Apply GCD (Greatest Common Divisor) fix to bypass server-side rotation checks
-        jobject sensObj = env->GetObjectField(options, sensitivityField);
-        jobject sensDoubleObj = env->CallObjectMethod(sensObj, getDoubleValue);
-        
-        jclass doubleClass = env->FindClass("java/lang/Double");
-        jmethodID doubleValueMethod = env->GetMethodID(doubleClass, "doubleValue", "()D");
-        double sens = env->CallDoubleMethod(sensDoubleObj, doubleValueMethod);
-        
-        float f = (float)(sens * 0.6 + 0.2);
-        float gcd = f * f * f * 1.2f;
-
-        newYaw -= std::fmod(newYaw, gcd);
-        newPitch -= std::fmod(newPitch, gcd);
-
-        env->SetFloatField(player, yawField, newYaw);
-        env->SetFloatField(player, pitchField, newPitch);
-
-        env->DeleteLocalRef(sensDoubleObj);
-        env->DeleteLocalRef(sensObj);
-        env->DeleteLocalRef(bestTarget);
-    }
-
-    env->DeleteLocalRef(playersList);
 
 cleanup:
     env->DeleteLocalRef(options);

@@ -76,76 +76,78 @@ void Reach::OnTick() {
         return;
     }
 
-    double px = env->GetDoubleField(player, entX);
-    double py = env->GetDoubleField(player, entY) + 1.62; 
-    double pz = env->GetDoubleField(player, entZ);
-    
-    jfieldID yawField = JNIHelper::GetFieldSafe(entityClass, "field_5982", "F", "yaw");
-    jfieldID pitchField = JNIHelper::GetFieldSafe(entityClass, "field_5965", "F", "pitch");
-    float yaw = env->GetFloatField(player, yawField);
-    float pitch = env->GetFloatField(player, pitchField);
+    {
+        double px = env->GetDoubleField(player, entX);
+        double py = env->GetDoubleField(player, entY) + 1.62; 
+        double pz = env->GetDoubleField(player, entZ);
+        
+        jfieldID yawField = JNIHelper::GetFieldSafe(entityClass, "field_5982", "F", "yaw");
+        jfieldID pitchField = JNIHelper::GetFieldSafe(entityClass, "field_5965", "F", "pitch");
+        float yaw = env->GetFloatField(player, yawField);
+        float pitch = env->GetFloatField(player, pitchField);
 
-    float f = pitch * 0.017453292F;
-    float g = -yaw * 0.017453292F;
-    float h = std::cos(g);
-    float i = std::sin(g);
-    float j = std::cos(f);
-    float k = std::sin(f);
-    double lookX = (double)(i * j);
-    double lookY = (double)(-k);
-    double lookZ = (double)(h * j);
+        float f = pitch * 0.017453292F;
+        float g = -yaw * 0.017453292F;
+        float h = std::cos(g);
+        float i = std::sin(g);
+        float j = std::cos(f);
+        float k = std::sin(f);
+        double lookX = (double)(i * j);
+        double lookY = (double)(-k);
+        double lookZ = (double)(h * j);
 
-    jobject playersList = env->GetObjectField(world, playersField);
-    if (!playersList) goto cleanup;
+        jobject playersList = env->GetObjectField(world, playersField);
+        if (!playersList) goto cleanup;
 
-    int size = env->CallIntMethod(playersList, listSize);
-    jobject bestTarget = nullptr;
-    double bestDist = reachDistance;
+        int size = env->CallIntMethod(playersList, listSize);
+        jobject bestTarget = nullptr;
+        double bestDist = reachDistance;
 
-    for (int idx = 0; idx < size; idx++) {
-        jobject target = env->CallObjectMethod(playersList, listGet, idx);
-        if (!target) continue;
+        for (int idx = 0; idx < size; idx++) {
+            jobject target = env->CallObjectMethod(playersList, listGet, idx);
+            if (!target) continue;
 
-        if (env->IsSameObject(player, target)) {
-            env->DeleteLocalRef(target);
-            continue;
-        }
-
-        float hp = env->CallFloatMethod(target, getHealth);
-        if (hp <= 0.0f) {
-            env->DeleteLocalRef(target);
-            continue;
-        }
-
-        double tx = env->GetDoubleField(target, entX);
-        double ty = env->GetDoubleField(target, entY) + 1.0; 
-        double tz = env->GetDoubleField(target, entZ);
-
-        double diffX = tx - px;
-        double diffY = ty - py;
-        double diffZ = tz - pz;
-        double dist = std::sqrt(diffX * diffX + diffY * diffY + diffZ * diffZ);
-
-        if (dist <= bestDist && dist > 3.0) { 
-            double dot = (diffX * lookX + diffY * lookY + diffZ * lookZ) / dist;
-            if (dot > 0.95) { 
-                bestDist = dist;
-                if (bestTarget) env->DeleteLocalRef(bestTarget);
-                bestTarget = env->NewLocalRef(target);
+            if (env->IsSameObject(player, target)) {
+                env->DeleteLocalRef(target);
+                continue;
             }
+
+            float hp = env->CallFloatMethod(target, getHealth);
+            if (hp <= 0.0f) {
+                env->DeleteLocalRef(target);
+                continue;
+            }
+
+            double tx = env->GetDoubleField(target, entX);
+            double ty = env->GetDoubleField(target, entY) + 1.0; 
+            double tz = env->GetDoubleField(target, entZ);
+
+            double diffX = tx - px;
+            double diffY = ty - py;
+            double diffZ = tz - pz;
+            double dist = std::sqrt(diffX * diffX + diffY * diffY + diffZ * diffZ);
+
+            if (dist <= bestDist && dist > 3.0) { 
+                double dot = (diffX * lookX + diffY * lookY + diffZ * lookZ) / dist;
+                if (dot > 0.95) { 
+                    bestDist = dist;
+                    if (bestTarget) env->DeleteLocalRef(bestTarget);
+                    bestTarget = env->NewLocalRef(target);
+                }
+            }
+            env->DeleteLocalRef(target);
         }
-        env->DeleteLocalRef(target);
-    }
 
-    if (bestTarget) {
-        env->CallVoidMethod(interactionManager, attackMethod, player, bestTarget);
-        jobject mainHand = env->GetStaticObjectField(handClass, mainHandField);
-        env->CallVoidMethod(player, swingMethod, mainHand);
-        env->DeleteLocalRef(mainHand);
-        env->DeleteLocalRef(bestTarget);
-    }
+        if (bestTarget) {
+            env->CallVoidMethod(interactionManager, attackMethod, player, bestTarget);
+            jobject mainHand = env->GetStaticObjectField(handClass, mainHandField);
+            env->CallVoidMethod(player, swingMethod, mainHand);
+            env->DeleteLocalRef(mainHand);
+            env->DeleteLocalRef(bestTarget);
+        }
 
-    env->DeleteLocalRef(playersList);
+        env->DeleteLocalRef(playersList);
+    }
 
 cleanup:
     env->DeleteLocalRef(interactionManager);
