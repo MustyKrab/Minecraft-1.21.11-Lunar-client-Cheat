@@ -17,11 +17,16 @@ private:
     std::thread renderThread;
     std::atomic<bool> running{false};
 
+    bool guiOpen = false;
+    bool insertPressed = false;
+    bool wasClicked = false;
+
     static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
     void RenderLoop();
     bool WorldToScreen(Vec3 pos, Vec3 camPos, float* mv, float* p, Vec2& screen, int width, int height);
     
-    void DrawProfessionalESP(Gdiplus::Graphics& g, float x, float y, float w, float h, float health, float maxHealth, int screenW, int screenH, const std::wstring& name, double distance);
+    void Draw3DBox(Gdiplus::Graphics& g, Vec3 feet, float w, float h, Vec3 camPos, float* mv, float* p, int sW, int sH, Gdiplus::Color color);
+    void DrawGUI(Gdiplus::Graphics& g, int mouseX, int mouseY, bool clickAction);
 
 public:
     ESP();

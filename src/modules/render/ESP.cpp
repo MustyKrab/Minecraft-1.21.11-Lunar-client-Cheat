@@ -1,5 +1,6 @@
 #include "ESP.h"
 #include "../../core/JNIHelper.h"
+#include "../ModuleManager.h"
 #include <iostream>
 #include <fstream>
 #include <cmath>
@@ -60,60 +61,78 @@ bool ESP::WorldToScreen(Vec3 pos, Vec3 camPos, float* mv, float* p, Vec2& screen
     return true;
 }
 
-void ESP::DrawProfessionalESP(Graphics& g, float x, float y, float w, float h, float health, float maxHealth, int screenW, int screenH, const std::wstring& name, double distance) {
-    // 1. Semi-Transparent Box Fill
-    SolidBrush fillBrush(Color(40, 0, 0, 0));
-    g.FillRectangle(&fillBrush, x, y, w, h);
+void ESP::Draw3DBox(Graphics& g, Vec3 feet, float w, float h, Vec3 camPos, float* mv, float* p, int sW, int sH, Color color) {
+    float hw = w / 2.0f;
+    
+    // 8 Corners of the bounding box
+    Vec3 corners[8] = {
+        {feet.x - hw, feet.y, feet.z - hw},
+        {feet.x + hw, feet.y, feet.z - hw},
+        {feet.x + hw, feet.y, feet.z + hw},
+        {feet.x - hw, feet.y, feet.z + hw},
+        {feet.x - hw, feet.y + h, feet.z - hw},
+        {feet.x + hw, feet.y + h, feet.z - hw},
+        {feet.x + hw, feet.y + h, feet.z + hw},
+        {feet.x - hw, feet.y + h, feet.z + hw}
+    };
 
-    // 2. Smooth White Outline
-    Pen outlinePen(Color(255, 255, 255, 255), 1.5f);
-    g.DrawRectangle(&outlinePen, x, y, w, h);
+    Vec2 s[8];
+    bool valid[8];
+    for (int i = 0; i < 8; i++) {
+        valid[i] = WorldToScreen(corners[i], camPos, mv, p, s[i], sW, sH);
+    }
 
-    // 3. Tracer
-    Pen tracerPen(Color(150, 255, 255, 255), 1.0f);
-    g.DrawLine(&tracerPen, (REAL)(screenW / 2), (REAL)screenH, x + w / 2, y + h);
+    Pen pen(color, 1.5f);
+    
+    auto drawLineIfValid = [&](int i, int j) {
+        if (valid[i] && valid[j]) {
+            g.DrawLine(&pen, s[i].x, s[i].y, s[j].x, s[j].y);
+        }
+    };
 
-    // 4. Health Bar
-    if (maxHealth <= 0) maxHealth = 20.0f;
-    float hpPercent = health / maxHealth;
-    if (hpPercent > 1.0f) hpPercent = 1.0f;
-    if (hpPercent < 0.0f) hpPercent = 0.0f;
+    // Bottom rectangle
+    drawLineIfValid(0, 1); drawLineIfValid(1, 2); drawLineIfValid(2, 3); drawLineIfValid(3, 0);
+    // Top rectangle
+    drawLineIfValid(4, 5); drawLineIfValid(5, 6); drawLineIfValid(6, 7); drawLineIfValid(7, 4);
+    // Pillars
+    drawLineIfValid(0, 4); drawLineIfValid(1, 5); drawLineIfValid(2, 6); drawLineIfValid(3, 7);
+}
 
-    int r = (int)(255.0f * (1.0f - hpPercent));
-    int gr = (int)(255.0f * hpPercent);
+void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction) {
+    // Main Window Background
+    SolidBrush bg(Color(240, 25, 25, 25));
+    g.FillRectangle(&bg, 100, 100, 400, 350);
 
-    float barX = x - 6.0f;
-    float barY = y;
-    float barW = 3.0f;
-    float barH = h;
+    // Header
+    SolidBrush header(Color(255, 15, 15, 15));
+    g.FillRectangle(&header, 100, 100, 400, 40);
 
-    SolidBrush bgBarBrush(Color(255, 0, 0, 0));
-    g.FillRectangle(&bgBarBrush, barX, barY, barW, barH);
-
-    SolidBrush hpBrush(Color(255, r, gr, 0));
-    float hpFillH = barH * hpPercent;
-    float hpFillY = barY + (barH - hpFillH);
-    g.FillRectangle(&hpBrush, barX + 1, hpFillY + 1, barW - 2, hpFillH - 2);
-
-    // 5. Nametag & Distance Text
-    FontFamily fontFamily(L"Consolas");
-    Font font(&fontFamily, 12, FontStyleBold, UnitPixel);
-    StringFormat format;
-    format.SetAlignment(StringAlignmentCenter);
-
-    // Text Shadow/Outline for readability
-    SolidBrush shadowBrush(Color(255, 0, 0, 0));
+    FontFamily fontFamily(L"Verdana");
+    Font titleFont(&fontFamily, 16, FontStyleBold, UnitPixel);
+    Font modFont(&fontFamily, 14, FontStyleRegular, UnitPixel);
     SolidBrush textBrush(Color(255, 255, 255, 255));
+    
+    g.DrawString(L"Vape V4 (MustyClient Edition)", -1, &titleFont, PointF(115, 110), nullptr, &textBrush);
 
-    wchar_t textBuf[256];
-    swprintf_s(textBuf, L"%s [%.1fm]", name.c_str(), distance);
+    // Draw Modules
+    int y = 160;
+    for (Module* mod : ModuleManager::GetModules()) {
+        bool enabled = mod->IsEnabled();
+        
+        // Module Button Background
+        SolidBrush modBg(enabled ? Color(255, 46, 204, 113) : Color(255, 45, 45, 45));
+        g.FillRectangle(&modBg, 120, y, 360, 30);
 
-    PointF textPos(x + w / 2.0f, y - 16.0f);
+        std::wstring wName(mod->GetName().begin(), mod->GetName().end());
+        g.DrawString(wName.c_str(), -1, &modFont, PointF(135, y + 6), nullptr, &textBrush);
 
-    // Draw shadow slightly offset
-    g.DrawString(textBuf, -1, &font, PointF(textPos.X + 1, textPos.Y + 1), &format, &shadowBrush);
-    // Draw main text
-    g.DrawString(textBuf, -1, &font, textPos, &format, &textBrush);
+        // Handle Click
+        if (clickAction && mouseX >= 120 && mouseX <= 480 && mouseY >= y && mouseY <= y + 30) {
+            mod->Toggle();
+        }
+        
+        y += 40;
+    }
 }
 
 void ESP::RenderLoop() {
@@ -219,11 +238,43 @@ void ESP::RenderLoop() {
     jfieldID matrixFields[16];
     for (int i = 0; i < 16; i++) matrixFields[i] = env->GetFieldID(matrixClass, mNames[i], "F");
 
+    FontFamily fontFamily(L"Consolas");
+    Font font(&fontFamily, 12, FontStyleBold, UnitPixel);
+    StringFormat format;
+    format.SetAlignment(StringAlignmentCenter);
+    SolidBrush shadowBrush(Color(255, 0, 0, 0));
+    SolidBrush textBrush(Color(255, 255, 255, 255));
+
     while (running) {
         GetWindowRect(mcWindow, &rect);
         int width = rect.right - rect.left;
         int height = rect.bottom - rect.top;
         MoveWindow(overlayWindow, rect.left, rect.top, width, height, true);
+
+        // GUI Toggle Logic (Right Shift)
+        if (GetAsyncKeyState(VK_RSHIFT) & 0x8000) {
+            if (!insertPressed) {
+                guiOpen = !guiOpen;
+                insertPressed = true;
+                long style = GetWindowLong(overlayWindow, GWL_EXSTYLE);
+                if (guiOpen) {
+                    SetWindowLong(overlayWindow, GWL_EXSTYLE, style & ~WS_EX_TRANSPARENT);
+                    SetForegroundWindow(overlayWindow);
+                } else {
+                    SetWindowLong(overlayWindow, GWL_EXSTYLE, style | WS_EX_TRANSPARENT);
+                }
+            }
+        } else {
+            insertPressed = false;
+        }
+
+        // Mouse Logic
+        POINT cursorPos;
+        GetCursorPos(&cursorPos);
+        ScreenToClient(overlayWindow, &cursorPos);
+        bool isClicked = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+        bool clickAction = isClicked && !wasClicked;
+        wasClicked = isClicked;
 
         HDC hdc = GetDC(overlayWindow);
         HDC memDC = CreateCompatibleDC(hdc);
@@ -235,9 +286,9 @@ void ESP::RenderLoop() {
         FillRect(memDC, &clientRect, bgBrush);
         DeleteObject(bgBrush);
 
-        Graphics graphics(memDC);
-        graphics.SetSmoothingMode(SmoothingModeAntiAlias);
-        graphics.SetTextRenderingHint(TextRenderingHintAntiAlias);
+        Graphics g(memDC);
+        g.SetSmoothingMode(SmoothingModeAntiAlias);
+        g.SetTextRenderingHint(TextRenderingHintAntiAlias);
 
         jobject mcInstance = env->GetStaticObjectField(mcClass, instanceField);
         if (mcInstance) {
@@ -282,23 +333,15 @@ void ESP::RenderLoop() {
                             env->GetDoubleField(player, entZ)
                         };
 
-                        Vec3 headPos = feetPos;
-                        headPos.y += 2.0;
+                        // 1. Draw 3D Rectangular Prism (Vape Style)
+                        Draw3DBox(g, feetPos, 0.6f, 1.8f, camPos, mv, p, width, height, Color(255, 46, 204, 113));
 
-                        Vec2 screenFeet, screenHead;
-                        if (WorldToScreen(feetPos, camPos, mv, p, screenFeet, width, height) &&
-                            WorldToScreen(headPos, camPos, mv, p, screenHead, width, height)) {
-
-                            float boxHeight = screenFeet.y - screenHead.y;
-                            float boxWidth = boxHeight / 2.0f;
-                            float boxX = screenHead.x - boxWidth / 2.0f;
-                            float boxY = screenHead.y;
-
-                            float hp = 20.0f, maxHp = 20.0f;
-                            if (getHealth && getMaxHealth) {
-                                hp = env->CallFloatMethod(player, getHealth);
-                                maxHp = env->CallFloatMethod(player, getMaxHealth);
-                            }
+                        // 2. Nametag & Health
+                        Vec3 headPos = { feetPos.x, feetPos.y + 2.0, feetPos.z };
+                        Vec2 screenHead;
+                        if (WorldToScreen(headPos, camPos, mv, p, screenHead, width, height)) {
+                            float hp = 20.0f;
+                            if (getHealth) hp = env->CallFloatMethod(player, getHealth);
 
                             double distance = sqrt(pow(camPos.x - feetPos.x, 2) + pow(camPos.y - feetPos.y, 2) + pow(camPos.z - feetPos.z, 2));
 
@@ -318,7 +361,12 @@ void ESP::RenderLoop() {
                                 }
                             }
 
-                            DrawProfessionalESP(graphics, boxX, boxY, boxWidth, boxHeight, hp, maxHp, width, height, playerName, distance);
+                            wchar_t textBuf[256];
+                            swprintf_s(textBuf, L"%s [%.1fm] \u2764%.1f", playerName.c_str(), distance, hp);
+                            
+                            PointF textPos(screenHead.x, screenHead.y - 16.0f);
+                            g.DrawString(textBuf, -1, &font, PointF(textPos.X + 1, textPos.Y + 1), &format, &shadowBrush);
+                            g.DrawString(textBuf, -1, &font, textPos, &format, &textBrush);
                         }
                         env->DeleteLocalRef(player);
                     }
@@ -334,6 +382,11 @@ void ESP::RenderLoop() {
             env->DeleteLocalRef(mcInstance);
         }
 
+        // Draw GUI on top of everything if open
+        if (guiOpen) {
+            DrawGUI(g, cursorPos.x, cursorPos.y, clickAction);
+        }
+
         BitBlt(hdc, 0, 0, width, height, memDC, 0, 0, SRCCOPY);
 
         SelectObject(memDC, oldBitmap);
@@ -341,7 +394,7 @@ void ESP::RenderLoop() {
         DeleteDC(memDC);
         ReleaseDC(overlayWindow, hdc);
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(16));
+        std::this_thread::sleep_for(std::chrono::milliseconds(8));
     }
 
     DestroyWindow(overlayWindow);
