@@ -4,6 +4,7 @@
 #include <chrono>
 #include <random>
 #include <windows.h>
+#include <cmath>
 
 static bool acMappingsLoaded = false;
 static jclass mcClass, playerClass, optionsClass, keyBindingClass;
@@ -22,8 +23,6 @@ long long AutoClicker::GetTimeMs() {
 int AutoClicker::GetRandomDelay() {
     if (minCps >= maxCps) maxCps = minCps + 1.0f;
     
-    // Convert CPS to milliseconds delay
-    // 10 CPS = 100ms per click (50ms down, 50ms up)
     int minDelay = (int)(1000.0f / maxCps);
     int maxDelay = (int)(1000.0f / minCps);
     
@@ -63,7 +62,6 @@ void AutoClicker::OnTick() {
 
     if (!instanceField || !playerField || !optionsField || !attackKeyField) return;
 
-    // Only autoclick if the user is physically holding the left mouse button
     if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
         isClicking = false;
         return;
@@ -87,11 +85,9 @@ void AutoClicker::OnTick() {
     if (currentTime >= nextClickTime) {
         jobject attackKey = env->GetObjectField(options, attackKeyField);
         if (attackKey) {
-            // Toggle click state
             isClicking = !isClicking;
             env->CallVoidMethod(attackKey, setPressedMethod, isClicking ? JNI_TRUE : JNI_FALSE);
             
-            // If we just clicked down, apply jitter
             if (isClicking && jitter) {
                 std::random_device rd;
                 std::mt19937 gen(rd());
@@ -106,7 +102,6 @@ void AutoClicker::OnTick() {
             
             env->DeleteLocalRef(attackKey);
             
-            // Set next time to toggle state (half of the full delay to simulate down/up)
             nextClickTime = currentTime + (GetRandomDelay() / 2);
         }
     }
