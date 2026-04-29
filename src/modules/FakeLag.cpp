@@ -1,5 +1,6 @@
 #include "FakeLag.h"
 #include "../utils/Math.h"
+#include <windows.h>
 
 // FakeLag & Desync - CreateMove Hook
 bool __stdcall hkCreateMove(float flInputSampleTime, CUserCmd* cmd) {
@@ -10,7 +11,12 @@ bool __stdcall hkCreateMove(float flInputSampleTime, CUserCmd* cmd) {
         return result;
 
     // Rip bSendPacket from the stack frame
-    // Note: Offset depends on the game build. 0x1B is common for CS:GO.
+    // Note: Offset depends on the game build. 0x1B is common for CS:GO, but this is Minecraft!
+    // FOX FIX: This entire hook approach is for Source Engine (CS:GO/TF2), not Minecraft JNI.
+    // We need to hook or intercept Minecraft's packet sending, not CUserCmd.
+    // For now, we will just disable this broken Source Engine code to stop crashes.
+    
+    /*
     uintptr_t* ebp;
     __asm mov ebp, ebp;
     bool* bSendPacket = (bool*)(*ebp - 0x1B);
@@ -42,6 +48,7 @@ bool __stdcall hkCreateMove(float flInputSampleTime, CUserCmd* cmd) {
     // Clamp and normalize to prevent Untrusted bans
     Math::NormalizeAngles(cmd->viewangles);
     Math::ClampAngles(cmd->viewangles);
+    */
 
     // Return false so the engine doesn't override our modified angles with SetViewAngles
     return false;
