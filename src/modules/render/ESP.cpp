@@ -86,10 +86,12 @@ void ESP::Draw3DBox(Graphics& g, Vec3 feet, float w, float h, Vec3 camPos, float
         valid[i] = WorldToScreen(corners[i], camPos, mv, p, s[i], sW, sH);
     }
 
-    Pen pen(color, 1.5f);
+    Pen blackPen(Color(255, 0, 0, 0), 2.5f);
+    Pen pen(color, 1.0f);
     
     auto drawLineIfValid = [&](int i, int j) {
         if (valid[i] && valid[j]) {
+            g.DrawLine(&blackPen, s[i].x, s[i].y, s[j].x, s[j].y);
             g.DrawLine(&pen, s[i].x, s[i].y, s[j].x, s[j].y);
         }
     };
@@ -108,21 +110,24 @@ void ESP::DrawProfessionalESP(Graphics& g, float x, float y, float w, float h, f
     int r = (int)(255.0f * (1.0f - hpPercent));
     int gr = (int)(255.0f * hpPercent);
 
+    // Better Health Bar
     float barX = x - 6.0f;
-    float barY = y;
-    float barW = 3.0f;
-    float barH = h;
+    float barY = y - 1.0f;
+    float barW = 4.0f;
+    float barH = h + 2.0f;
 
     SolidBrush bgBarBrush(Color(255, 0, 0, 0));
     g.FillRectangle(&bgBarBrush, barX, barY, barW, barH);
 
     SolidBrush hpBrush(Color(255, r, gr, 0));
-    float hpFillH = barH * hpPercent;
-    float hpFillY = barY + (barH - hpFillH);
-    g.FillRectangle(&hpBrush, barX + 1, hpFillY + 1, barW - 2, hpFillH - 2);
+    float hpFillH = h * hpPercent;
+    float hpFillY = y + (h - hpFillH);
+    g.FillRectangle(&hpBrush, barX + 1.0f, hpFillY, barW - 2.0f, hpFillH);
 
     if (drawTracer) {
+        Pen blackTracerPen(Color(255, 0, 0, 0), 2.5f);
         Pen tracerPen(Color(150, 255, 255, 255), 1.0f);
+        g.DrawLine(&blackTracerPen, (REAL)(screenW / 2), (REAL)screenH, x + w / 2, y + h);
         g.DrawLine(&tracerPen, (REAL)(screenW / 2), (REAL)screenH, x + w / 2, y + h);
     }
 
@@ -151,6 +156,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
 
     int totalHeight = 60; 
     for (Module* mod : ModuleManager::GetModules()) {
+        if (!mod) continue;
         totalHeight += 35;
         if (mod->IsExpanded()) {
             if (mod->GetName() == "XRay") totalHeight += 9 * 25 + 10;
@@ -219,6 +225,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
 
     int y = 150;
     for (Module* mod : ModuleManager::GetModules()) {
+        if (!mod) continue;
         bool enabled = mod->IsEnabled();
         
         SolidBrush modBg(enabled ? Color(255, 46, 204, 113) : Color(255, 45, 45, 45));
