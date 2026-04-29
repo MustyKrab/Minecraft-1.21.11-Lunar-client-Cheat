@@ -76,7 +76,7 @@ void Killaura::OnTick() {
         double pz = env->GetDoubleField(player, entZ);
 
         jobject playersList = env->GetObjectField(world, playersField);
-        if (!playersList) goto cleanup;
+        if (!playersList) goto cleanup; // FIX: Null check before calling method
 
         int size = env->CallIntMethod(playersList, listSize);
         jobject bestTarget = nullptr;

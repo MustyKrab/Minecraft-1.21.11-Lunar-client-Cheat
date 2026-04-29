@@ -97,7 +97,7 @@ void Reach::OnTick() {
         double lookZ = (double)(h * j);
 
         jobject playersList = env->GetObjectField(world, playersField);
-        if (!playersList) goto cleanup;
+        if (!playersList) goto cleanup; // FIX: Null check before calling method
 
         int size = env->CallIntMethod(playersList, listSize);
         jobject bestTarget = nullptr;

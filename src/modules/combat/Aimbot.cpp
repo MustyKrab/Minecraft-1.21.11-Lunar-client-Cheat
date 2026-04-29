@@ -48,7 +48,7 @@ void Aimbot::OnTick() {
         getHealth = JNIHelper::GetMethodSafe(livingClass, "method_6032", "()F", "getHealth");
         
         sensitivityField = JNIHelper::GetFieldSafe(optionsClass, "field_1844", "Lnet/minecraft/class_7172;", "mouseSensitivity");
-        getDoubleValue = JNIHelper::GetMethodSafe(doubleOptionClass, "method_41753", "()Ljava/lang/Object;", "getValue");
+        getDoubleValue = JNIHelper::GetMethodSafe(doubleOptionClass, "method_41753", "()Ljava/lang/lang/Object;", "getValue");
 
         aimbotMappingsLoaded = true;
     }
@@ -84,7 +84,7 @@ void Aimbot::OnTick() {
         float currentPitch = env->GetFloatField(player, pitchField);
 
         jobject playersList = env->GetObjectField(world, playersField);
-        if (!playersList) goto cleanup;
+        if (!playersList) goto cleanup; // FIX: Null check before calling method
 
         int size = env->CallIntMethod(playersList, listSize);
         jobject bestTarget = nullptr;
