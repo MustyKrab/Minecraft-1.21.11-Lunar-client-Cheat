@@ -22,10 +22,10 @@ public class SkeletonESP extends Module {
                 PlayerEntity player = (PlayerEntity) entity;
                 Vec3d pos = player.getLerpedPos(tickDelta);
                 
-                // Approximate bone positions based on body yaw
-                float bodyYaw = (float) Math.toRadians(player.bodyYaw);
-                float cos = (float) Math.cos(bodyYaw);
-                float sin = (float) Math.sin(bodyYaw);
+                // Approximate bone positions based on yaw
+                float bodyYaw = player.getYaw(tickDelta);
+                float cos = (float) Math.cos(Math.toRadians(bodyYaw));
+                float sin = (float) Math.sin(Math.toRadians(bodyYaw));
                 
                 Vec3d rightOffset = new Vec3d(-cos * 0.3, 0, -sin * 0.3);
                 Vec3d leftOffset = new Vec3d(cos * 0.3, 0, sin * 0.3);
