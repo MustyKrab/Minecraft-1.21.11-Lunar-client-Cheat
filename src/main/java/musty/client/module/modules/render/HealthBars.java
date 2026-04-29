@@ -22,13 +22,18 @@ public class HealthBars extends Module {
         Vec3d cameraPos = mc.player.getCameraPosVec(tickDelta);
         float yaw = mc.player.getYaw(tickDelta);
         float pitch = mc.player.getPitch(tickDelta);
+        
+        // Better pixel scaling based on vertical FOV
+        float fov = mc.options.getFov().getValue().floatValue();
+        float pixelsPerDegree = height / fov;
 
         for (Entity entity : mc.world.getEntities()) {
             if (entity instanceof PlayerEntity && entity != mc.player) {
                 PlayerEntity player = (PlayerEntity) entity;
-                Vec3d entityPos = entity.getLerpedPos(tickDelta);
                 
-                Vec3d diff = entityPos.subtract(cameraPos);
+                // Get the position slightly above the player's head
+                Vec3d headPos = player.getLerpedPos(tickDelta).add(0, player.getHeight() + 0.3, 0);
+                Vec3d diff = headPos.subtract(cameraPos);
                 
                 double diffXZ = Math.sqrt(diff.x * diff.x + diff.z * diff.z);
                 float yawToEntity = (float) Math.toDegrees(Math.atan2(diff.z, diff.x)) - 90.0f;
@@ -37,10 +42,8 @@ public class HealthBars extends Module {
                 float relativeYaw = wrapDegrees(yawToEntity - yaw);
                 float relativePitch = wrapDegrees(pitchToEntity - pitch);
                 
+                // Only draw if entity is in front of the camera
                 if (Math.abs(relativeYaw) < 90.0f) {
-                    float fov = mc.options.getFov().getValue().floatValue();
-                    float pixelsPerDegree = (width / fov);
-                    
                     int screenX = (width / 2) + (int)(relativeYaw * pixelsPerDegree);
                     int screenY = (height / 2) + (int)(relativePitch * pixelsPerDegree);
                     
@@ -48,15 +51,24 @@ public class HealthBars extends Module {
                     float maxHp = player.getMaxHealth();
                     float hpPercent = hp / maxHp;
                     
-                    int barWidth = 30;
-                    int barHeight = 4;
+                    int barWidth = 40;
+                    int barHeight = 5;
                     int barX = screenX - (barWidth / 2);
-                    int barY = screenY - 20;
+                    int barY = screenY; // Draw exactly at the projected head pos
                     
-                    context.fill(barX, barY, barX + barWidth, barY + barHeight, 0xFF000000);
+                    // Draw background (black border)
+                    context.fill(barX - 1, barY - 1, barX + barWidth + 1, barY + barHeight + 1, 0xFF000000);
+                    // Draw background (dark gray inner)
+                    context.fill(barX, barY, barX + barWidth, barY + barHeight, 0xFF444444);
                     
+                    // Draw health
                     int hpColor = hpPercent > 0.5 ? 0xFF00FF00 : (hpPercent > 0.25 ? 0xFFFFFF00 : 0xFFFF0000);
-                    context.fill(barX + 1, barY + 1, barX + 1 + (int)((barWidth - 2) * hpPercent), barY + barHeight - 1, hpColor);
+                    context.fill(barX, barY, barX + (int)(barWidth * hpPercent), barY + barHeight, hpColor);
+                    
+                    // Draw HP text
+                    String hpText = String.format("%.1f", hp);
+                    int textWidth = mc.textRenderer.getWidth(hpText);
+                    context.drawText(mc.textRenderer, hpText, screenX - (textWidth / 2), barY - 10, 0xFFFFFFFF, true);
                 }
             }
         }
