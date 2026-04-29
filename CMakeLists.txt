@@ -18,6 +18,8 @@ add_library(MustyClient SHARED
     src/modules/combat/Aimbot.h
     src/modules/render/ESP.cpp
     src/modules/render/ESP.h
+    src/modules/render/XRay.cpp
+    src/modules/render/XRay.h
 )
 
 find_package(JNI REQUIRED)
