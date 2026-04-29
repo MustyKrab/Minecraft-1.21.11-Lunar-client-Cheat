@@ -9,7 +9,7 @@ static jfieldID instanceField, playerField, worldField, interactionManagerField,
 static jfieldID entX, entY, entZ, yawField, pitchField, mainHandField;
 static jmethodID listSize, listGet, getHealth, attackMethod, swingMethod, getCooldownMethod;
 
-Killaura::Killaura() : Module("Killaura"), reach(4.5f) {}
+Killaura::Killaura() : Module("Killaura"), reach(4.5f), aimbotIntensity(0.5f), aimAssistMode(false) {}
 
 void Killaura::OnTick() {
     JNIEnv* env = JNIHelper::env;
@@ -119,13 +119,30 @@ void Killaura::OnTick() {
             double diffZ = tz - pz;
             double distXZ = std::sqrt(diffX * diffX + diffZ * diffZ);
 
-            float yaw = (float)(std::atan2(diffZ, diffX) * 180.0 / 3.14159265) - 90.0f;
-            float pitch = (float)-(std::atan2(diffY, distXZ) * 180.0 / 3.14159265);
+            float targetYaw = (float)(std::atan2(diffZ, diffX) * 180.0 / 3.14159265) - 90.0f;
+            float targetPitch = (float)-(std::atan2(diffY, distXZ) * 180.0 / 3.14159265);
 
-            env->SetFloatField(player, yawField, yaw);
-            env->SetFloatField(player, pitchField, pitch);
+            float currentYaw = env->GetFloatField(player, yawField);
+            float currentPitch = env->GetFloatField(player, pitchField);
+
+            // Normalize yaw differences
+            float yawDiff = targetYaw - currentYaw;
+            while (yawDiff <= -180.0f) yawDiff += 360.0f;
+            while (yawDiff > 180.0f) yawDiff -= 360.0f;
+
+            float pitchDiff = targetPitch - currentPitch;
+
+            // Apply smoothing based on intensity
+            // If aimAssistMode is true, only rotate if we are clicking (handled implicitly or by user)
+            // But here we just apply the intensity. 1.0 = snap, 0.01 = very slow
+            float smoothedYaw = currentYaw + (yawDiff * aimbotIntensity);
+            float smoothedPitch = currentPitch + (pitchDiff * aimbotIntensity);
+
+            env->SetFloatField(player, yawField, smoothedYaw);
+            env->SetFloatField(player, pitchField, smoothedPitch);
 
             // Attack (respect cooldown)
+            // If in aim assist mode, we might not want to auto-attack, but let's assume Killaura always attacks
             float cooldown = env->CallFloatMethod(player, getCooldownMethod, 0.5f);
             if (cooldown >= 1.0f) {
                 env->CallVoidMethod(interactionManager, attackMethod, player, bestTarget);
