@@ -64,16 +64,40 @@ bool ESP::WorldToScreen(Vec3 pos, Vec3 camPos, float* mv, float* p, Vec2& screen
     return true;
 }
 
+void ESP::Draw3DBox(Graphics& g, Vec3 feet, float w, float h, Vec3 camPos, float* mv, float* p, int sW, int sH, Color color) {
+    float hw = w / 2.0f;
+    
+    Vec3 corners[8] = {
+        {feet.x - hw, feet.y, feet.z - hw},
+        {feet.x + hw, feet.y, feet.z - hw},
+        {feet.x + hw, feet.y, feet.z + hw},
+        {feet.x - hw, feet.y, feet.z + hw},
+        {feet.x - hw, feet.y + h, feet.z - hw},
+        {feet.x + hw, feet.y + h, feet.z - hw},
+        {feet.x + hw, feet.y + h, feet.z + hw},
+        {feet.x - hw, feet.y + h, feet.z + hw}
+    };
+
+    Vec2 s[8];
+    bool valid[8];
+    for (int i = 0; i < 8; i++) {
+        valid[i] = WorldToScreen(corners[i], camPos, mv, p, s[i], sW, sH);
+    }
+
+    Pen pen(color, 1.5f);
+    
+    auto drawLineIfValid = [&](int i, int j) {
+        if (valid[i] && valid[j]) {
+            g.DrawLine(&pen, s[i].x, s[i].y, s[j].x, s[j].y);
+        }
+    };
+
+    drawLineIfValid(0, 1); drawLineIfValid(1, 2); drawLineIfValid(2, 3); drawLineIfValid(3, 0);
+    drawLineIfValid(4, 5); drawLineIfValid(5, 6); drawLineIfValid(6, 7); drawLineIfValid(7, 4);
+    drawLineIfValid(0, 4); drawLineIfValid(1, 5); drawLineIfValid(2, 6); drawLineIfValid(3, 7);
+}
+
 void ESP::DrawProfessionalESP(Graphics& g, float x, float y, float w, float h, float health, float maxHealth, int screenW, int screenH, const std::wstring& name, double distance) {
-    SolidBrush fillBrush(Color(40, 0, 0, 0));
-    g.FillRectangle(&fillBrush, x, y, w, h);
-
-    Pen outlinePen(Color(255, 255, 255, 255), 1.5f);
-    g.DrawRectangle(&outlinePen, x, y, w, h);
-
-    Pen tracerPen(Color(150, 255, 255, 255), 1.0f);
-    g.DrawLine(&tracerPen, (REAL)(screenW / 2), (REAL)screenH, x + w / 2, y + h);
-
     if (maxHealth <= 0) maxHealth = 20.0f;
     float hpPercent = health / maxHealth;
     if (hpPercent > 1.0f) hpPercent = 1.0f;
@@ -404,13 +428,6 @@ void ESP::RenderLoop() {
     jfieldID matrixFields[16];
     for (int i = 0; i < 16; i++) matrixFields[i] = env->GetFieldID(matrixClass, mNames[i], "F");
 
-    FontFamily fontFamily(L"Consolas");
-    Font font(&fontFamily, 12, FontStyleBold, UnitPixel);
-    StringFormat format;
-    format.SetAlignment(StringAlignmentCenter);
-    SolidBrush shadowBrush(Color(255, 0, 0, 0));
-    SolidBrush textBrush(Color(255, 255, 255, 255));
-
     while (running) {
         GetWindowRect(mcWindow, &rect);
         int width = rect.right - rect.left;
@@ -499,7 +516,6 @@ void ESP::RenderLoop() {
 
                         double distance = std::sqrt(std::pow(camPos.x - feetPos.x, 2) + std::pow(camPos.y - feetPos.y, 2) + std::pow(camPos.z - feetPos.z, 2));
 
-                        // Check ESP Range
                         if (distance <= espRange) {
                             Vec3 headPos = feetPos;
                             headPos.y += 2.0;
@@ -512,6 +528,9 @@ void ESP::RenderLoop() {
                                 float boxWidth = boxHeight / 2.0f;
                                 float boxX = screenHead.x - boxWidth / 2.0f;
                                 float boxY = screenHead.y;
+
+                                // Draw 3D Box ESP
+                                Draw3DBox(g, feetPos, 0.6f, 1.8f, camPos, mv, p, width, height, Color(255, 46, 204, 113));
 
                                 float hp = 20.0f, maxHp = 20.0f;
                                 if (getHealth && getMaxHealth) {
