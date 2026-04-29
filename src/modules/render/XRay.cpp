@@ -69,6 +69,8 @@ void XRay::OnTick() {
 
     jmethodID blockPosInit = env->GetMethodID(blockPosClass, "<init>", "(III)V");
 
+    env->PushLocalFrame(200); // <-- FIX: Prevent JNI local reference leaks
+
     // Scan a 32x32x32 area around the player
     for (int x = px - scanRadius; x <= px + scanRadius; x++) {
         for (int y = py - scanRadius; y <= py + scanRadius; y++) {
@@ -81,7 +83,7 @@ void XRay::OnTick() {
                 if (stateObj) {
                     jobject blockObj = env->CallObjectMethod(stateObj, getBlockMethod);
                     if (blockObj) {
-                        jstring keyStr = (jstring)env->CallObjectMethod(blockObj, getTranslationKeyMethod);
+                        jstring keyStr = (jstring(env->CallObjectMethod(blockObj, getTranslationKeyMethod);
                         if (keyStr) {
                             const char* rawKey = env->GetStringUTFChars(keyStr, nullptr);
                             
@@ -117,7 +119,12 @@ void XRay::OnTick() {
         }
     }
 
-    foundBlocks = newFoundBlocks;
+    env->PopLocalFrame(nullptr);
+
+    {
+        std::lock_guard<std::mutex> lock(blocksMutex); // <-- FIX: Thread safety
+        foundBlocks = newFoundBlocks;
+    }
 
     env->DeleteLocalRef(world);
     env->DeleteLocalRef(player);

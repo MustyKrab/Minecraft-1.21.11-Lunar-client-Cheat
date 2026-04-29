@@ -1,6 +1,7 @@
 #pragma once
 #include "../Module.h"
 #include <vector>
+#include <mutex>
 
 struct XRayBlock {
     int x, y, z;
@@ -14,6 +15,8 @@ private:
     int tickCounter = 0;
 
 public:
+    std::mutex blocksMutex; // <-- FIX: Thread safety
+
     bool showDiamond = true;
     bool showGold = true;
     bool showIron = true;

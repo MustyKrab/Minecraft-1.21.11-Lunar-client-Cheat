@@ -115,7 +115,7 @@ void ESP::Draw3DBox(Graphics& g, Vec3 feet, float w, float h, Vec3 camPos, float
 void ESP::DrawProfessionalESP(Graphics& g, float x, float y, float w, float h, float health, float maxHealth, int screenW, int screenH, const std::wstring& name, double distance, bool drawTracer) {
     if (maxHealth <= 0) maxHealth = 20.0f;
     float hpPercent = health / maxHealth;
-    if (hpPercent > 1.0f) hpPercent = 1.0f;
+    if (hiPercent > 1.0f) hpPercent = 1.0f;
     if (hpPercent < 0.0f) hpPercent = 0.0f;
 
     int r = (int)(255.0f * (1.0f - hpPercent));
@@ -235,7 +235,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
     };
 
     int y = 150;
-    for (Module* mod : ModuleManager::GetModules()) {
+    for (Module* mod : ModuleManager::GetModule()) {
         if (!mod) continue;
         bool enabled = mod->IsEnabled();
         
@@ -284,7 +284,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
                 AutoClicker* ac = (AutoClicker*)mod;
                 float minCps = ac->GetMinCps();
                 float maxCps = ac->GetMaxCps();
-                bool jitter = ac->IsJitterEnabled();
+                booljitter = ac->IsJitterEnabled();
                 
                 y += DrawSlider(L"Min CPS", minCps, 1.0f, 20.0f, draggingAcMinSlider, 130, y);
                 y += DrawSlider(L"Max CPS", maxCps, 1.0f, 20.0f, draggingAcMaxSlider, 130, y);
@@ -320,7 +320,7 @@ void ESP::RenderLoop() {
     GetWindowRect(mcWindow, &rect);
 
     overlayWindow = CreateWindowExA(
-        WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_TOOLWINDOW,
+        WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_LAVERED | WS_EX_TOOLWINDOW,
         "MustyOverlay", "Musty ESP",
         WS_POPUP,
         rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top,
@@ -485,6 +485,7 @@ void ESP::RenderLoop() {
                     }
 
                     jint size = env->CallIntMethod(playersList, listSize);
+                    env->PushLocalFrame(200); // <-- FIX: Prevent JNI local reference leaks
                     for (int i = 0; i < size; i++) {
                         jobject player = env->CallObjectMethod(playersList, listGet, i);
                         if (!player) continue;
@@ -546,10 +547,12 @@ void ESP::RenderLoop() {
                         }
                         env->DeleteLocalRef(player);
                     }
+                    env->PopLocalFrame(nullptr);
                     
                     // Draw X-Ray Blocks
                     XRay* xray = (XRay*)ModuleManager::GetModule("XRay");
                     if (xray && xray->IsEnabled()) {
+                        std::lock_guard<std::mutex> lock(xray->blocksMutex); // <-- FIX: Thread safety
                         for (const auto& block : xray->GetFoundBlocks()) {
                             Vec3 blockPos = { (double)block.x + 0.5, (double)block.y + 0.5, (double)block.z + 0.5 };
                             double distance = std::sqrt(std::pow(camPos.x - blockPos.x, 2) + std::pow(camPos.y - blockPos.y, 2) + std::pow(camPos.z - blockPos.z, 2));
