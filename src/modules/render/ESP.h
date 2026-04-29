@@ -1,35 +1,47 @@
-I3ByYWdtYSBvbmNlCiNpbmNsdWRlICIuLi9Nb2R1bGUuaCIKI2luY2x1ZGUg
-PHdpbmRvd3MuaD4KI2luY2x1ZGUgPGdkaXBsdXMuaD4KI2luY2x1ZGUgPHRo
-cmVhZD4KI2luY2x1ZGUgPGF0b21pYz4KI2luY2x1ZGUgPHN0cmluZz4KCnN0
-cnVjdCBWZWMyIHsgZmxvYXQgeCwgeTsgfTsKc3RydWN0IFZlYzMgeyBkb3Vi
-bGUgeCwgeSwgejsgfTsKCmNsYXNzIEVTUCA6IHB1YmxpYyBNb2R1bGUgewpw
-cml2YXRlOgogICAgSFdORCBvdmVybGF5V2luZG93ID0gTlVMTDsKICAgIEhX
-TkQgbWNXaW5kb3cgPSBOVUxMOwogICAgVUxPTkdfUFRSIGdkaXBsdXNUb2tl
-biA9IDA7CiAgICBzdGQ6OnRocmVhZCByZW5kZXJUaHJlYWQ7CiAgICBzdGQ6
-OmF0b21pYzxib29sPiBydW5uaW5ne2ZhbHNlfTsKCiAgICBib29sIGd1aU9w
-ZW4gPSBmYWxzZTsKICAgIGJvb2wgaW5zZXJ0UHJlc3NlZCA9IGZhbHNlOwog
-ICAgYm9vbCB3YXNDbGlja2VkID0gZmFsc2U7CiAgICBib29sIHdhc1JpZ2h0
-Q2xpY2tlZCA9IGZhbHNlOwogICAgCiAgICBib29sIGRyYWdnaW5nU2xpZGVy
-ID0gZmFsc2U7CiAgICBib29sIGRyYWdnaW5nQWltU2xpZGVyID0gZmFsc2U7
-CiAgICBib29sIGRyYWdnaW5nRXNwUmFuZ2VTbGlkZXIgPSBmYWxzZTsKICAg
-IGJvb2wgZHJhZ2dpbmdSZWFjaFNsaWRlciA9IGZhbHNlOwogICAgYm9vbCBk
-cmFnZ2luZ0FjTWluU2xpZGVyID0gZmFsc2U7CiAgICBib29sIGRyYWdnaW5n
-QWNNYXhTbGlkZXIgPSBmYWxzZTsKCiAgICBmbG9hdCBlc3BSYW5nZSA9IDEw
-MC4wZjsKCiAgICBzdGF0aWMgTFJFU1VMVCBDQUxMQkFDSyBPdmVybGF5UHJv
-YyhIV05EIGh3bmQsIFVJTlQgbXNnLCBXUEFSQU0gd1BhcmFtLCBMUEFSQU0g
-bFBhcmFtKTsKICAgIHZvaWQgUmVuZGVyTG9vcCgpOwogICAgYm9vbCBXb3Js
-ZFRvU2NyZWVuKFZlYzMgcG9zLCBWZWMzIGNhbVBvcywgZmxvYXQqIG12LCBm
-bG9hdCogcCwgVmVjMiYgc2NyZWVuLCBpbnQgd2lkdGgsIGludCBoZWlnaHQp
-OwogICAgCiAgICB2b2lkIERyYXczREJveChHZGlwbHVzOjpHcmFwaGljcyYg
-ZywgVmVjMyBmZWV0LCBmbG9hdCB3LCBmbG9hdCBoLCBWZWMzIGNhbVBvcywg
-ZmxvYXQqIG12LCBmbG9hdCogcCwgaW50IHNXLCBpbnQgc0gsIEdkaXBsdXM6
-OkNvbG9yIGNvbG9yKTsKICAgIHZvaWQgRHJhd1Byb2Zlc3Npb25hbEVTUChH
-ZGlwbHVzOjpHcmFwaGljcyYgZywgZmxvYXQgeCwgZmxvYXQgeSwgZmxvYXQg
-dywgZmxvYXQgaCwgZmxvYXQgaGVhbHRoLCBmbG9hdCBtYXhIZWFsdGgsIGlu
-dCBzY3JlZW5XLCBpbnQgc2NyZWVuSCwgY29uc3Qgc3RkOjp3c3RyaW5nJiBu
-YW1lLCBkb3VibGUgZGlzdGFuY2UsIGJvb2wgZHJhd1RyYWNlcik7CiAgICB2
-b2lkIERyYXdHVUkoR2RpcGx1czo6R3JhcGhpY3MmIGcsIGludCBtb3VzZVgs
-IGludCBtb3VzZVksIGJvb2wgY2xpY2tBY3Rpb24sIGJvb2wgcmlnaHRDbGlj
-a0FjdGlvbik7CgpwdWJsaWM6CiAgICBFU1AoKTsKICAgIH5FU1AoKTsKICAg
-IHZvaWQgT25FbmFibGUoKSBvdmVycmlkZTsKICAgIHZvaWQgT25EaXNhYmxl
-KCkgb3ZlcnJpZGU7Cn07Cg==
+#pragma once
+#include "../Module.h"
+#include <windows.h>
+#include <gdiplus.h>
+#include <thread>
+#include <atomic>
+#include <string>
+
+struct Vec2 { float x, y; };
+struct Vec3 { double x, y, z; };
+
+class ESP : public Module {
+private:
+    HWND overlayWindow = NULL;
+    HWND mcWindow = NULL;
+    ULONG_PTR gdiplusToken = 0;
+    std::thread renderThread;
+    std::atomic<bool> running{false};
+
+    bool guiOpen = false;
+    bool insertPressed = false;
+    bool wasClicked = false;
+    bool wasRightClicked = false;
+    
+    bool draggingSlider = false;
+    bool draggingAimSlider = false;
+    bool draggingEspRangeSlider = false;
+    bool draggingReachSlider = false;
+    bool draggingAcMinSlider = false;
+    bool draggingAcMaxSlider = false;
+
+    float espRange = 100.0f;
+
+    static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+    void RenderLoop();
+    bool WorldToScreen(Vec3 pos, Vec3 camPos, float* mv, float* p, Vec2& screen, int width, int height);
+    
+    void Draw3DBox(Gdiplus::Graphics& g, Vec3 feet, float w, float h, Vec3 camPos, float* mv, float* p, int sW, int sH, Gdiplus::Color color);
+    void DrawProfessionalESP(Gdiplus::Graphics& g, float x, float y, float w, float h, float health, float maxHealth, int screenW, int screenH, const std::wstring& name, double distance, bool drawTracer);
+    void DrawGUI(Gdiplus::Graphics& g, int mouseX, int mouseY, bool clickAction, bool rightClickAction);
+
+public:
+    ESP();
+    ~ESP();
+    void OnEnable() override;
+    void OnDisable() override;
+};
