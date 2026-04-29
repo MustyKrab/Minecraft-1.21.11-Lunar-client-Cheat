@@ -14,6 +14,8 @@ add_library(MustyClient SHARED
     src/modules/Module.h
     src/modules/combat/Killaura.cpp
     src/modules/combat/Killaura.h
+    src/modules/combat/Aimbot.cpp
+    src/modules/combat/Aimbot.h
     src/modules/render/ESP.cpp
     src/modules/render/ESP.h
 )
@@ -23,7 +25,6 @@ target_include_directories(MustyClient PRIVATE ${JNI_INCLUDE_DIRS} src)
 target_link_libraries(MustyClient PRIVATE ${JNI_LIBRARIES})
 
 if(WIN32)
-    # Link GDI+ for the advanced overlay
     target_link_libraries(MustyClient PRIVATE user32 gdi32 gdiplus)
     set_target_properties(MustyClient PROPERTIES PREFIX "")
 endif()

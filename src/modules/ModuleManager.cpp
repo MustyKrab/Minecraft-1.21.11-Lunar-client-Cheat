@@ -1,11 +1,13 @@
 #include "ModuleManager.h"
 #include "combat/Killaura.h"
+#include "combat/Aimbot.h"
 #include "render/ESP.h"
 
 std::vector<Module*> ModuleManager::modules;
 
 void ModuleManager::Initialize() {
     modules.push_back(new Killaura());
+    modules.push_back(new Aimbot());
     modules.push_back(new ESP());
     
     // Enable ESP by default for testing
