@@ -3,6 +3,7 @@
 #include "../ModuleManager.h"
 #include "../combat/Killaura.h"
 #include "../combat/Aimbot.h"
+#include "../combat/Reach.h"
 #include <iostream>
 #include <fstream>
 #include <cmath>
@@ -113,7 +114,7 @@ void ESP::DrawProfessionalESP(Graphics& g, float x, float y, float w, float h, f
 
 void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction) {
     SolidBrush bg(Color(240, 25, 25, 25));
-    g.FillRectangle(&bg, 100, 100, 400, 450);
+    g.FillRectangle(&bg, 100, 100, 400, 500);
 
     SolidBrush header(Color(255, 15, 15, 15));
     g.FillRectangle(&header, 100, 100, 400, 40);
@@ -257,6 +258,46 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction) {
                 espRange = 10.0f + (newPercent * 190.0f);
             }
         }
+        y += 50;
+    }
+
+    // Draw Reach Tool Slider
+    Reach* reachMod = (Reach*)ModuleManager::GetModule("Reach");
+    if (reachMod) {
+        int sliderX = 120;
+        int sliderY = y + 20;
+        int sliderW = 360;
+        int sliderH = 15;
+
+        float reach = reachMod->GetReach();
+        float percent = (reach - 3.0f) / 3.0f; // 3.0 to 6.0
+        if (percent < 0.0f) percent = 0.0f;
+        if (percent > 1.0f) percent = 1.0f;
+
+        SolidBrush sliderBg(Color(255, 45, 45, 45));
+        g.FillRectangle(&sliderBg, sliderX, sliderY, sliderW, sliderH);
+
+        SolidBrush sliderFill(Color(255, 46, 204, 113));
+        g.FillRectangle(&sliderFill, sliderX, sliderY, (int)(sliderW * percent), sliderH);
+
+        wchar_t buf[64];
+        swprintf_s(buf, L"Reach Tool: %.2f", reach);
+        g.DrawString(buf, -1, &modFont, PointF(sliderX + 5, sliderY - 18), nullptr, &textBrush);
+
+        if (clickAction && mouseX >= sliderX && mouseX <= sliderX + sliderW && mouseY >= sliderY && mouseY <= sliderY + sliderH) {
+            draggingReachSlider = true;
+        }
+
+        if (draggingReachSlider) {
+            if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
+                draggingReachSlider = false;
+            } else {
+                float newPercent = (float)(mouseX - sliderX) / sliderW;
+                if (newPercent < 0.0f) newPercent = 0.0f;
+                if (newPercent > 1.0f) newPercent = 1.0f;
+                reachMod->SetReach(3.0f + (newPercent * 3.0f));
+            }
+        }
     }
 }
 
@@ -362,6 +403,13 @@ void ESP::RenderLoop() {
     const char* mNames[] = { "m00","m01","m02","m03", "m10","m11","m12","m13", "m20","m21","m22","m23", "m30","m31","m32","m33" };
     jfieldID matrixFields[16];
     for (int i = 0; i < 16; i++) matrixFields[i] = env->GetFieldID(matrixClass, mNames[i], "F");
+
+    FontFamily fontFamily(L"Consolas");
+    Font font(&fontFamily, 12, FontStyleBold, UnitPixel);
+    StringFormat format;
+    format.SetAlignment(StringAlignmentCenter);
+    SolidBrush shadowBrush(Color(255, 0, 0, 0));
+    SolidBrush textBrush(Color(255, 255, 255, 255));
 
     while (running) {
         GetWindowRect(mcWindow, &rect);

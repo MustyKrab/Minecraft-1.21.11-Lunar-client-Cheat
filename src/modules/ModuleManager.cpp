@@ -1,6 +1,7 @@
 #include "ModuleManager.h"
 #include "combat/Killaura.h"
 #include "combat/Aimbot.h"
+#include "combat/Reach.h"
 #include "render/ESP.h"
 #include "render/XRay.h"
 
@@ -9,6 +10,7 @@ std::vector<Module*> ModuleManager::modules;
 void ModuleManager::Initialize() {
     modules.push_back(new Killaura());
     modules.push_back(new Aimbot());
+    modules.push_back(new Reach());
     modules.push_back(new ESP());
     modules.push_back(new XRay());
     

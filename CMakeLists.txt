@@ -16,6 +16,8 @@ add_library(MustyClient SHARED
     src/modules/combat/Killaura.h
     src/modules/combat/Aimbot.cpp
     src/modules/combat/Aimbot.h
+    src/modules/combat/Reach.cpp
+    src/modules/combat/Reach.h
     src/modules/render/ESP.cpp
     src/modules/render/ESP.h
     src/modules/render/XRay.cpp
