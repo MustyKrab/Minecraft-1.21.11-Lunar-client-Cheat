@@ -4,6 +4,7 @@
 #include <gdiplus.h>
 #include <thread>
 #include <atomic>
+#include <string>
 
 struct Vec2 { float x, y; };
 struct Vec3 { double x, y, z; };
@@ -20,9 +21,7 @@ private:
     void RenderLoop();
     bool WorldToScreen(Vec3 pos, Vec3 camPos, float* mv, float* p, Vec2& screen, int width, int height);
     
-    void DrawCornerBox(Gdiplus::Graphics& g, float x, float y, float w, float h, Gdiplus::Color color);
-    void DrawHealthBar(Gdiplus::Graphics& g, float x, float y, float w, float h, float hp, float maxHp);
-    void DrawSkeleton(Gdiplus::Graphics& g, Vec3 feet, float bodyYaw, float height, Vec3 camPos, float* mv, float* p, int sW, int sH);
+    void DrawProfessionalESP(Gdiplus::Graphics& g, float x, float y, float w, float h, float health, float maxHealth, int screenW, int screenH, const std::wstring& name, double distance);
 
 public:
     ESP();
