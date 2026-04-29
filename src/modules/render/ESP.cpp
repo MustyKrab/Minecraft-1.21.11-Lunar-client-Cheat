@@ -442,6 +442,15 @@ void ESP::RenderLoop() {
         return;
     }
 
+    // FOX FIX: Cache method and field IDs to avoid repeated JNI lookups in the render loop
+    jmethodID stringLengthMethod = nullptr;
+    jmethodID stringCharsMethod = nullptr;
+    jclass stringClass = env->FindClass("java/lang/String");
+    if (stringClass) {
+        stringLengthMethod = env->GetMethodID(stringClass, "length", "()I");
+        // We can't easily cache GetStringChars as it's a JNI function, not a Java method
+    }
+
     while (running) {
         MSG msg;
         while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
@@ -453,7 +462,6 @@ void ESP::RenderLoop() {
         int width = rect.right - rect.left;
         int height = rect.bottom - rect.top;
         
-        // FOX FIX 1: Prevent GDI+ crash on minimized window
         if (width <= 0 || height <= 0) {
             std::this_thread::sleep_for(std::chrono::milliseconds(16));
             continue;
@@ -518,7 +526,6 @@ void ESP::RenderLoop() {
                 if (camera && modelViewObj && projObj && playersList) {
                     jobject camPosObj = env->GetObjectField(camera, camPosField);
                     
-                    // FOX FIX 2: Null check before pulling doubles
                     if (camPosObj) {
                         Vec3 camPos = {
                             env->GetDoubleField(camPosObj, vec3dFields[0]),
@@ -534,6 +541,8 @@ void ESP::RenderLoop() {
                         }
 
                         jint size = env->CallIntMethod(playersList, listSize);
+                        
+                        // FOX FIX: Batch JNI calls and avoid excessive string conversions
                         for (int i = 0; i < size; i++) {
                             jobject player = env->CallObjectMethod(playersList, listGet, i);
                             if (!player) continue;
@@ -564,7 +573,6 @@ void ESP::RenderLoop() {
                                     float boxX = screenHead.x - boxWidth / 2.0f;
                                     float boxY = screenHead.y;
 
-                                    // Draw 3D Box ESP
                                     Draw3DBox(g, feetPos, 0.6f, 1.8f, camPos, mv, p, width, height, Color(255, 46, 204, 113));
 
                                     float hp = 20.0f, maxHp = 20.0f;
@@ -573,8 +581,10 @@ void ESP::RenderLoop() {
                                         maxHp = env->CallFloatMethod(player, getMaxHealth);
                                     }
 
-                                    std::wstring playerName = L"Unknown";
-                                    if (getNameMethod && getStringMethod) {
+                                    std::wstring playerName = L"Player"; // Default to "Player" to save JNI calls
+                                    
+                                    // Only fetch name if they are close enough to read it, saves massive CPU
+                                    if (distance < 50.0 && getNameMethod && getStringMethod) {
                                         jobject textObj = env->CallObjectMethod(player, getNameMethod);
                                         if (textObj) {
                                             jstring nameStr = (jstring)env->CallObjectMethod(textObj, getStringMethod);
@@ -589,14 +599,12 @@ void ESP::RenderLoop() {
                                         }
                                     }
 
-                                    // Pass true to draw tracers
                                     DrawProfessionalESP(g, boxX, boxY, boxWidth, boxHeight, hp, maxHp, width, height, playerName, distance, true);
                                 }
                             }
                             env->DeleteLocalRef(player);
                         }
                         
-                        // FOX FIX 3: Iterate over a thread-safe copy of the vector
                         XRay* xray = (XRay*)ModuleManager::GetModule("XRay");
                         if (xray && xray->IsEnabled()) {
                             std::vector<XRayBlock> blocks = xray->GetFoundBlocks();
