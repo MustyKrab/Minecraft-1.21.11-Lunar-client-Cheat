@@ -26,12 +26,6 @@ add_library(MustyClient SHARED
     src/modules/render/ESP.h
     src/modules/render/XRay.cpp
     src/modules/render/XRay.h
-    src/modules/render/SkeletonESP.cpp
-    src/modules/render/SkeletonESP.h
-    src/modules/render/Tracers.cpp
-    src/modules/render/Tracers.h
-    src/modules/render/HealthBars.cpp
-    src/modules/render/HealthBars.h
     src/modules/player/Fly.cpp
     src/modules/player/Fly.h
 )
