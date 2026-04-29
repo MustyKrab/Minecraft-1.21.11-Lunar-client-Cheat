@@ -59,14 +59,21 @@ void Killaura::OnTick() {
         getCooldownMethod = JNIHelper::GetMethodSafe(playerClass, "method_7261", "(F)F", "getAttackCooldownProgress");
 
         sendPacketMethod = JNIHelper::GetMethodSafe(networkHandlerClass, "method_52787", "(Lnet/minecraft/class_2596;)V", "sendPacket");
+        
+        // FOX FIX: Clear pending exception if packet init method fails
         packetInitMethod = env->GetMethodID(positionAndOnGroundClass, "<init>", "(DDDZ)V");
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            packetInitMethod = nullptr;
+        }
 
         mainHandField = JNIHelper::GetStaticFieldSafe(handClass, "field_5808", "Lnet/minecraft/class_1268;", "MAIN_HAND");
 
         mappingsLoaded = true;
     }
 
-    if (!instanceField || !playerField || !worldField || !interactionManagerField || !playersField || !entX || !entY || !entZ || !yawField || !pitchField || !listSize || !listGet || !getHealth || !attackMethod || !swingMethod || !getCooldownMethod || !mainHandField || !networkHandlerField || !sendPacketMethod || !packetInitMethod) return;
+    // FOX FIX: Removed networkHandlerField and packetInitMethod from this strict check
+    if (!instanceField || !playerField || !worldField || !interactionManagerField || !playersField || !entX || !entY || !entZ || !yawField || !pitchField || !listSize || !listGet || !getHealth || !attackMethod || !swingMethod || !getCooldownMethod || !mainHandField) return;
 
     jobject mc = env->GetStaticObjectField(mcClass, instanceField);
     if (!mc) return;
@@ -162,7 +169,7 @@ void Killaura::OnTick() {
             if (cooldown >= 1.0f) {
                 
                 // Teleport Aura Logic
-                if (teleportAura && bestDist > 3.0) {
+                if (teleportAura && bestDist > 3.0 && networkHandlerField && packetInitMethod) {
                     jobject networkHandler = env->GetObjectField(player, networkHandlerField);
                     if (networkHandler) {
                         // Calculate a point close to the target

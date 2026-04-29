@@ -173,6 +173,8 @@ void Aimbot::OnTick() {
                         newYaw -= std::fmod(newYaw, gcd);
                         newPitch -= std::fmod(newPitch, gcd);
                         
+                        // FOX FIX: Delete local ref to prevent table overflow crash
+                        env->DeleteLocalRef(doubleClass);
                         env->DeleteLocalRef(sensDoubleObj);
                     }
                     env->DeleteLocalRef(sensObj);
