@@ -2,6 +2,7 @@
 #include "../../core/JNIHelper.h"
 #include <iostream>
 #include <cstring>
+#include <cmath>
 
 static bool xrayMappingsLoaded = false;
 static jclass mcClass, worldClass, blockPosClass, blockStateClass, blockClass, registryClass;
@@ -43,7 +44,7 @@ void XRay::OnTick() {
 
     if (!instanceField || !worldField || !getBlockStateMethod) return;
 
-    // Only scan every 20 ticks (1 second) to prevent massive lag
+    // Only scan every 20 ticks (1 second)
     tickCounter++;
     if (tickCounter < 20) return;
     tickCounter = 0;
@@ -64,6 +65,19 @@ void XRay::OnTick() {
     int px = (int)env->GetDoubleField(player, entX);
     int py = (int)env->GetDoubleField(player, entY);
     int pz = (int)env->GetDoubleField(player, entZ);
+
+    // FOX FIX: Only rescan if the player has moved more than 16 blocks from the last scan center
+    double distMoved = std::sqrt(std::pow(px - lastScanX, 2) + std::pow(py - lastScanY, 2) + std::pow(pz - lastScanZ, 2));
+    if (distMoved < 16.0) {
+        env->DeleteLocalRef(world);
+        env->DeleteLocalRef(player);
+        env->DeleteLocalRef(mc);
+        return; // Skip scan, keep old blocks
+    }
+
+    lastScanX = px;
+    lastScanY = py;
+    lastScanZ = pz;
 
     std::vector<XRayBlock> newFoundBlocks;
 
