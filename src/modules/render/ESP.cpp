@@ -86,8 +86,8 @@ void ESP::Draw3DBox(Graphics& g, Vec3 feet, float w, float h, Vec3 camPos, float
         valid[i] = WorldToScreen(corners[i], camPos, mv, p, s[i], sW, sH);
     }
 
-    Pen blackPen(Color(255, 0, 0, 0), 2.5f);
-    Pen pen(color, 1.0f);
+    Pen blackPen(Color(255, 0, 0, 0), 3.0f);
+    Pen pen(color, 1.5f);
     
     auto drawLineIfValid = [&](int i, int j) {
         if (valid[i] && valid[j]) {
@@ -110,10 +110,10 @@ void ESP::DrawProfessionalESP(Graphics& g, float x, float y, float w, float h, f
     int r = (int)(255.0f * (1.0f - hpPercent));
     int gr = (int)(255.0f * hpPercent);
 
-    // Better Health Bar
-    float barX = x - 6.0f;
+    // Thicker Health Bar with Black Outline
+    float barX = x - 7.0f;
     float barY = y - 1.0f;
-    float barW = 4.0f;
+    float barW = 5.0f;
     float barH = h + 2.0f;
 
     SolidBrush bgBarBrush(Color(255, 0, 0, 0));
@@ -125,8 +125,8 @@ void ESP::DrawProfessionalESP(Graphics& g, float x, float y, float w, float h, f
     g.FillRectangle(&hpBrush, barX + 1.0f, hpFillY, barW - 2.0f, hpFillH);
 
     if (drawTracer) {
-        Pen blackTracerPen(Color(255, 0, 0, 0), 2.5f);
-        Pen tracerPen(Color(150, 255, 255, 255), 1.0f);
+        Pen blackTracerPen(Color(255, 0, 0, 0), 3.0f);
+        Pen tracerPen(Color(150, 255, 255, 255), 1.5f);
         g.DrawLine(&blackTracerPen, (REAL)(screenW / 2), (REAL)screenH, x + w / 2, y + h);
         g.DrawLine(&tracerPen, (REAL)(screenW / 2), (REAL)screenH, x + w / 2, y + h);
     }
@@ -140,7 +140,7 @@ void ESP::DrawProfessionalESP(Graphics& g, float x, float y, float w, float h, f
     SolidBrush textBrush(Color(255, 255, 255, 255));
 
     wchar_t textBuf[256];
-    swprintf_s(textBuf, L"%s [%.1fm]", name.c_str(), distance);
+    swprintf_s(textBuf, L"%ls [%.1fm]", name.c_str(), distance);
 
     PointF textPos(x + w / 2.0f, y - 16.0f);
 
@@ -197,7 +197,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
         if (percent < 0) percent = 0; if (percent > 1) percent = 1;
 
         wchar_t buf[64];
-        swprintf_s(buf, L"%s: %.1f", label, value);
+        swprintf_s(buf, L"%ls: %.1f", label, value);
         g.DrawString(buf, -1, &modFont, PointF(cx, cy), nullptr, &textBrush);
         cy += 18;
 
@@ -407,19 +407,19 @@ void ESP::RenderLoop() {
             if (!insertPressed) {
                 guiOpen = !guiOpen;
                 insertPressed = true;
-                long style = GetWindowLong(overlayWindow, GWL_EXSTYLE);
+                LONG_PTR style = GetWindowLongPtrA(overlayWindow, GWL_EXSTYLE);
                 if (guiOpen) {
-                    SetWindowLong(overlayWindow, GWL_EXSTYLE, style & ~WS_EX_TRANSPARENT);
+                    SetWindowLongPtrA(overlayWindow, GWL_EXSTYLE, style & ~WS_EX_TRANSPARENT);
                     SetForegroundWindow(overlayWindow);
                 } else {
-                    SetWindowLong(overlayWindow, GWL_EXSTYLE, style | WS_EX_TRANSPARENT);
+                    SetWindowLongPtrA(overlayWindow, GWL_EXSTYLE, style | WS_EX_TRANSPARENT);
                 }
             }
         } else {
             insertPressed = false;
         }
 
-        POINT cursorPos;
+        POINT cursorPos = {0, 0};
         GetCursorPos(&cursorPos);
         ScreenToClient(overlayWindow, &cursorPos);
         
