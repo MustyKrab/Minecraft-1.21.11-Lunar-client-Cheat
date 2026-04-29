@@ -19,7 +19,13 @@ ESP::ESP() : Module("ESP") {}
 ESP::~ESP() {
     if (running) {
         running = false;
-        if (renderThread.joinable()) renderThread.join();
+        if (renderThread.joinable()) {
+            if (std::this_thread::get_id() == renderThread.get_id()) {
+                renderThread.detach();
+            } else {
+                renderThread.join();
+            }
+        }
     }
 }
 
@@ -32,7 +38,12 @@ void ESP::OnEnable() {
 void ESP::OnDisable() {
     running = false;
     if (renderThread.joinable()) {
-        renderThread.join();
+        // Prevent std::system_error by not joining the thread from itself
+        if (std::this_thread::get_id() == renderThread.get_id()) {
+            renderThread.detach();
+        } else {
+            renderThread.join();
+        }
     }
     std::cout << "[MustyClient] ESP Disabled." << std::endl;
 }
@@ -173,7 +184,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
 
     SolidBrush header(Color(255, 15, 15, 15));
     g.FillRectangle(&header, 100, 100, 400, 40);
-    g.DrawString(L"Vape V4 (MustyClient Edition)", -1, &titleFont, PointF(115, 110), nullptr, &textBrush);
+    g.DrawString(L"Musty Client", -1, &titleFont, PointF(115, 110), nullptr, &textBrush);
 
     auto DrawCheckbox = [&](const wchar_t* label, bool& value, int cx, int cy) {
         SolidBrush cbBg(Color(255, 45, 45, 45));
@@ -231,7 +242,6 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
         SolidBrush modBg(enabled ? Color(255, 46, 204, 113) : Color(255, 45, 45, 45));
         g.FillRectangle(&modBg, 120, y, 360, 30);
 
-        // Fix for 0xC0000409 crash: Store string locally before getting iterators
         std::string nameStr = mod->GetName();
         std::wstring wName(nameStr.begin(), nameStr.end());
         g.DrawString(wName.c_str(), -1, &modFont, PointF(135, y + 6), nullptr, &textBrush);
