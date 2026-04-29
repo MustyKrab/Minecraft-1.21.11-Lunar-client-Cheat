@@ -3,6 +3,7 @@
 #include <iostream>
 #include <cmath>
 #include <windows.h>
+#include <random>
 
 static bool reachMappingsLoaded = false;
 static jclass mcClass, playerClass, worldClass, interactionManagerClass, entityClass, livingClass, handClass;
@@ -104,7 +105,14 @@ void Reach::OnTick() {
 
         int size = env->CallIntMethod(playersList, listSize);
         jobject bestTarget = nullptr;
-        double bestDist = reachDistance;
+        
+        // FOX FIX: Randomize the reach slightly so it's not a static value
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_real_distribution<float> reachDist(reachDistance - 0.1f, reachDistance + 0.1f);
+        double actualReach = reachDist(gen);
+        
+        double bestDist = actualReach;
 
         for (int idx = 0; idx < size; idx++) {
             jobject target = env->CallObjectMethod(playersList, listGet, idx);
@@ -129,7 +137,7 @@ void Reach::OnTick() {
             double diffY = ty - py;
             double diffZ = tz - pz;
             double dist = std::sqrt(diffX * diffX + diffY * diffY + diffZ * diffZ);
-
+            
             if (dist <= bestDist && dist > 3.0) { 
                 double dot = (diffX * lookX + diffY * lookY + diffZ * lookZ) / dist;
                 if (dot > 0.95) { 
