@@ -34,10 +34,10 @@ public class ESP extends Module {
                     float boxX = projHead.x - (boxWidth / 2.0f);
                     float boxY = projHead.y;
 
-                    // Draw filled box (semi-transparent black)
-                    context.fill((int)boxX, (int)boxY, (int)(boxX + boxWidth), (int)(boxY + boxHeight), 0x40000000);
+                    // 1. Semi-Transparent Box Fill (Matches main.cpp: Color(40, 0, 0, 0) -> 0x28000000)
+                    context.fill((int)boxX, (int)boxY, (int)(boxX + boxWidth), (int)(boxY + boxHeight), 0x28000000);
                     
-                    // Draw outline manually since drawBorder might not exist in this mapping version
+                    // 2. Smooth White Outline (Matches main.cpp: Color(255, 255, 255, 255) -> 0xFFFFFFFF)
                     int color = 0xFFFFFFFF;
                     int x = (int)boxX;
                     int y = (int)boxY;
@@ -53,13 +53,17 @@ public class ESP extends Module {
                     // Right
                     context.fill(x + w - 1, y, x + w, y + h, color);
 
-                    // Draw Nametag & Distance
+                    // 3. Nametag & Distance Text
                     String name = entity.getName().getString();
                     String dist = String.format("%.1fm", mc.player.distanceTo(entity));
                     String text = name + " [" + dist + "]";
                     
                     int textWidth = mc.textRenderer.getWidth(text);
-                    context.drawText(mc.textRenderer, text, (int)(projHead.x - textWidth / 2), (int)boxY - 10, 0xFFFFFFFF, true);
+                    
+                    // Draw text shadow for readability (Matches main.cpp offset)
+                    context.drawText(mc.textRenderer, text, (int)(projHead.x - textWidth / 2) + 1, (int)boxY - 10 + 1, 0xFF000000, false);
+                    // Draw main text
+                    context.drawText(mc.textRenderer, text, (int)(projHead.x - textWidth / 2), (int)boxY - 10, 0xFFFFFFFF, false);
                 }
             }
         }
