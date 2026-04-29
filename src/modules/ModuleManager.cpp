@@ -4,6 +4,7 @@
 #include "combat/Reach.h"
 #include "render/ESP.h"
 #include "render/XRay.h"
+#include "player/Fly.h"
 
 std::vector<Module*> ModuleManager::modules;
 
@@ -13,6 +14,7 @@ void ModuleManager::Initialize() {
     modules.push_back(new Reach());
     modules.push_back(new ESP());
     modules.push_back(new XRay());
+    modules.push_back(new Fly());
     
     // Enable ESP by default for testing
     GetModule("ESP")->Toggle();

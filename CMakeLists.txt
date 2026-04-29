@@ -22,6 +22,8 @@ add_library(MustyClient SHARED
     src/modules/render/ESP.h
     src/modules/render/XRay.cpp
     src/modules/render/XRay.h
+    src/modules/player/Fly.cpp
+    src/modules/player/Fly.h
 )
 
 find_package(JNI REQUIRED)
