@@ -251,8 +251,8 @@ void ESP::RenderLoop() {
         int height = rect.bottom - rect.top;
         MoveWindow(overlayWindow, rect.left, rect.top, width, height, true);
 
-        // GUI Toggle Logic (Right Shift)
-        if (GetAsyncKeyState(VK_RSHIFT) & 0x8000) {
+        // GUI Toggle Logic (Left Bracket '[')
+        if (GetAsyncKeyState(VK_OEM_4) & 0x8000) {
             if (!insertPressed) {
                 guiOpen = !guiOpen;
                 insertPressed = true;
