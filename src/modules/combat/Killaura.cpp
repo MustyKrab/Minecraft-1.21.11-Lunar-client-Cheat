@@ -5,11 +5,12 @@
 
 static bool mappingsLoaded = false;
 static jclass mcClass, worldClass, entityClass, livingClass, playerClass, interactionManagerClass, handClass, listClass;
-static jfieldID instanceField, playerField, worldField, interactionManagerField, playersField;
+static jclass networkHandlerClass, playerMoveC2SPacketClass, positionAndOnGroundClass;
+static jfieldID instanceField, playerField, worldField, interactionManagerField, playersField, networkHandlerField;
 static jfieldID entX, entY, entZ, yawField, pitchField, mainHandField;
-static jmethodID listSize, listGet, getHealth, attackMethod, swingMethod, getCooldownMethod;
+static jmethodID listSize, listGet, getHealth, attackMethod, swingMethod, getCooldownMethod, sendPacketMethod, packetInitMethod;
 
-Killaura::Killaura() : Module("Killaura"), reach(4.5f), aimbotIntensity(0.5f), aimAssistMode(false) {}
+Killaura::Killaura() : Module("Killaura"), reach(4.5f), aimbotIntensity(0.5f), aimAssistMode(false), teleportAura(false) {}
 
 void Killaura::OnTick() {
     JNIEnv* env = JNIHelper::env;
@@ -25,12 +26,20 @@ void Killaura::OnTick() {
         handClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_1268;", "net/minecraft/util/Hand");
         listClass = env->FindClass("java/util/List");
 
-        if (!mcClass || !worldClass || !entityClass || !livingClass || !playerClass || !interactionManagerClass || !handClass) return;
+        // Network classes for Teleport Aura
+        networkHandlerClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_634;", "net/minecraft/client/network/ClientPlayNetworkHandler");
+        playerMoveC2SPacketClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_2828;", "net/minecraft/network/packet/c2s/play/PlayerMoveC2SPacket");
+        positionAndOnGroundClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_2828$class_2829;", "net/minecraft/network/packet/c2s/play/PlayerMoveC2SPacket$PositionAndOnGround");
+
+        if (!mcClass || !worldClass || !entityClass || !livingClass || !playerClass || !interactionManagerClass || !handClass || !networkHandlerClass || !playerMoveC2SPacketClass || !positionAndOnGroundClass) return;
 
         instanceField = JNIHelper::GetStaticFieldSafe(mcClass, "field_1700", "Lnet/minecraft/class_310;", "instance");
         playerField = JNIHelper::GetFieldSafe(mcClass, "field_1724", "Lnet/minecraft/class_746;", "player");
         worldField = JNIHelper::GetFieldSafe(mcClass, "field_1687", "Lnet/minecraft/class_638;", "world");
         interactionManagerField = JNIHelper::GetFieldSafe(mcClass, "field_1761", "Lnet/minecraft/class_636;", "interactionManager");
+        
+        // We need networkHandler from player to send packets
+        networkHandlerField = JNIHelper::GetFieldSafe(JNIHelper::FindClassSafe("Lnet/minecraft/class_746;", "net/minecraft/client/network/ClientPlayerEntity"), "field_3944", "Lnet/minecraft/class_634;", "networkHandler");
         
         playersField = JNIHelper::GetFieldSafe(worldClass, "field_18226", "Ljava/util/List;", "players");
         
@@ -48,12 +57,15 @@ void Killaura::OnTick() {
         swingMethod = JNIHelper::GetMethodSafe(livingClass, "method_6104", "(Lnet/minecraft/class_1268;)V", "swingHand");
         getCooldownMethod = JNIHelper::GetMethodSafe(playerClass, "method_7261", "(F)F", "getAttackCooldownProgress");
 
+        sendPacketMethod = JNIHelper::GetMethodSafe(networkHandlerClass, "method_52787", "(Lnet/minecraft/class_2596;)V", "sendPacket");
+        packetInitMethod = env->GetMethodID(positionAndOnGroundClass, "<init>", "(DDDZ)V");
+
         mainHandField = JNIHelper::GetStaticFieldSafe(handClass, "field_5808", "Lnet/minecraft/class_1268;", "MAIN_HAND");
 
         mappingsLoaded = true;
     }
 
-    if (!instanceField || !playerField || !worldField || !interactionManagerField || !playersField || !entX || !entY || !entZ || !yawField || !pitchField || !listSize || !listGet || !getHealth || !attackMethod || !swingMethod || !getCooldownMethod || !mainHandField) return;
+    if (!instanceField || !playerField || !worldField || !interactionManagerField || !playersField || !entX || !entY || !entZ || !yawField || !pitchField || !listSize || !listGet || !getHealth || !attackMethod || !swingMethod || !getCooldownMethod || !mainHandField || !networkHandlerField || !sendPacketMethod || !packetInitMethod) return;
 
     jobject mc = env->GetStaticObjectField(mcClass, instanceField);
     if (!mc) return;
@@ -133,8 +145,6 @@ void Killaura::OnTick() {
             float pitchDiff = targetPitch - currentPitch;
 
             // Apply smoothing based on intensity
-            // If aimAssistMode is true, only rotate if we are clicking (handled implicitly or by user)
-            // But here we just apply the intensity. 1.0 = snap, 0.01 = very slow
             float smoothedYaw = currentYaw + (yawDiff * aimbotIntensity);
             float smoothedPitch = currentPitch + (pitchDiff * aimbotIntensity);
 
@@ -142,15 +152,48 @@ void Killaura::OnTick() {
             env->SetFloatField(player, pitchField, smoothedPitch);
 
             // Attack (respect cooldown)
-            // If in aim assist mode, we might not want to auto-attack, but let's assume Killaura always attacks
             float cooldown = env->CallFloatMethod(player, getCooldownMethod, 0.5f);
             if (cooldown >= 1.0f) {
-                env->CallVoidMethod(interactionManager, attackMethod, player, bestTarget);
                 
-                jobject mainHand = env->GetStaticObjectField(handClass, mainHandField);
-                if (mainHand) {
-                    env->CallVoidMethod(player, swingMethod, mainHand);
-                    env->DeleteLocalRef(mainHand);
+                // Teleport Aura Logic
+                if (teleportAura && bestDist > 3.0) {
+                    jobject networkHandler = env->GetObjectField(player, networkHandlerField);
+                    if (networkHandler) {
+                        // Calculate a point close to the target
+                        double tpX = tx - (diffX / bestDist) * 2.0; // 2 blocks away from target
+                        double tpY = ty;
+                        double tpZ = tz - (diffZ / bestDist) * 2.0;
+
+                        // 1. Send packet to teleport TO the target
+                        jobject packetTo = env->NewObject(positionAndOnGroundClass, packetInitMethod, tpX, tpY, tpZ, JNI_TRUE);
+                        env->CallVoidMethod(networkHandler, sendPacketMethod, packetTo);
+                        env->DeleteLocalRef(packetTo);
+
+                        // 2. Attack the target (now that we are "close" to it on the server)
+                        env->CallVoidMethod(interactionManager, attackMethod, player, bestTarget);
+                        
+                        jobject mainHand = env->GetStaticObjectField(handClass, mainHandField);
+                        if (mainHand) {
+                            env->CallVoidMethod(player, swingMethod, mainHand);
+                            env->DeleteLocalRef(mainHand);
+                        }
+
+                        // 3. Send packet to teleport BACK to original position
+                        jobject packetBack = env->NewObject(positionAndOnGroundClass, packetInitMethod, px, py, pz, JNI_TRUE);
+                        env->CallVoidMethod(networkHandler, sendPacketMethod, packetBack);
+                        env->DeleteLocalRef(packetBack);
+
+                        env->DeleteLocalRef(networkHandler);
+                    }
+                } else {
+                    // Normal Attack
+                    env->CallVoidMethod(interactionManager, attackMethod, player, bestTarget);
+                    
+                    jobject mainHand = env->GetStaticObjectField(handClass, mainHandField);
+                    if (mainHand) {
+                        env->CallVoidMethod(player, swingMethod, mainHand);
+                        env->DeleteLocalRef(mainHand);
+                    }
                 }
             }
 
