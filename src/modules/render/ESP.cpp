@@ -4,6 +4,7 @@
 #include "../combat/Killaura.h"
 #include "../combat/Aimbot.h"
 #include "../combat/Reach.h"
+#include "../render/XRay.h"
 #include <iostream>
 #include <fstream>
 #include <cmath>
@@ -98,8 +99,6 @@ void ESP::Draw3DBox(Graphics& g, Vec3 feet, float w, float h, Vec3 camPos, float
 }
 
 void ESP::DrawProfessionalESP(Graphics& g, float x, float y, float w, float h, float health, float maxHealth, int screenW, int screenH, const std::wstring& name, double distance) {
-    // Removed the 2D Box and Tracer lines, as requested by user to use 3D Box instead.
-    
     if (maxHealth <= 0) maxHealth = 20.0f;
     float hpPercent = health / maxHealth;
     if (hpPercent > 1.0f) hpPercent = 1.0f;
@@ -430,6 +429,13 @@ void ESP::RenderLoop() {
     jfieldID matrixFields[16];
     for (int i = 0; i < 16; i++) matrixFields[i] = env->GetFieldID(matrixClass, mNames[i], "F");
 
+    FontFamily fontFamily(L"Consolas");
+    Font font(&fontFamily, 12, FontStyleBold, UnitPixel);
+    StringFormat format;
+    format.SetAlignment(StringAlignmentCenter);
+    SolidBrush shadowBrush(Color(255, 0, 0, 0));
+    SolidBrush textBrush(Color(255, 255, 255, 255));
+
     while (running) {
         GetWindowRect(mcWindow, &rect);
         int width = rect.right - rect.left;
@@ -560,6 +566,19 @@ void ESP::RenderLoop() {
                             }
                         }
                         env->DeleteLocalRef(player);
+                    }
+                    
+                    // Draw X-Ray Blocks
+                    XRay* xray = (XRay*)ModuleManager::GetModule("XRay");
+                    if (xray && xray->IsEnabled()) {
+                        for (const auto& block : xray->GetFoundBlocks()) {
+                            Vec3 blockPos = { (double)block.x + 0.5, (double)block.y + 0.5, (double)block.z + 0.5 };
+                            double distance = std::sqrt(std::pow(camPos.x - blockPos.x, 2) + std::pow(camPos.y - blockPos.y, 2) + std::pow(camPos.z - blockPos.z, 2));
+                            
+                            if (distance <= espRange) {
+                                Draw3DBox(g, { (double)block.x, (double)block.y, (double)block.z }, 1.0f, 1.0f, camPos, mv, p, width, height, Color(255, 0, 255, 255)); // Cyan for diamonds
+                            }
+                        }
                     }
                 }
                 if (camera) env->DeleteLocalRef(camera);

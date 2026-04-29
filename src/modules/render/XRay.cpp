@@ -3,62 +3,108 @@
 #include <iostream>
 
 static bool xrayMappingsLoaded = false;
-static jclass mcClass, worldRendererClass;
-static jfieldID instanceField, worldRendererField;
-static jmethodID reloadMethod;
+static jclass mcClass, worldClass, blockPosClass, blockStateClass, blockClass, registryClass;
+static jfieldID instanceField, playerField, worldField;
+static jfieldID entX, entY, entZ;
+static jmethodID getBlockStateMethod, getBlockMethod, getTranslationKeyMethod;
 
 XRay::XRay() : Module("XRay") {}
 
-void XRay::OnEnable() {
+void XRay::OnTick() {
     JNIEnv* env = JNIHelper::env;
     if (!env) return;
 
     if (!xrayMappingsLoaded) {
         mcClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_310;", "net/minecraft/client/MinecraftClient");
-        worldRendererClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_761;", "net/minecraft/client/render/WorldRenderer");
-        
-        if (!mcClass || !worldRendererClass) return;
+        worldClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_638;", "net/minecraft/client/world/ClientWorld");
+        blockPosClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_2338;", "net/minecraft/util/math/BlockPos");
+        blockStateClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_2680;", "net/minecraft/block/BlockState");
+        blockClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_2248;", "net/minecraft/block/Block");
+        registryClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_2378;", "net/minecraft/registry/Registry");
+
+        if (!mcClass || !worldClass || !blockPosClass || !blockStateClass || !blockClass) return;
 
         instanceField = JNIHelper::GetStaticFieldSafe(mcClass, "field_1700", "Lnet/minecraft/class_310;", "instance");
-        worldRendererField = JNIHelper::GetFieldSafe(mcClass, "field_1769", "Lnet/minecraft/class_761;", "worldRenderer");
-        reloadMethod = JNIHelper::GetMethodSafe(worldRendererClass, "method_3279", "()V", "reload");
+        playerField = JNIHelper::GetFieldSafe(mcClass, "field_1724", "Lnet/minecraft/class_746;", "player");
+        worldField = JNIHelper::GetFieldSafe(mcClass, "field_1687", "Lnet/minecraft/class_638;", "world");
+
+        jclass entityClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_1297;", "net/minecraft/entity/Entity");
+        entX = JNIHelper::GetFieldSafe(entityClass, "field_6014", "D", "x");
+        entY = JNIHelper::GetFieldSafe(entityClass, "field_6036", "D", "y");
+        entZ = JNIHelper::GetFieldSafe(entityClass, "field_5969", "D", "z");
+
+        getBlockStateMethod = JNIHelper::GetMethodSafe(worldClass, "method_8320", "(Lnet/minecraft/class_2338;)Lnet/minecraft/class_2680;", "getBlockState");
+        getBlockMethod = JNIHelper::GetMethodSafe(blockStateClass, "method_26204", "()Lnet/minecraft/class_2248;", "getBlock");
+        getTranslationKeyMethod = JNIHelper::GetMethodSafe(blockClass, "method_9539", "()Ljava/lang/String;", "getTranslationKey");
 
         xrayMappingsLoaded = true;
     }
 
-    if (!instanceField || !worldRendererField || !reloadMethod) return;
+    if (!instanceField || !worldField || !getBlockStateMethod) return;
+
+    // Only scan every 20 ticks (1 second) to prevent massive lag
+    tickCounter++;
+    if (tickCounter < 20) return;
+    tickCounter = 0;
 
     jobject mc = env->GetStaticObjectField(mcClass, instanceField);
     if (!mc) return;
 
-    jobject worldRenderer = env->GetObjectField(mc, worldRendererField);
-    if (worldRenderer) {
-        // Trigger a chunk reload to apply X-Ray (requires a mixin or bytecode patch to actually change block visibility)
-        // Since we are pure C++, we can't easily hook the block render loop without a bytecode patcher.
-        // For now, we just trigger the reload. A full X-Ray requires hooking Block#shouldDrawSide or similar.
-        env->CallVoidMethod(worldRenderer, reloadMethod);
-        env->DeleteLocalRef(worldRenderer);
+    jobject player = env->GetObjectField(mc, playerField);
+    jobject world = env->GetObjectField(mc, worldField);
+
+    if (!player || !world) {
+        if (player) env->DeleteLocalRef(player);
+        if (world) env->DeleteLocalRef(world);
+        env->DeleteLocalRef(mc);
+        return;
     }
-    env->DeleteLocalRef(mc);
-}
 
-void XRay::OnDisable() {
-    JNIEnv* env = JNIHelper::env;
-    if (!env) return;
+    int px = (int)env->GetDoubleField(player, entX);
+    int py = (int)env->GetDoubleField(player, entY);
+    int pz = (int)env->GetDoubleField(player, entZ);
 
-    if (!xrayMappingsLoaded) return;
+    std::vector<BlockPos> newFoundBlocks;
 
-    jobject mc = env->GetStaticObjectField(mcClass, instanceField);
-    if (!mc) return;
+    jmethodID blockPosInit = env->GetMethodID(blockPosClass, "<init>", "(III)V");
 
-    jobject worldRenderer = env->GetObjectField(mc, worldRendererField);
-    if (worldRenderer) {
-        env->CallVoidMethod(worldRenderer, reloadMethod);
-        env->DeleteLocalRef(worldRenderer);
+    // Scan a 32x32x32 area around the player
+    for (int x = px - scanRadius; x <= px + scanRadius; x++) {
+        for (int y = py - scanRadius; y <= py + scanRadius; y++) {
+            // Don't scan above ground much or below bedrock
+            if (y < -64 || y > 100) continue; 
+            
+            for (int z = pz - scanRadius; z <= pz + scanRadius; z++) {
+                jobject posObj = env->NewObject(blockPosClass, blockPosInit, x, y, z);
+                jobject stateObj = env->CallObjectMethod(world, getBlockStateMethod, posObj);
+                
+                if (stateObj) {
+                    jobject blockObj = env->CallObjectMethod(stateObj, getBlockMethod);
+                    if (blockObj) {
+                        jstring keyStr = (jstring)env->CallObjectMethod(blockObj, getTranslationKeyMethod);
+                        if (keyStr) {
+                            const char* rawKey = env->GetStringUTFChars(keyStr, nullptr);
+                            
+                            // Check for Diamond Ore or Deepslate Diamond Ore
+                            if (strstr(rawKey, "diamond_ore") != nullptr) {
+                                newFoundBlocks.push_back({x, y, z});
+                            }
+                            
+                            env->ReleaseStringUTFChars(keyStr, rawKey);
+                            env->DeleteLocalRef(keyStr);
+                        }
+                        env->DeleteLocalRef(blockObj);
+                    }
+                    env->DeleteLocalRef(stateObj);
+                }
+                env->DeleteLocalRef(posObj);
+            }
+        }
     }
-    env->DeleteLocalRef(mc);
-}
 
-void XRay::OnTick() {
-    // X-Ray logic is handled via block rendering hooks, not per-tick.
+    foundBlocks = newFoundBlocks;
+
+    env->DeleteLocalRef(world);
+    env->DeleteLocalRef(player);
+    env->DeleteLocalRef(mc);
 }
