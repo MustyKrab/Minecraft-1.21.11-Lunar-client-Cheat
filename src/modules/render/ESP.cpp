@@ -115,7 +115,7 @@ void ESP::Draw3DBox(Graphics& g, Vec3 feet, float w, float h, Vec3 camPos, float
 void ESP::DrawProfessionalESP(Graphics& g, float x, float y, float w, float h, float health, float maxHealth, int screenW, int screenH, const std::wstring& name, double distance, bool drawTracer) {
     if (maxHealth <= 0) maxHealth = 20.0f;
     float hpPercent = health / maxHealth;
-    if (hiPercent > 1.0f) hpPercent = 1.0f;
+    if (hpPercent > 1.0f) hpPercent = 1.0f;
     if (hpPercent < 0.0f) hpPercent = 0.0f;
 
     int r = (int)(255.0f * (1.0f - hpPercent));
@@ -235,7 +235,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
     };
 
     int y = 150;
-    for (Module* mod : ModuleManager::GetModule()) {
+    for (Module* mod : ModuleManager::GetModules()) {
         if (!mod) continue;
         bool enabled = mod->IsEnabled();
         
@@ -271,7 +271,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
                 y += DrawCheckbox(L"Spawners", xray->showSpawners, 130, y);
                 y += DrawCheckbox(L"Hoppers", xray->showHoppers, 130, y);
             } else if (mod->GetName() == "Killaura") {
-                Killaura* ka = (Killaura*)mod;
+               Killaura* ka = (Killaura*)mod;
                 float r = ka->GetReach();
                 y += DrawSlider(L"Reach", r, 3.0f, 6.0f, draggingSlider, 130, y);
                 ka->SetReach(r);
