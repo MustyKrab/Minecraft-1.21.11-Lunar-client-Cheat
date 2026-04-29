@@ -171,7 +171,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
         totalHeight += 35;
         if (mod->IsExpanded()) {
             if (mod->GetName() == "XRay") totalHeight += 9 * 25 + 10;
-            else if (mod->GetName() == "Killaura") totalHeight += 40 + 10;
+            else if (mod->GetName() == "Killaura") totalHeight += 3 * 40 + 10; // Increased height for new options
             else if (mod->GetName() == "Aimbot") totalHeight += 40 + 10;
             else if (mod->GetName() == "AutoClicker") totalHeight += 2 * 40 + 25 + 10;
             else if (mod->GetName() == "ESP") totalHeight += 40 + 10;
@@ -208,7 +208,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
         if (percent < 0) percent = 0; if (percent > 1) percent = 1;
 
         wchar_t buf[64];
-        swprintf_s(buf, L"%ls: %.1f", label, value);
+        swprintf_s(buf, L"%ls: %.2f", label, value);
         g.DrawString(buf, -1, &modFont, PointF(cx, cy), nullptr, &textBrush);
         cy += 18;
 
@@ -276,8 +276,16 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
                 Killaura* ka = (Killaura*)mod;
                 if (ka) {
                     float r = ka->GetReach();
+                    float intensity = ka->GetAimbotIntensity();
+                    bool aimAssist = ka->IsAimAssistMode();
+                    
                     y += DrawSlider(L"Reach", r, 3.0f, 10.0f, draggingSlider, 130, y);
+                    y += DrawSlider(L"Aimbot Intensity", intensity, 0.01f, 1.0f, draggingAimSlider, 130, y);
+                    y += DrawCheckbox(L"Aim Assist Mode", aimAssist, 130, y);
+                    
                     ka->SetReach(r);
+                    ka->SetAimbotIntensity(intensity);
+                    ka->SetAimAssistMode(aimAssist);
                 }
             } else if (mod->GetName() == "Aimbot") {
                 Aimbot* aim = (Aimbot*)mod;
