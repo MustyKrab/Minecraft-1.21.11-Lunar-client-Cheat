@@ -99,7 +99,7 @@ void ESP::Draw3DBox(Graphics& g, Vec3 feet, float w, float h, Vec3 camPos, float
     drawLineIfValid(0, 4); drawLineIfValid(1, 5); drawLineIfValid(2, 6); drawLineIfValid(3, 7);
 }
 
-void ESP::DrawProfessionalESP(Graphics& g, float x, float y, float w, float h, float health, float maxHealth, int screenW, int screenH, const std::wstring& name, double distance) {
+void ESP::DrawProfessionalESP(Graphics& g, float x, float y, float w, float h, float health, float maxHealth, int screenW, int screenH, const std::wstring& name, double distance, bool drawTracer) {
     if (maxHealth <= 0) maxHealth = 20.0f;
     float hpPercent = health / maxHealth;
     if (hpPercent > 1.0f) hpPercent = 1.0f;
@@ -120,6 +120,11 @@ void ESP::DrawProfessionalESP(Graphics& g, float x, float y, float w, float h, f
     float hpFillH = barH * hpPercent;
     float hpFillY = barY + (barH - hpFillH);
     g.FillRectangle(&hpBrush, barX + 1, hpFillY + 1, barW - 2, hpFillH - 2);
+
+    if (drawTracer) {
+        Pen tracerPen(Color(150, 255, 255, 255), 1.0f);
+        g.DrawLine(&tracerPen, (REAL)(screenW / 2), (REAL)screenH, x + w / 2, y + h);
+    }
 
     FontFamily fontFamily(L"Consolas");
     Font font(&fontFamily, 12, FontStyleBold, UnitPixel);
@@ -516,7 +521,8 @@ void ESP::RenderLoop() {
                                     }
                                 }
 
-                                DrawProfessionalESP(g, boxX, boxY, boxWidth, boxHeight, hp, maxHp, width, height, playerName, distance);
+                                // Pass true to draw tracers
+                                DrawProfessionalESP(g, boxX, boxY, boxWidth, boxHeight, hp, maxHp, width, height, playerName, distance, true);
                             }
                         }
                         env->DeleteLocalRef(player);
