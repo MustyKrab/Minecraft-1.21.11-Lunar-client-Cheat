@@ -36,7 +36,7 @@ private:
     bool WorldToScreen(Vec3 pos, Vec3 camPos, float* mv, float* p, Vec2& screen, int width, int height);
     
     void Draw3DBox(Gdiplus::Graphics& g, Vec3 feet, float w, float h, Vec3 camPos, float* mv, float* p, int sW, int sH, Gdiplus::Color color);
-    void DrawProfessionalESP(Gdiplus::Graphics& g, float x, float y, float w, float h, float health, float maxHealth, int screenW, int screenH, const std::wstring& name, double distance);
+    void DrawProfessionalESP(Gdiplus::Graphics& g, float x, float y, float w, float h, float health, float maxHealth, int screenW, int screenH, const std::wstring& name, double distance, bool drawTracer);
     void DrawGUI(Gdiplus::Graphics& g, int mouseX, int mouseY, bool clickAction, bool rightClickAction);
 
 public:
