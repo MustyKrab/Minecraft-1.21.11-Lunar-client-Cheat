@@ -20,6 +20,8 @@ add_library(MustyClient SHARED
     src/modules/combat/Reach.h
     src/modules/combat/WTap.cpp
     src/modules/combat/WTap.h
+    src/modules/combat/AutoClicker.cpp
+    src/modules/combat/AutoClicker.h
     src/modules/render/ESP.cpp
     src/modules/render/ESP.h
     src/modules/render/XRay.cpp

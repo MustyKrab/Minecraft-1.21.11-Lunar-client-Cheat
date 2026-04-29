@@ -3,6 +3,7 @@
 #include "combat/Aimbot.h"
 #include "combat/Reach.h"
 #include "combat/WTap.h"
+#include "combat/AutoClicker.h"
 #include "render/ESP.h"
 #include "render/XRay.h"
 #include "player/Fly.h"
@@ -12,6 +13,7 @@ std::vector<Module*> ModuleManager::modules;
 void ModuleManager::Initialize() {
     modules.push_back(new Killaura());
     modules.push_back(new Aimbot());
+    modules.push_back(new AutoClicker());
     modules.push_back(new Reach());
     modules.push_back(new WTap());
     modules.push_back(new ESP());

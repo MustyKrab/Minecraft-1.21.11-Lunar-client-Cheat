@@ -4,6 +4,7 @@
 #include "../combat/Killaura.h"
 #include "../combat/Aimbot.h"
 #include "../combat/Reach.h"
+#include "../combat/AutoClicker.h"
 #include "../render/XRay.h"
 #include <iostream>
 #include <fstream>
@@ -150,6 +151,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
             if (mod->GetName() == "XRay") totalHeight += 9 * 25 + 10;
             else if (mod->GetName() == "Killaura") totalHeight += 40 + 10;
             else if (mod->GetName() == "Aimbot") totalHeight += 40 + 10;
+            else if (mod->GetName() == "AutoClicker") totalHeight += 2 * 40 + 25 + 10;
             else if (mod->GetName() == "ESP") totalHeight += 40 + 10;
             else if (mod->GetName() == "Reach") totalHeight += 40 + 10;
         }
@@ -254,6 +256,19 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
                 float s = aim->GetSmoothSpeed();
                 y += DrawSlider(L"Smooth Speed", s, 0.01f, 0.50f, draggingAimSlider, 130, y);
                 aim->SetSmoothSpeed(s);
+            } else if (mod->GetName() == "AutoClicker") {
+                AutoClicker* ac = (AutoClicker*)mod;
+                float minCps = ac->GetMinCps();
+                float maxCps = ac->GetMaxCps();
+                bool jitter = ac->IsJitterEnabled();
+                
+                y += DrawSlider(L"Min CPS", minCps, 1.0f, 20.0f, draggingAcMinSlider, 130, y);
+                y += DrawSlider(L"Max CPS", maxCps, 1.0f, 20.0f, draggingAcMaxSlider, 130, y);
+                y += DrawCheckbox(L"Jitter", jitter, 130, y);
+                
+                ac->SetMinCps(minCps);
+                ac->SetMaxCps(maxCps);
+                ac->SetJitter(jitter);
             } else if (mod->GetName() == "ESP") {
                 y += DrawSlider(L"ESP Range", espRange, 10.0f, 200.0f, draggingEspRangeSlider, 130, y);
             } else if (mod->GetName() == "Reach") {
@@ -369,8 +384,6 @@ void ESP::RenderLoop() {
     const char* mNames[] = { "m00","m01","m02","m03", "m10","m11","m12","m13", "m20","m21","m22","m23", "m30","m31","m32","m33" };
     jfieldID matrixFields[16];
     for (int i = 0; i < 16; i++) matrixFields[i] = env->GetFieldID(matrixClass, mNames[i], "F");
-
-    bool wasRightClicked = false;
 
     while (running) {
         GetWindowRect(mcWindow, &rect);

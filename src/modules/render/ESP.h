@@ -26,6 +26,8 @@ private:
     bool draggingAimSlider = false;
     bool draggingEspRangeSlider = false;
     bool draggingReachSlider = false;
+    bool draggingAcMinSlider = false;
+    bool draggingAcMaxSlider = false;
 
     float espRange = 100.0f;
 
