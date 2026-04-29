@@ -2,6 +2,7 @@
 #include "../../core/JNIHelper.h"
 #include <iostream>
 #include <windows.h>
+#include <random>
 
 static bool wtapMappingsLoaded = false;
 static jclass mcClass, playerClass, optionsClass, keyBindingClass;
@@ -31,10 +32,6 @@ void WTap::OnTick() {
         setPressedMethod = JNIHelper::GetMethodSafe(keyBindingClass, "method_1430", "(Z)V", "setPressed");
         setSprintingMethod = JNIHelper::GetMethodSafe(playerClass, "method_5728", "(Z)V", "setSprinting");
         
-        // In 1.21, checking if the player just attacked can be tricky externally without hooking the attack method directly.
-        // We will approximate it by checking if the mouse is clicked and a target is in crosshair, or just rely on the swing animation.
-        // For a pure external JNI cheat, we can check handSwingProgress.
-        
         wtapMappingsLoaded = true;
     }
 
@@ -63,6 +60,12 @@ void WTap::OnTick() {
             // Start W-Tap
             isWTapping = true;
             ticksSinceAttack = 0;
+            
+            // FOX FIX: Add randomization to the W-Tap delay
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            std::uniform_int_distribution<> delayDist(2, 6); // Randomize between 2 and 6 ticks
+            wTapDelay = delayDist(gen);
             
             // Un-sprint
             env->CallVoidMethod(player, setSprintingMethod, JNI_FALSE);
