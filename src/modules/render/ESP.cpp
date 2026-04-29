@@ -2,6 +2,7 @@
 #include "../../core/JNIHelper.h"
 #include <iostream>
 #include <cmath>
+#include <string>
 
 #pragma comment(lib, "gdiplus.lib")
 using namespace Gdiplus;
@@ -104,8 +105,8 @@ void ESP::DrawHealthBar(Graphics& g, float x, float y, float w, float h, float h
 }
 
 void ESP::DrawSkeleton(Graphics& g, Vec3 feet, float bodyYaw, float height, Vec3 camPos, float* mv, float* p, int sW, int sH) {
-    float cosY = cos(bodyYaw * (3.14159265f / 180.0f));
-    float sinY = sin(bodyYaw * (3.14159265f / 180.0f));
+    float cosY = std::cos(bodyYaw * (3.14159265f / 180.0f));
+    float sinY = std::sin(bodyYaw * (3.14159265f / 180.0f));
 
     Vec3 rightOffset = { -cosY * 0.3, 0, -sinY * 0.3 };
     Vec3 leftOffset = { cosY * 0.3, 0, sinY * 0.3 };
@@ -335,7 +336,7 @@ void ESP::RenderLoop() {
                             DrawSkeleton(g, feetPos, bYaw, 1.8f, camPos, mv, p, width, height);
 
                             // 4. Nametag & Distance
-                            double distance = sqrt(pow(camPos.x - feetPos.x, 2) + pow(camPos.y - feetPos.y, 2) + pow(camPos.z - feetPos.z, 2));
+                            double distance = std::sqrt(std::pow(camPos.x - feetPos.x, 2) + std::pow(camPos.y - feetPos.y, 2) + std::pow(camPos.z - feetPos.z, 2));
                             wchar_t textBuf[256];
                             swprintf_s(textBuf, L"Player [%.1fm] \u2764%.1f", distance, hp);
                             
