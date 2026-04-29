@@ -83,9 +83,8 @@ void XRay::OnTick() {
                 if (stateObj) {
                     jobject blockObj = env->CallObjectMethod(stateObj, getBlockMethod);
                     if (blockObj) {
-                        jstring keyStr = (jstring)(env->CallObjectMethod(blockObj, getTranslationKeyMethod));
+                        jstring keyStr = (jstring)env->CallObjectMethod(blockObj, getTranslationKeyMethod);
                         if (keyStr) {
-                            const char* rawKey = env->GetStaticFieldSafe(blockClass, "method_9539", "()Ljava/lang/String;", "getTranslationKey");
                             const char* rawKey = env->GetStringUTFChars(keyStr, nullptr);
                             
                             if (strstr(rawKey, "diamond_ore")) {
