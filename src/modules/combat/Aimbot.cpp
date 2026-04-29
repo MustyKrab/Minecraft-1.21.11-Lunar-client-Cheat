@@ -76,6 +76,8 @@ void Aimbot::OnTick() {
         return;
     }
 
+    env->PushLocalFrame(100); // <-- FIX: Prevent JNI local reference leaks
+
     {
         double px = env->GetDoubleField(player, entX);
         double py = env->GetDoubleField(player, entY);
@@ -111,7 +113,7 @@ void Aimbot::OnTick() {
                 if (hp > 0.0f) {
                     double diffX = tx - px;
                     double diffZ = tz - pz;
-                    float targetYaw = (float)(std::atan2(diffZ, diffX) * 180.0 / 3.14159265) - 90.0f;
+                    float targetYaw = (float)(std::atan2(diff, diffX) * 180.0 / 3.14159265) - 90.0f;
                     
                     float yawDiff = targetYaw - currentYaw;
                     while (yawDiff <= -180.0f) yawDiff += 360.0f;
@@ -176,6 +178,7 @@ void Aimbot::OnTick() {
     }
 
 cleanup:
+    env->PopLocalFrame(nullptr);
     env->DeleteLocalRef(options);
     env->DeleteLocalRef(world);
     env->DeleteLocalRef(player);
