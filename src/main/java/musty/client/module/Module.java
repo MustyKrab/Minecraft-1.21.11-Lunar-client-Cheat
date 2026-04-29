@@ -1,4 +1,4 @@
-package jack.client.module;
+package musty.client.module;
 
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
@@ -48,7 +48,6 @@ public abstract class Module {
     public void onTick() {}
     public void onRender(DrawContext context, float tickDelta) {}
 
-    // Packet hooks. Return true to cancel the packet.
     public boolean onSendPacket(Packet<?> packet) { return false; }
     public boolean onReceivePacket(Packet<?> packet) { return false; }
 }

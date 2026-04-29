@@ -1,8 +1,8 @@
-package jack.client.gui;
+package musty.client.gui;
 
-import jack.client.JackClient;
-import jack.client.module.Module;
-import jack.client.module.modules.combat.Killaura;
+import musty.client.MustyClient;
+import musty.client.module.Module;
+import musty.client.module.modules.combat.Killaura;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
@@ -29,17 +29,15 @@ public class ClickGUI extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        // Handle mouse input manually to avoid Version-specific Screen method changes
         boolean isClicked = GLFW.glfwGetMouseButton(client.getWindow().getHandle(), GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
         
-        Killaura killaura = (Killaura) JackClient.moduleManager.getModuleByName("Killaura");
+        Killaura killaura = (Killaura) MustyClient.moduleManager.getModuleByName("Killaura");
         int sliderX = x + 200;
         int sliderY = y + 30;
         int sliderWidth = 150;
         int sliderHeight = 10;
 
         if (isClicked && !wasClicked) {
-            // On Initial Click
             if (mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + 20) {
                 dragging = true;
                 dragX = mouseX - x;
@@ -48,7 +46,7 @@ public class ClickGUI extends Screen {
                 draggingSlider = true;
             } else {
                 int moduleY = y + 25;
-                for (Module module : JackClient.moduleManager.getModules()) {
+                for (Module module : MustyClient.moduleManager.getModules()) {
                     if (mouseX >= x + 10 && mouseX <= x + 100 && mouseY >= moduleY && mouseY <= moduleY + 10) {
                         module.toggle();
                     }
@@ -69,28 +67,23 @@ public class ClickGUI extends Screen {
             float pick = (float) (mouseX - sliderX) / (float) sliderWidth;
             if (pick < 0.0f) pick = 0.0f;
             if (pick > 1.0f) pick = 1.0f;
-            float newReach = 3.0f + (pick * 3.0f); // 3.0 to 6.0
+            float newReach = 3.0f + (pick * 3.0f);
             killaura.setReach(newReach);
         }
 
         wasClicked = isClicked;
 
-        // Draw background
-        context.fill(x, y, x + width, y + height, 0xAA000000); // Argb black
-        
-        // Draw header
+        context.fill(x, y, x + width, y + height, 0xAA000000);
         context.fill(x, y, x + width, y + 20, 0xFF333333);
         context.drawText(client.textRenderer, "Musty Client 1.21.11", x + 5, y + 6, 0xFFFFFFFF, true);
 
-        // Draw Modules
         int moduleY = y + 25;
-        for (Module module : JackClient.moduleManager.getModules()) {
+        for (Module module : MustyClient.moduleManager.getModules()) {
             int color = module.isEnabled() ? 0xFF00FF00 : 0xFFFF0000;
             context.drawText(client.textRenderer, module.getName(), x + 10, moduleY, color, true);
             moduleY += 15;
         }
 
-        // Draw Slider
         if (killaura != null) {
             context.fill(sliderX, sliderY, sliderX + sliderWidth, sliderY + sliderHeight, 0xFF555555);
             float pick = (killaura.getReach() -  3.0f) / 3.0f;

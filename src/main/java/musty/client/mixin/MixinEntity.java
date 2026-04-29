@@ -1,6 +1,6 @@
-package jack.client.mixin;
+package musty.client.mixin;
 
-import jack.client.module.modules.render.GlowESP;
+import musty.client.module.modules.render.GlowESP;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
 import org.spongepowered.asm.mixin.Mixin;

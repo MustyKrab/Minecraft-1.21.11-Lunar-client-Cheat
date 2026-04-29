@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "id": "jackclient",
+  "id": "mustyclient",
   "version": "1.0.0",
   "name": "Musty Client",
   "description": "Internal 1.21.11 Fabric Client",
@@ -9,15 +9,15 @@
   ],
   "contact": {},
   "license": "MIT",
-  "icon": "assets/jackclient/icon.png",
+  "icon": "assets/mustyclient/icon.png",
   "environment": "*",
   "entrypoints": {
     "main": [
-      "jack.client.JackClient"
+      "musty.client.MustyClient"
     ]
   },
   "mixins": [
-    "jackclient.mixins.json"
+    "mustyclient.mixins.json"
   ],
   "depends": {
     "fabricloader": ">=0.15.0",

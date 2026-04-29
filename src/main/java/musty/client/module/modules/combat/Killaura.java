@@ -1,8 +1,8 @@
-package jack.client.module.modules.combat;
+package musty.client.module.modules.combat;
 
-import jack.client.mixin.PlayerMoveC2SPacketAccessor;
-import jack.client.module.Category;
-import jack.client.module.Module;
+import musty.client.mixin.PlayerMoveC2SPacketAccessor;
+import musty.client.module.Category;
+import musty.client.module.Module;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
@@ -43,14 +43,11 @@ public class Killaura extends Module {
     public void onTick() {
         if (mc.player == null || mc.world == null) return;
 
-        // 1. Find the best target
         target = findTarget();
 
         if (target != null) {
-            // 2. Calculate rotations
             float[] rotations = getRotations(target);
             
-            // Apply GCD fix (Greatest Common Divisor) to simulate real mouse movements
             float f = (float) (mc.options.getMouseSensitivity().getValue() * 0.6F + 0.2F);
             float gcd = f * f * f * 1.2F;
             
@@ -60,9 +57,7 @@ public class Killaura extends Module {
             serverYaw = rotations[0];
             serverPitch = rotations[1];
 
-            // 3. Attack logic (respecting cooldowns for 1.21.11 combat)
             if (mc.player.getAttackCooldownProgress(0.5f) >= 1.0f) {
-                // Raytrace check to prevent hitting through walls
                 if (isVisible(target)) {
                     mc.interactionManager.attackEntity(mc.player, target);
                     mc.player.swingHand(Hand.MAIN_HAND);
@@ -75,7 +70,6 @@ public class Killaura extends Module {
     public boolean onSendPacket(Packet<?> packet) {
         if (mc.player == null || target == null) return false;
 
-        // 4. Silent Rotation (Spoofing)
         if (packet instanceof PlayerMoveC2SPacket movePacket) {
             if (movePacket.changesLook()) {
                 ((PlayerMoveC2SPacketAccessor) movePacket).setYaw(serverYaw);
@@ -115,7 +109,6 @@ public class Killaura extends Module {
 
     private float[] getRotations(Entity target) {
         Vec3d playerPos = mc.player.getEyePos();
-        // Aim at the center of the target's bounding box
         Vec3d targetPos = target.getBoundingBox().getCenter();
 
         double diffX = targetPos.x - playerPos.x;

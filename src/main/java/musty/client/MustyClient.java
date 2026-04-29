@@ -1,7 +1,7 @@
-package jack.client;
+package musty.client;
 
-import jack.client.gui.ClickGUI;
-import jack.client.module.ModuleManager;
+import musty.client.gui.ClickGUI;
+import musty.client.module.ModuleManager;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.MinecraftClient;
@@ -10,8 +10,8 @@ import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class JackClient implements ModInitializer {
-    public static final String MOD_ID = "jackclient";
+public class MustyClient implements ModInitializer {
+    public static final String MOD_ID = "mustyclient";
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
     
     public static ModuleManager moduleManager;

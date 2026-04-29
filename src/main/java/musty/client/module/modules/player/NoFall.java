@@ -1,8 +1,8 @@
-package jack.client.module.modules.player;
+package musty.client.module.modules.player;
 
-import jack.client.mixin.PlayerMoveC2SPacketAccessor;
-import jack.client.module.Category;
-import jack.client.module.Module;
+import musty.client.mixin.PlayerMoveC2SPacketAccessor;
+import musty.client.module.Category;
+import musty.client.module.Module;
 import net.minecraft.network.packet.Packet;
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
 

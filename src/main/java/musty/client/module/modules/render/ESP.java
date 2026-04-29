@@ -1,7 +1,7 @@
-package jack.client.module.modules.render;
+package musty.client.module.modules.render;
 
-import jack.client.module.Category;
-import jack.client.module.Module;
+import musty.client.module.Category;
+import musty.client.module.Module;
 
 public class ESP extends Module {
     public static ESP instance;

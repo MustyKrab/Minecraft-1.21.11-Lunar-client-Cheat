@@ -1,13 +1,13 @@
-package jack.client.module;
+package musty.client.module;
 
-import jack.client.module.modules.combat.Killaura;
-import jack.client.module.modules.combat.Velocity;
-import jack.client.module.modules.player.NoFall;
-import jack.client.module.modules.render.GlowESP;
-import jack.client.module.modules.render.HealthBars;
+import musty.client.module.modules.combat.Killaura;
+import musty.client.module.modules.combat.Velocity;
+import musty.client.module.modules.player.NoFall;
+import musty.client.module.modules.render.GlowESP;
+import musty.client.module.modules.render.HealthBars;
+import musty.client.module.modules.render.Tracers;
 import java.util.ArrayList;
 import java.util.List;
-import jack.client.module.modules.render.Tracers;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.network.packet.Packet;
 
@@ -15,16 +15,11 @@ public class ModuleManager {
     private final List<Module> modules = new ArrayList<>();
 
     public void init() {
-        // Render
         modules.add(new GlowESP());
         modules.add(new Tracers());
         modules.add(new HealthBars());
-        
-        // Combat
         modules.add(new Velocity());
         modules.add(new Killaura());
-        
-        // Player
         modules.add(new NoFall());
     }
 

@@ -1,7 +1,7 @@
-package jack.client.module.modules.combat;
+package musty.client.module.modules.combat;
 
-import jack.client.module.Category;
-import jack.client.module.Module;
+import musty.client.module.Category;
+import musty.client.module.Module;
 import net.minecraft.network.packet.Packet;
 import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket;
 import net.minecraft.network.packet.s2c.play.ExplosionS2CPacket;
@@ -17,8 +17,8 @@ public class Velocity extends Module {
         if (mc.player == null) return false;
 
         if (packet instanceof EntityVelocityUpdateS2CPacket velocityPacket) {
-            if (velocityPacket.getEntityId() == mc.player.getId()) {
-                return true; // Cancel the original packet
+            if (velocityPacket.getId() == mc.player.getId()) {
+                return true;
             }
         }
 
