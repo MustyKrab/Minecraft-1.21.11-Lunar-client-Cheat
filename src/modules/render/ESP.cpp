@@ -171,7 +171,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
         totalHeight += 35;
         if (mod->IsExpanded()) {
             if (mod->GetName() == "XRay") totalHeight += 9 * 25 + 10;
-            else if (mod->GetName() == "Killaura") totalHeight += 3 * 40 + 25 + 10; // Increased height for new options
+            else if (mod->GetName() == "Killaura") totalHeight += 3 * 40 + 2 * 25 + 10; // Increased height for new options
             else if (mod->GetName() == "Aimbot") totalHeight += 40 + 10;
             else if (mod->GetName() == "AutoClicker") totalHeight += 2 * 40 + 25 + 10;
             else if (mod->GetName() == "ESP") totalHeight += 40 + 10;
@@ -278,14 +278,17 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
                     float r = ka->GetReach();
                     float intensity = ka->GetAimbotIntensity();
                     bool aimAssist = ka->IsAimAssistMode();
+                    bool tpAura = ka->IsTeleportAuraEnabled();
                     
                     y += DrawSlider(L"Reach", r, 3.0f, 10.0f, draggingSlider, 130, y);
                     y += DrawSlider(L"Aimbot Intensity", intensity, 0.01f, 1.0f, draggingAimSlider, 130, y);
                     y += DrawCheckbox(L"Aim Assist Mode", aimAssist, 130, y);
+                    y += DrawCheckbox(L"Teleport Aura", tpAura, 130, y);
                     
                     ka->SetReach(r);
                     ka->SetAimbotIntensity(intensity);
                     ka->SetAimAssistMode(aimAssist);
+                    ka->SetTeleportAura(tpAura);
                 }
             } else if (mod->GetName() == "Aimbot") {
                 Aimbot* aim = (Aimbot*)mod;
