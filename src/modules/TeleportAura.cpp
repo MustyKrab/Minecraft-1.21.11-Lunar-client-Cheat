@@ -1,25 +1,171 @@
 #include "TeleportAura.h"
-#include "../core/Globals.h"
-#include "../core/TargetManager.h"
-#include "../core/Network.h"
+#include "../core/JNIHelper.h"
+#include <iostream>
+#include <cmath>
 
-// Teleport Aura - Directly sends packets to bypass distance
-void TeleportAura::OnTick(CUserCmd* cmd) {
-    if (!bEnabled) return;
-    
-    // Massive reach check (e.g., 50.0 blocks/units)
-    Entity* target = TargetManager::GetClosest(50.0f); 
-    if (!target) return;
+static bool taMappingsLoaded = false;
+static jclass taMcClass, taWorldClass, taEntityClass, taLivingClass, taPlayerClass, taInteractionManagerClass, taHandClass, taListClass;
+static jclass taNetworkHandlerClass, taPositionAndOnGroundClass;
+static jfieldID taInstanceField, taPlayerField, taWorldField, taInteractionManagerField, taPlayersField, taNetworkHandlerField;
+static jfieldID taEntX, taEntY, taEntZ, taMainHandField;
+static jmethodID taListSize, taListGet, taGetHealth, taAttackMethod, taSwingMethod, taGetCooldownMethod, taSendPacketMethod, taPacketInitMethod;
 
-    Vector3 originalPos = Globals::LocalPlayer->GetPos();
-    Vector3 targetPos = target->GetPos();
+TeleportAura::TeleportAura() : Module("TeleportAura"), reach(50.0f) {}
 
-    // 1. Send packets to teleport to the target (bypass distance)
-    Network::SendPositionPacket(targetPos);
-    
-    // 2. Smack the bitch
-    Network::SendAttackPacket(target);
-    
-    // 3. Teleport back to original position instantly to avoid rubberbanding/flagging
-    Network::SendPositionPacket(originalPos);
+void TeleportAura::OnTick() {
+    JNIEnv* env = JNIHelper::env;
+    if (!env) return;
+
+    if (!taMappingsLoaded) {
+        taMcClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_310;", "net/minecraft/client/MinecraftClient");
+        taWorldClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_638;", "net/minecraft/client/world/ClientWorld");
+        taEntityClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_1297;", "net/minecraft/entity/Entity");
+        taLivingClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_1309;", "net/minecraft/entity/LivingEntity");
+        taPlayerClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_1657;", "net/minecraft/entity/player/PlayerEntity");
+        taInteractionManagerClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_636;", "net/minecraft/client/network/ClientPlayerInteractionManager");
+        taHandClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_1268;", "net/minecraft/util/Hand");
+        taListClass = env->FindClass("java/util/List");
+
+        taNetworkHandlerClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_634;", "net/minecraft/client/network/ClientPlayNetworkHandler");
+        taPositionAndOnGroundClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_2828$class_2829;", "net/minecraft/network/packet/c2s/play/PlayerMoveC2SPacket$PositionAndOnGround");
+
+        if (!taMcClass || !taWorldClass || !taEntityClass || !taLivingClass || !taPlayerClass || !taInteractionManagerClass || !taHandClass || !taNetworkHandlerClass || !taPositionAndOnGroundClass) return;
+
+        taInstanceField = JNIHelper::GetStaticFieldSafe(taMcClass, "field_1700", "Lnet/minecraft/class_310;", "instance");
+        taPlayerField = JNIHelper::GetFieldSafe(taMcClass, "field_1724", "Lnet/minecraft/class_746;", "player");
+        taWorldField = JNIHelper::GetFieldSafe(taMcClass, "field_1687", "Lnet/minecraft/class_638;", "world");
+        taInteractionManagerField = JNIHelper::GetFieldSafe(taMcClass, "field_1761", "Lnet/minecraft/class_636;", "interactionManager");
+        
+        taNetworkHandlerField = JNIHelper::GetFieldSafe(JNIHelper::FindClassSafe("Lnet/minecraft/class_746;", "net/minecraft/client/network/ClientPlayerEntity"), "field_3944", "Lnet/minecraft/class_634;", "networkHandler");
+        
+        taPlayersField = JNIHelper::GetFieldSafe(taWorldClass, "field_18226", "Ljava/util/List;", "players");
+        
+        taListSize = env->GetMethodID(taListClass, "size", "()I");
+        taListGet = env->GetMethodID(taListClass, "get", "(I)Ljava/lang/Object;");
+
+        taEntX = JNIHelper::GetFieldSafe(taEntityClass, "field_6014", "D", "x");
+        taEntY = JNIHelper::GetFieldSafe(taEntityClass, "field_6036", "D", "y");
+        taEntZ = JNIHelper::GetFieldSafe(taEntityClass, "field_5969", "D", "z");
+
+        taGetHealth = JNIHelper::GetMethodSafe(taLivingClass, "method_6032", "()F", "getHealth");
+        taAttackMethod = JNIHelper::GetMethodSafe(taInteractionManagerClass, "method_2918", "(Lnet/minecraft/class_1657;Lnet/minecraft/class_1297;)V", "attackEntity");
+        taSwingMethod = JNIHelper::GetMethodSafe(taLivingClass, "method_6104", "(Lnet/minecraft/class_1268;)V", "swingHand");
+        taGetCooldownMethod = JNIHelper::GetMethodSafe(taPlayerClass, "method_7261", "(F)F", "getAttackCooldownProgress");
+
+        taSendPacketMethod = JNIHelper::GetMethodSafe(taNetworkHandlerClass, "method_52787", "(Lnet/minecraft/class_2596;)V", "sendPacket");
+        
+        taPacketInitMethod = env->GetMethodID(taPositionAndOnGroundClass, "<init>", "(DDDZ)V");
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            taPacketInitMethod = nullptr;
+        }
+
+        taMainHandField = JNIHelper::GetStaticFieldSafe(taHandClass, "field_5808", "Lnet/minecraft/class_1268;", "MAIN_HAND");
+
+        taMappingsLoaded = true;
+    }
+
+    if (!taInstanceField || !taPlayerField || !taWorldField || !taInteractionManagerField || !taPlayersField || !taEntX || !taEntY || !taEntZ || !taListSize || !taListGet || !taGetHealth || !taAttackMethod || !taSwingMethod || !taGetCooldownMethod || !taMainHandField || !taNetworkHandlerField || !taPacketInitMethod) return;
+
+    jobject mc = env->GetStaticObjectField(taMcClass, taInstanceField);
+    if (!mc) return;
+
+    jobject player = env->GetObjectField(mc, taPlayerField);
+    jobject world = env->GetObjectField(mc, taWorldField);
+    jobject interactionManager = env->GetObjectField(mc, taInteractionManagerField);
+
+    if (!player || !world || !interactionManager) {
+        if (player) env->DeleteLocalRef(player);
+        if (world) env->DeleteLocalRef(world);
+        if (interactionManager) env->DeleteLocalRef(interactionManager);
+        env->DeleteLocalRef(mc);
+        return;
+    }
+
+    {
+        double px = env->GetDoubleField(player, taEntX);
+        double py = env->GetDoubleField(player, taEntY);
+        double pz = env->GetDoubleField(player, taEntZ);
+
+        jobject playersList = env->GetObjectField(world, taPlayersField);
+        if (!playersList) goto cleanup;
+
+        int size = env->CallIntMethod(playersList, taListSize);
+        jobject bestTarget = nullptr;
+        double bestDist = reach;
+
+        for (int i = 0; i < size; i++) {
+            jobject target = env->CallObjectMethod(playersList, taListGet, i);
+            if (!target) continue;
+
+            if (env->IsSameObject(player, target)) {
+                env->DeleteLocalRef(target);
+                continue;
+            }
+
+            double tx = env->GetDoubleField(target, taEntX);
+            double ty = env->GetDoubleField(target, taEntY);
+            double tz = env->GetDoubleField(target, taEntZ);
+
+            double dist = std::sqrt(std::pow(tx - px, 2) + std::pow(ty - py, 2) + std::pow(tz - pz, 2));
+            
+            if (dist <= bestDist) {
+                float hp = env->CallFloatMethod(target, taGetHealth);
+                if (hp > 0.0f) {
+                    bestDist = dist;
+                    if (bestTarget) env->DeleteLocalRef(bestTarget);
+                    bestTarget = env->NewLocalRef(target);
+                }
+            }
+            env->DeleteLocalRef(target);
+        }
+
+        if (bestTarget) {
+            float cooldown = env->CallFloatMethod(player, taGetCooldownMethod, 0.5f);
+            if (cooldown >= 1.0f) {
+                double tx = env->GetDoubleField(bestTarget, taEntX);
+                double ty = env->GetDoubleField(bestTarget, taEntY);
+                double tz = env->GetDoubleField(bestTarget, taEntZ);
+
+                double diffX = tx - px;
+                double diffZ = tz - pz;
+
+                jobject networkHandler = env->GetObjectField(player, taNetworkHandlerField);
+                if (networkHandler) {
+                    double tpX = tx - (diffX / bestDist) * 2.0;
+                    double tpY = ty;
+                    double tpZ = tz - (diffZ / bestDist) * 2.0;
+
+                    // 1. Send packet to teleport TO the target
+                    jobject packetTo = env->NewObject(taPositionAndOnGroundClass, taPacketInitMethod, tpX, tpY, tpZ, JNI_TRUE);
+                    env->CallVoidMethod(networkHandler, taSendPacketMethod, packetTo);
+                    env->DeleteLocalRef(packetTo);
+
+                    // 2. Attack the target
+                    env->CallVoidMethod(interactionManager, taAttackMethod, player, bestTarget);
+                    
+                    jobject mainHand = env->GetStaticObjectField(taHandClass, taMainHandField);
+                    if (mainHand) {
+                        env->CallVoidMethod(player, taSwingMethod, mainHand);
+                        env->DeleteLocalRef(mainHand);
+                    }
+
+                    // 3. Send packet to teleport BACK to original position
+                    jobject packetBack = env->NewObject(taPositionAndOnGroundClass, taPacketInitMethod, px, py, pz, JNI_TRUE);
+                    env->CallVoidMethod(networkHandler, taSendPacketMethod, packetBack);
+                    env->DeleteLocalRef(packetBack);
+
+                    env->DeleteLocalRef(networkHandler);
+                }
+            }
+            env->DeleteLocalRef(bestTarget);
+        }
+        env->DeleteLocalRef(playersList);
+    }
+
+cleanup:
+    env->DeleteLocalRef(interactionManager);
+    env->DeleteLocalRef(world);
+    env->DeleteLocalRef(player);
+    env->DeleteLocalRef(mc);
 }
