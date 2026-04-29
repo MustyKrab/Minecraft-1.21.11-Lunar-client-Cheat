@@ -247,7 +247,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
                 y += DrawCheckbox(L"Iron Ore", xray->showIron, 130, y);
                 y += DrawCheckbox(L"Emerald Ore", xray->showEmerald, 130, y);
                 y += DrawCheckbox(L"Ancient Debris", xray->showNetherite, 130, y);
-                y += DrawCheckbox(L"Chests & Barrels", xray->showChests, 130, y);
+                y += DrawCheckbox(L"Chest & Barrels", xray->showChests, 130, y);
                 y += DrawCheckbox(L"Ender Chests", xray->showEnderChests, 130, y);
                 y += DrawCheckbox(L"Spawners", xray->showSpawners, 130, y);
                 y += DrawCheckbox(L"Hoppers", xray->showHoppers, 130, y);
