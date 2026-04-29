@@ -261,45 +261,55 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
         if (mod->IsExpanded()) {
             if (mod->GetName() == "XRay") {
                 XRay* xray = (XRay*)mod;
-                y += DrawCheckbox(L"Diamond Ore", xray->showDiamond, 130, y);
-                y += DrawCheckbox(L"Gold Ore", xray->showGold, 130, y);
-                y += DrawCheckbox(L"Iron Ore", xray->showIron, 130, y);
-                y += DrawCheckbox(L"Emerald Ore", xray->showEmerald, 130, y);
-                y += DrawCheckbox(L"Ancient Debris", xray->showNetherite, 130, y);
-                y += DrawCheckbox(L"Chest & Barrels", xray->showChests, 130, y);
-                y += DrawCheckbox(L"Ender Chests", xray->showEnderChests, 130, y);
-                y += DrawCheckbox(L"Spawners", xray->showSpawners, 130, y);
-                y += DrawCheckbox(L"Hoppers", xray->showHoppers, 130, y);
+                if (xray) {
+                    y += DrawCheckbox(L"Diamond Ore", xray->showDiamond, 130, y);
+                    y += DrawCheckbox(L"Gold Ore", xray->showGold, 130, y);
+                    y += DrawCheckbox(L"Iron Ore", xray->showIron, 130, y);
+                    y += DrawCheckbox(L"Emerald Ore", xray->showEmerald, 130, y);
+                    y += DrawCheckbox(L"Ancient Debris", xray->showNetherite, 130, y);
+                    y += DrawCheckbox(L"Chest & Barrels", xray->showChests, 130, y);
+                    y += DrawCheckbox(L"Ender Chests", xray->showEnderChests, 130, y);
+                    y += DrawCheckbox(L"Spawners", xray->showSpawners, 130, y);
+                    y += DrawCheckbox(L"Hoppers", xray->showHoppers, 130, y);
+                }
             } else if (mod->GetName() == "Killaura") {
                 Killaura* ka = (Killaura*)mod;
-                float r = ka->GetReach();
-                y += DrawSlider(L"Reach", r, 3.0f, 6.0f, draggingSlider, 130, y);
-                ka->SetReach(r);
+                if (ka) {
+                    float r = ka->GetReach();
+                    y += DrawSlider(L"Reach", r, 3.0f, 6.0f, draggingSlider, 130, y);
+                    ka->SetReach(r);
+                }
             } else if (mod->GetName() == "Aimbot") {
                 Aimbot* aim = (Aimbot*)mod;
-                float s = aim->GetSmoothSpeed();
-                y += DrawSlider(L"Smooth Speed", s, 0.01f, 0.50f, draggingAimSlider, 130, y);
-                aim->SetSmoothSpeed(s);
+                if (aim) {
+                    float s = aim->GetSmoothSpeed();
+                    y += DrawSlider(L"Smooth Speed", s, 0.01f, 0.50f, draggingAimSlider, 130, y);
+                    aim->SetSmoothSpeed(s);
+                }
             } else if (mod->GetName() == "AutoClicker") {
                 AutoClicker* ac = (AutoClicker*)mod;
-                float minCps = ac->GetMinCps();
-                float maxCps = ac->GetMaxCps();
-                bool jitter = ac->IsJitterEnabled();
-                
-                y += DrawSlider(L"Min CPS", minCps, 1.0f, 20.0f, draggingAcMinSlider, 130, y);
-                y += DrawSlider(L"Max CPS", maxCps, 1.0f, 20.0f, draggingAcMaxSlider, 130, y);
-                y += DrawCheckbox(L"Jitter", jitter, 130, y);
-                
-                ac->SetMinCps(minCps);
-                ac->SetMaxCps(maxCps);
-                ac->SetJitter(jitter);
+                if (ac) {
+                    float minCps = ac->GetMinCps();
+                    float maxCps = ac->GetMaxCps();
+                    bool jitter = ac->IsJitterEnabled();
+                    
+                    y += DrawSlider(L"Min CPS", minCps, 1.0f, 20.0f, draggingAcMinSlider, 130, y);
+                    y += DrawSlider(L"Max CPS", maxCps, 1.0f, 20.0f, draggingAcMaxSlider, 130, y);
+                    y += DrawCheckbox(L"Jitter", jitter, 130, y);
+                    
+                    ac->SetMinCps(minCps);
+                    ac->SetMaxCps(maxCps);
+                    ac->SetJitter(jitter);
+                }
             } else if (mod->GetName() == "ESP") {
                 y += DrawSlider(L"ESP Range", espRange, 10.0f, 200.0f, draggingEspRangeSlider, 130, y);
             } else if (mod->GetName() == "Reach") {
                 Reach* rm = (Reach*)mod;
-                float r = rm->GetReach();
-                y += DrawSlider(L"Reach Distance", r, 3.0f, 6.0f, draggingReachSlider, 130, y);
-                rm->SetReach(r);
+                if (rm) {
+                    float r = rm->GetReach();
+                    y += DrawSlider(L"Reach Distance", r, 3.0f, 6.0f, draggingReachSlider, 130, y);
+                    rm->SetReach(r);
+                }
             }
             y += 10;
         }
