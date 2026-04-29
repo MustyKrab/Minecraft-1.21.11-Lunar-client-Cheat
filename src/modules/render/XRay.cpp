@@ -1,6 +1,7 @@
 #include "XRay.h"
 #include "../../core/JNIHelper.h"
 #include <iostream>
+#include <cstring>
 
 static bool xrayMappingsLoaded = false;
 static jclass mcClass, worldClass, blockPosClass, blockStateClass, blockClass, registryClass;
