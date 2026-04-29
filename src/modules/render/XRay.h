@@ -1,31 +1,21 @@
-#pragma once
-#include "../Module.h"
-#include <vector>
-
-struct XRayBlock {
-    int x, y, z;
-    int r, g, b;
-};
-
-class XRay : public Module {
-private:
-    std::vector<XRayBlock> foundBlocks;
-    int scanRadius = 32;
-    int tickCounter = 0;
-
-public:
-    bool showDiamond = true;
-    bool showGold = true;
-    bool showIron = true;
-    bool showEmerald = true;
-    bool showNetherite = true;
-    bool showChests = true;
-    bool showEnderChests = true;
-    bool showSpawners = true;
-    bool showHoppers = true;
-
-    XRay();
-    void OnTick() override;
-    
-    const std::vector<XRayBlock>& GetFoundBlocks() const { return foundBlocks; }
-};
+I3ByYWdtYSBvbmNlCiNpbmNsdWRlICIuLi9Nb2R1bGUuaCIKI2luY2x1ZGUg
+PHZlY3Rvcj4KI2luY2x1ZGUgPG11dGV4PgoKc3RydWN0IFhSYXlCbG9jayB7
+CiAgICBpbnQgeCwgeSwgejsKICAgIGludCByLCBnLCBiOwp9OwoKY2xhc3Mg
+WFJheSA6IHB1YmxpYyBNb2R1bGUgewpwcml2YXRlOgogICAgc3RkOjp2ZWN0
+b3I8WFJheUJsb2NrPiBmb3VuZEJsb2NrczsKICAgIG11dGFibGUgc3RkOjpt
+dXRleCBibG9ja3NNdXRleDsKICAgIGludCBzY2FuUmFkaXVzID0gMzI7CiAg
+ICBpbnQgdGlja0NvdW50ZXIgPSAwOwoKcHVibGljOgogICAgYm9vbCBzaG93
+RGlhbW9uZCA9IHRydWU7CiAgICBib29sIHNob3dHb2xkID0gdHJ1ZTsKICAg
+IGJvb2wgc2hvd0lyb24gPSB0cnVlOwogICAgYm9vbCBzaG93RW1lcmFsZCA9
+IHRydWU7CiAgICBib29sIHNob3dOZXRoZXJpdGUgPSB0cnVlOwogICAgYm9v
+bCBzaG93Q2hlc3RzID0gdHJ1ZTsKICAgIGJvb2wgc2hvd0VuZGVyQ2hlc3Rz
+ID0gdHJ1ZTsKICAgIGJvb2wgc2hvd1NwYXduZXJzID0gdHJ1ZTsKICAgIGJv
+b2wgc2hvd0hvcHBlcnMgPSB0cnVlOwoKICAgIFhSYXkoKTsKICAgIHZvaWQg
+T25UaWNrKCkgb3ZlcnJpZGU7CiAgICAKICAgIHN0ZDo6dmVjdG9yPFhSYXlC
+bG9jaz4gR2V0Rm91bmRCbG9ja3MoKSBjb25zdCB7CiAgICAgICAgc3RkOjps
+b2NrX2d1YXJkPHN0ZDo6bXV0ZXg+IGxvY2soYmxvY2tzTXV0ZXgpOwogICAg
+ICAgIHJldHVybiBmb3VuZEJsb2NrczsKICAgIH0KICAgIAogICAgdm9pZCBT
+ZXRGb3VuZEJsb2Nrcyhjb25zdCBzdGQ6OnZlY3RvcjxYUmF5QmxvY2s+JiBi
+bG9ja3MpIHsKICAgICAgICBzdGQ6OmxvY2tfZ3VhcmQ8c3RkOjptdXRleD4g
+bG9jayhibG9ja3NNdXRleCk7CiAgICAgICAgZm91bmRCbG9ja3MgPSBibG9j
+a3M7CiAgICB9Cn07Cg==
