@@ -6,6 +6,8 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.math.Vec3d;
+import org.joml.Matrix4f;
+import org.joml.Vector4f;
 
 public class HealthBars extends Module {
     public HealthBars() {
@@ -23,29 +25,37 @@ public class HealthBars extends Module {
         float yaw = mc.player.getYaw(tickDelta);
         float pitch = mc.player.getPitch(tickDelta);
         
-        // Better pixel scaling based on vertical FOV
-        float fov = mc.options.getFov().getValue().floatValue();
-        float pixelsPerDegree = height / fov;
+        // Build View Matrix
+        Matrix4f viewMatrix = new Matrix4f()
+            .rotationX(-pitch * (float)(Math.PI / 180.0))
+            .rotationY(-yaw * (float)(Math.PI / 180.0) - (float)Math.PI);
+            
+        // Build Projection Matrix
+        float fov = (float) Math.toRadians(mc.options.getFov().getValue());
+        float aspect = (float) mc.getWindow().getFramebufferWidth() / (float) mc.getWindow().getFramebufferHeight();
+        Matrix4f projMatrix = new Matrix4f().setPerspective(fov, aspect, 0.05f, 1000.0f);
 
         for (Entity entity : mc.world.getEntities()) {
             if (entity instanceof PlayerEntity && entity != mc.player) {
                 PlayerEntity player = (PlayerEntity) entity;
                 
-                // Get the position slightly above the player's head
+                // Position slightly above the player's head
                 Vec3d headPos = player.getLerpedPos(tickDelta).add(0, player.getHeight() + 0.3, 0);
                 Vec3d diff = headPos.subtract(cameraPos);
                 
-                double diffXZ = Math.sqrt(diff.x * diff.x + diff.z * diff.z);
-                float yawToEntity = (float) Math.toDegrees(Math.atan2(diff.z, diff.x)) - 90.0f;
-                float pitchToEntity = (float) -Math.toDegrees(Math.atan2(diff.y, diffXZ));
+                Vector4f pos = new Vector4f((float)diff.x, (float)diff.y, (float)diff.z, 1.0f);
                 
-                float relativeYaw = wrapDegrees(yawToEntity - yaw);
-                float relativePitch = wrapDegrees(pitchToEntity - pitch);
+                // Project 3D to 2D
+                viewMatrix.transform(pos);
+                projMatrix.transform(pos);
                 
-                // Only draw if entity is in front of the camera
-                if (Math.abs(relativeYaw) < 90.0f) {
-                    int screenX = (width / 2) + (int)(relativeYaw * pixelsPerDegree);
-                    int screenY = (height / 2) + (int)(relativePitch * pixelsPerDegree);
+                // If w > 0, the entity is in front of the camera
+                if (pos.w > 0.0f) {
+                    float ndcX = pos.x / pos.w;
+                    float ndcY = pos.y / pos.w;
+                    
+                    int screenX = (int) ((ndcX + 1.0f) * 0.5f * width);
+                    int screenY = (int) ((1.0f - ndcY) * 0.5f * height);
                     
                     float hp = player.getHealth();
                     float maxHp = player.getMaxHealth();
@@ -54,7 +64,7 @@ public class HealthBars extends Module {
                     int barWidth = 40;
                     int barHeight = 5;
                     int barX = screenX - (barWidth / 2);
-                    int barY = screenY; // Draw exactly at the projected head pos
+                    int barY = screenY;
                     
                     // Draw background (black border)
                     context.fill(barX - 1, barY - 1, barX + barWidth + 1, barY + barHeight + 1, 0xFF000000);
@@ -72,16 +82,5 @@ public class HealthBars extends Module {
                 }
             }
         }
-    }
-    
-    private float wrapDegrees(float degrees) {
-        float f = degrees % 360.0F;
-        if (f >= 180.0F) {
-            f -= 360.0F;
-        }
-        if (f < -180.0F) {
-            f += 360.0F;
-        }
-        return f;
     }
 }

@@ -6,6 +6,8 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.math.Vec3d;
+import org.joml.Matrix4f;
+import org.joml.Vector4f;
 
 public class Tracers extends Module {
     public Tracers() {
@@ -22,26 +24,35 @@ public class Tracers extends Module {
         Vec3d cameraPos = mc.player.getCameraPosVec(tickDelta);
         float yaw = mc.player.getYaw(tickDelta);
         float pitch = mc.player.getPitch(tickDelta);
+        
+        // Build View Matrix
+        Matrix4f viewMatrix = new Matrix4f()
+            .rotationX(-pitch * (float)(Math.PI / 180.0))
+            .rotationY(-yaw * (float)(Math.PI / 180.0) - (float)Math.PI);
+            
+        // Build Projection Matrix
+        float fov = (float) Math.toRadians(mc.options.getFov().getValue());
+        float aspect = (float) mc.getWindow().getFramebufferWidth() / (float) mc.getWindow().getFramebufferHeight();
+        Matrix4f projMatrix = new Matrix4f().setPerspective(fov, aspect, 0.05f, 1000.0f);
 
         for (Entity entity : mc.world.getEntities()) {
             if (entity instanceof PlayerEntity && entity != mc.player) {
                 Vec3d entityPos = entity.getLerpedPos(tickDelta);
-                
                 Vec3d diff = entityPos.subtract(cameraPos);
                 
-                double diffXZ = Math.sqrt(diff.x * diff.x + diff.z * diff.z);
-                float yawToEntity = (float) Math.toDegrees(Math.atan2(diff.z, diff.x)) - 90.0f;
-                float pitchToEntity = (float) -Math.toDegrees(Math.atan2(diff.y, diffXZ));
+                Vector4f pos = new Vector4f((float)diff.x, (float)diff.y, (float)diff.z, 1.0f);
                 
-                float relativeYaw = wrapDegrees(yawToEntity - yaw);
-                float relativePitch = wrapDegrees(pitchToEntity - pitch);
+                // Project 3D to 2D
+                viewMatrix.transform(pos);
+                projMatrix.transform(pos);
                 
-                if (Math.abs(relativeYaw) < 90.0f) {
-                    float fov = mc.options.getFov().getValue().floatValue();
-                    float pixelsPerDegree = (width / fov);
+                // If w > 0, the entity is in front of the camera
+                if (pos.w > 0.0f) {
+                    float ndcX = pos.x / pos.w;
+                    float ndcY = pos.y / pos.w;
                     
-                    int screenX = (width / 2) + (int)(relativeYaw * pixelsPerDegree);
-                    int screenY = (height / 2) + (int)(relativePitch * pixelsPerDegree);
+                    int screenX = (int) ((ndcX + 1.0f) * 0.5f * width);
+                    int screenY = (int) ((1.0f - ndcY) * 0.5f * height);
                     
                     int startX = width / 2;
                     int startY = height;
@@ -76,16 +87,5 @@ public class Tracers extends Module {
             }
             dots++;
         }
-    }
-    
-    private float wrapDegrees(float degrees) {
-        float f = degrees % 360.0F;
-        if (f >= 180.0F) {
-            f -= 360.0F;
-        }
-        if (f < -180.0F) {
-            f += 360.0F;
-        }
-        return f;
     }
 }
