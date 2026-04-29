@@ -176,6 +176,8 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
             else if (mod->GetName() == "AutoClicker") totalHeight += 2 * 40 + 25 + 10;
             else if (mod->GetName() == "ESP") totalHeight += 40 + 10;
             else if (mod->GetName() == "Reach") totalHeight += 40 + 10;
+            // FOX FIX: Add height for new module
+            else totalHeight += 40 + 10; 
         }
     }
 
