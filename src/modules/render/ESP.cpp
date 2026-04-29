@@ -318,61 +318,60 @@ void ESP::RenderLoop() {
     jclass rendererClass = nullptr, cameraClass = nullptr, vec3dClass = nullptr, matrixClass = nullptr;
     jclass textClass = nullptr;
 
-    jint classCount = 0;
-    jclass* classes = nullptr;
-    JNIHelper::jvmti->GetLoadedClasses(&classCount, &classes);
+    // Retry loop for class resolution
+    int retries = 0;
+    while (retries < 100 && running) {
+        mcClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_310;", "net/minecraft/client/MinecraftClient");
+        worldClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_638;", "net/minecraft/client/world/ClientWorld");
+        entityClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_1297;", "net/minecraft/entity/Entity");
+        livingEntityClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_1309;", "net/minecraft/entity/LivingEntity");
+        rendererClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_757;", "net/minecraft/client/render/GameRenderer");
+        cameraClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_4184;", "net/minecraft/client/render/Camera");
+        vec3dClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_243;", "net/minecraft/util/math/Vec3d");
+        matrixClass = JNIHelper::FindClassSafe("Lorg/joml/Matrix4f;", "org/joml/Matrix4f");
+        textClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_2561;", "net/minecraft/text/Text");
 
-    for (int i = 0; i < classCount; i++) {
-        char* sig;
-        JNIHelper::jvmti->GetClassSignature(classes[i], &sig, nullptr);
-        if (sig) {
-            if (strcmp(sig, "Lnet/minecraft/class_310;") == 0) mcClass = classes[i];
-            else if (strcmp(sig, "Lnet/minecraft/class_638;") == 0) worldClass = classes[i];
-            else if (strcmp(sig, "Lnet/minecraft/class_1297;") == 0) entityClass = classes[i];
-            else if (strcmp(sig, "Lnet/minecraft/class_1309;") == 0) livingEntityClass = classes[i];
-            else if (strcmp(sig, "Lnet/minecraft/class_757;") == 0) rendererClass = classes[i];
-            else if (strcmp(sig, "Lnet/minecraft/class_4184;") == 0) cameraClass = classes[i];
-            else if (strcmp(sig, "Lnet/minecraft/class_243;") == 0) vec3dClass = classes[i];
-            else if (strcmp(sig, "Lorg/joml/Matrix4f;") == 0) matrixClass = classes[i];
-            else if (strcmp(sig, "Lnet/minecraft/class_2561;") == 0) textClass = classes[i];
-            JNIHelper::jvmti->Deallocate((unsigned char*)sig);
+        if (mcClass && worldClass && entityClass && rendererClass && cameraClass && vec3dClass && matrixClass) {
+            break;
         }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        retries++;
     }
-    JNIHelper::jvmti->Deallocate((unsigned char*)classes);
 
     if (!mcClass || !worldClass || !entityClass || !rendererClass || !cameraClass || !vec3dClass || !matrixClass) {
         std::cout << "[MustyClient] Failed to resolve obfuscated classes." << std::endl;
         return;
     }
 
-    jfieldID instanceField = env->GetStaticFieldID(mcClass, "field_1700", "Lnet/minecraft/class_310;");
-    jfieldID localPlayerField = env->GetFieldID(mcClass, "field_1724", "Lnet/minecraft/class_746;");
-    jfieldID worldField = env->GetFieldID(mcClass, "field_1687", "Lnet/minecraft/class_638;");
-    jfieldID rendererField = env->GetFieldID(mcClass, "field_1773", "Lnet/minecraft/class_757;");
+    jfieldID instanceField = JNIHelper::GetStaticFieldSafe(mcClass, "field_1700", "Lnet/minecraft/class_310;", "instance");
+    jfieldID localPlayerField = JNIHelper::GetFieldSafe(mcClass, "field_1724", "Lnet/minecraft/class_746;", "player");
+    jfieldID worldField = JNIHelper::GetFieldSafe(mcClass, "field_1687", "Lnet/minecraft/class_638;", "world");
+    jfieldID rendererField = JNIHelper::GetFieldSafe(mcClass, "field_1773", "Lnet/minecraft/class_757;", "gameRenderer");
 
-    jfieldID playersField = env->GetFieldID(worldClass, "field_18226", "Ljava/util/List;");
+    jfieldID playersField = JNIHelper::GetFieldSafe(worldClass, "field_18226", "Ljava/util/List;", "players");
     jclass listClass = env->FindClass("java/util/List");
     jmethodID listSize = env->GetMethodID(listClass, "size", "()I");
     jmethodID listGet = env->GetMethodID(listClass, "get", "(I)Ljava/lang/Object;");
 
-    jfieldID entX = env->GetFieldID(entityClass, "field_6014", "D");
-    jfieldID entY = env->GetFieldID(entityClass, "field_6036", "D");
-    jfieldID entZ = env->GetFieldID(entityClass, "field_5969", "D");
+    jfieldID entX = JNIHelper::GetFieldSafe(entityClass, "field_6014", "D", "x");
+    jfieldID entY = JNIHelper::GetFieldSafe(entityClass, "field_6036", "D", "y");
+    jfieldID entZ = JNIHelper::GetFieldSafe(entityClass, "field_5969", "D", "z");
 
-    jmethodID getNameMethod = env->GetMethodID(entityClass, "method_5477", "()Lnet/minecraft/class_2561;");
+    jmethodID getNameMethod = JNIHelper::GetMethodSafe(entityClass, "method_5477", "()Lnet/minecraft/class_2561;", "getName");
     jmethodID getStringMethod = nullptr;
-    if (textClass) getStringMethod = env->GetMethodID(textClass, "method_10851", "()Ljava/lang/String;");
+    if (textClass) getStringMethod = JNIHelper::GetMethodSafe(textClass, "method_10851", "()Ljava/lang/String;", "getString");
 
     jmethodID getHealth = nullptr, getMaxHealth = nullptr;
     if (livingEntityClass) {
-        getHealth = env->GetMethodID(livingEntityClass, "method_6032", "()F");
-        getMaxHealth = env->GetMethodID(livingEntityClass, "method_6063", "()F");
+        getHealth = JNIHelper::GetMethodSafe(livingEntityClass, "method_6032", "()F", "getHealth");
+        getMaxHealth = JNIHelper::GetMethodSafe(livingEntityClass, "method_6063", "()F", "getMaxHealth");
     }
 
-    jfieldID camField = env->GetFieldID(rendererClass, "lunar$savedCamera", "Lnet/minecraft/class_4184;");
-    jfieldID modelViewField = env->GetFieldID(rendererClass, "lunar$savedModelView$v1_19_3", "Lorg/joml/Matrix4f;");
-    jfieldID projField = env->GetFieldID(rendererClass, "lunar$savedProjection$v1_19_3", "Lorg/joml/Matrix4f;");
-    jfieldID camPosField = env->GetFieldID(cameraClass, "field_18712", "Lnet/minecraft/class_243;");
+    jfieldID camField = JNIHelper::GetFieldSafe(rendererClass, "lunar$savedCamera", "Lnet/minecraft/class_4184;", "camera");
+    jfieldID modelViewField = JNIHelper::GetFieldSafe(rendererClass, "lunar$savedModelView$v1_19_3", "Lorg/joml/Matrix4f;", "modelView");
+    jfieldID projField = JNIHelper::GetFieldSafe(rendererClass, "lunar$savedProjection$v1_19_3", "Lorg/joml/Matrix4f;", "projection");
+    jfieldID camPosField = JNIHelper::GetFieldSafe(cameraClass, "field_18712", "Lnet/minecraft/class_243;", "pos");
 
     jfieldID vec3dFields[3];
     int vecIdx = 0;
