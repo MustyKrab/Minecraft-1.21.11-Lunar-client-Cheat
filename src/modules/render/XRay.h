@@ -14,6 +14,11 @@ private:
     mutable std::mutex blocksMutex;
     int scanRadius = 32;
     int tickCounter = 0;
+    
+    // Cache player position to only rescan when moved significantly
+    int lastScanX = -999999;
+    int lastScanY = -999999;
+    int lastScanZ = -999999;
 
 public:
     bool showDiamond = true;
