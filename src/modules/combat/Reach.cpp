@@ -53,7 +53,6 @@ void Reach::OnTick() {
 
     if (!instanceField || !playerField || !worldField || !interactionManagerField) return;
 
-    // Only process reach logic when the user clicks
     static bool wasClicked = false;
     bool isClicked = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
     if (!isClicked || wasClicked) {
@@ -77,9 +76,8 @@ void Reach::OnTick() {
         return;
     }
 
-    // Get player pos and rotation
     double px = env->GetDoubleField(player, entX);
-    double py = env->GetDoubleField(player, entY) + 1.62; // Eye height
+    double py = env->GetDoubleField(player, entY) + 1.62; 
     double pz = env->GetDoubleField(player, entZ);
     
     jfieldID yawField = JNIHelper::GetFieldSafe(entityClass, "field_5982", "F", "yaw");
@@ -87,7 +85,6 @@ void Reach::OnTick() {
     float yaw = env->GetFloatField(player, yawField);
     float pitch = env->GetFloatField(player, pitchField);
 
-    // Calculate look vector
     float f = pitch * 0.017453292F;
     float g = -yaw * 0.017453292F;
     float h = std::cos(g);
@@ -121,7 +118,7 @@ void Reach::OnTick() {
         }
 
         double tx = env->GetDoubleField(target, entX);
-        double ty = env->GetDoubleField(target, entY) + 1.0; // Center of entity
+        double ty = env->GetDoubleField(target, entY) + 1.0; 
         double tz = env->GetDoubleField(target, entZ);
 
         double diffX = tx - px;
@@ -129,10 +126,9 @@ void Reach::OnTick() {
         double diffZ = tz - pz;
         double dist = std::sqrt(diffX * diffX + diffY * diffY + diffZ * diffZ);
 
-        if (dist <= bestDist && dist > 3.0) { // Only apply reach if beyond normal vanilla reach (3.0)
-            // Check if looking at the entity (dot product)
+        if (dist <= bestDist && dist > 3.0) { 
             double dot = (diffX * lookX + diffY * lookY + diffZ * lookZ) / dist;
-            if (dot > 0.95) { // Roughly within crosshair
+            if (dot > 0.95) { 
                 bestDist = dist;
                 if (bestTarget) env->DeleteLocalRef(bestTarget);
                 bestTarget = env->NewLocalRef(target);
