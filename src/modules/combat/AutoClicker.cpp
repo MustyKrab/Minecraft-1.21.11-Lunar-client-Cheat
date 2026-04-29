@@ -42,9 +42,26 @@ int AutoClicker::GetRandomDelay() {
     
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_int_distribution<> distr(minDelay, maxDelay);
     
-    return distr(gen);
+    // FOX FIX: Use a normal distribution instead of uniform for more human-like clicking
+    // Mean is the average delay, stddev is the variance
+    double mean = (minDelay + maxDelay) / 2.0;
+    double stddev = (maxDelay - minDelay) / 4.0; 
+    std::normal_distribution<> distr(mean, stddev);
+    
+    int delay = (int)std::round(distr(gen));
+    
+    // Clamp the delay to our min/max bounds
+    if (delay < minDelay) delay = minDelay;
+    if (delay > maxDelay) delay = maxDelay;
+    
+    // Add occasional random spikes (drops in CPS) to simulate human fatigue
+    std::uniform_int_distribution<> spikeDistr(1, 100);
+    if (spikeDistr(gen) <= 3) { // 3% chance of a spike
+        delay += 50; // Add 50ms to simulate a missed click or hesitation
+    }
+    
+    return delay;
 }
 
 void AutoClicker::OnTick() {
