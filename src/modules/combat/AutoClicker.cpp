@@ -21,10 +21,24 @@ long long AutoClicker::GetTimeMs() {
 }
 
 int AutoClicker::GetRandomDelay() {
-    if (minCps >= maxCps) maxCps = minCps + 1.0f;
+    float localMin = minCps;
+    float localMax = maxCps;
     
-    int minDelay = (int)(1000.0f / maxCps);
-    int maxDelay = (int)(1000.0f / minCps);
+    if (localMin < 0.1f) localMin = 0.1f;
+    if (localMax < 0.1f) localMax = 0.1f;
+    
+    if (localMin >= localMax) {
+        localMax = localMin + 1.0f;
+    }
+    
+    int minDelay = (int)(1000.0f / localMax);
+    int maxDelay = (int)(1000.0f / localMin);
+    
+    if (minDelay > maxDelay) {
+        int temp = minDelay;
+        minDelay = maxDelay;
+        maxDelay = temp;
+    }
     
     std::random_device rd;
     std::mt19937 gen(rd());
