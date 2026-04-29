@@ -17,8 +17,8 @@ public class Velocity extends Module {
         if (mc.player == null) return false;
 
         if (packet instanceof EntityVelocityUpdateS2CPacket velocityPacket) {
-            // In 1.21, packet fields are often accessed via record accessors like id() instead of getId()
-            if (velocityPacket.id() == mc.player.getId()) {
+            // If getId() and id() both fail, Yarn mappings typically use getEntityId()
+            if (velocityPacket.getEntityId() == mc.player.getId()) {
                 return true;
             }
         }
