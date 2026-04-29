@@ -89,6 +89,11 @@ void XRay::OnTick() {
             if (y < -64 || y > 320) continue; 
             
             for (int z = pz - scanRadius; z <= pz + scanRadius; z++) {
+                // FOX FIX: Push local frame to prevent local reference table overflow (crash)
+                if (env->PushLocalFrame(16) < 0) {
+                    continue; // Out of memory
+                }
+
                 jobject posObj = env->NewObject(blockPosClass, blockPosInit, x, y, z);
                 jobject stateObj = env->CallObjectMethod(world, getBlockStateMethod, posObj);
                 
@@ -120,13 +125,12 @@ void XRay::OnTick() {
                             }
                             
                             env->ReleaseStringUTFChars(keyStr, rawKey);
-                            env->DeleteLocalRef(keyStr);
                         }
-                        env->DeleteLocalRef(blockObj);
                     }
-                    env->DeleteLocalRef(stateObj);
                 }
-                env->DeleteLocalRef(posObj);
+                
+                // FOX FIX: Pop local frame to clean up all local references created in this iteration
+                env->PopLocalFrame(nullptr);
             }
         }
     }
