@@ -143,7 +143,6 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
     Font modFont(&fontFamily, 14, FontStyleRegular, UnitPixel);
     SolidBrush textBrush(Color(255, 255, 255, 255));
 
-    // Calculate total height needed
     int totalHeight = 60; 
     for (Module* mod : ModuleManager::GetModules()) {
         totalHeight += 35;
@@ -156,16 +155,13 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
         }
     }
 
-    // Draw Main Background
     SolidBrush bg(Color(240, 25, 25, 25));
     g.FillRectangle(&bg, 100, 100, 400, totalHeight);
 
-    // Header
     SolidBrush header(Color(255, 15, 15, 15));
     g.FillRectangle(&header, 100, 100, 400, 40);
     g.DrawString(L"Vape V4 (MustyClient Edition)", -1, &titleFont, PointF(115, 110), nullptr, &textBrush);
 
-    // Helpers for drawing settings
     auto DrawCheckbox = [&](const wchar_t* label, bool& value, int cx, int cy) {
         SolidBrush cbBg(Color(255, 45, 45, 45));
         g.FillRectangle(&cbBg, cx, cy, 15, 15);
@@ -218,14 +214,12 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
     for (Module* mod : ModuleManager::GetModules()) {
         bool enabled = mod->IsEnabled();
         
-        // Module Button Background
         SolidBrush modBg(enabled ? Color(255, 46, 204, 113) : Color(255, 45, 45, 45));
         g.FillRectangle(&modBg, 120, y, 360, 30);
 
         std::wstring wName(mod->GetName().begin(), mod->GetName().end());
         g.DrawString(wName.c_str(), -1, &modFont, PointF(135, y + 6), nullptr, &textBrush);
         
-        // Draw dropdown arrow indicator
         g.DrawString(mod->IsExpanded() ? L"v" : L">", -1, &modFont, PointF(460, y + 6), nullptr, &textBrush);
 
         bool hovered = (mouseX >= 120 && mouseX <= 480 && mouseY >= y && mouseY <= y + 30);
@@ -238,7 +232,6 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
         
         y += 35;
 
-        // Draw Settings Dropdown
         if (mod->IsExpanded()) {
             if (mod->GetName() == "XRay") {
                 XRay* xray = (XRay*)mod;
@@ -376,6 +369,8 @@ void ESP::RenderLoop() {
     const char* mNames[] = { "m00","m01","m02","m03", "m10","m11","m12","m13", "m20","m21","m22","m23", "m30","m31","m32","m33" };
     jfieldID matrixFields[16];
     for (int i = 0; i < 16; i++) matrixFields[i] = env->GetFieldID(matrixClass, mNames[i], "F");
+
+    bool wasRightClicked = false;
 
     while (running) {
         GetWindowRect(mcWindow, &rect);
