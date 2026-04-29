@@ -51,7 +51,7 @@ void Reach::OnTick() {
         reachMappingsLoaded = true;
     }
 
-    if (!instanceField || !playerField || !worldField || !interactionManagerField) return;
+    if (!instanceField || !playerField || !worldField || !interactionManagerField || !playersField || !entX || !entY || !entZ || !listSize || !listGet || !getHealth || !attackMethod || !swingMethod || !mainHandField) return;
 
     static bool wasClicked = false;
     bool isClicked = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
@@ -83,6 +83,9 @@ void Reach::OnTick() {
         
         jfieldID yawField = JNIHelper::GetFieldSafe(entityClass, "field_5982", "F", "yaw");
         jfieldID pitchField = JNIHelper::GetFieldSafe(entityClass, "field_5965", "F", "pitch");
+        
+        if (!yawField || !pitchField) goto cleanup;
+
         float yaw = env->GetFloatField(player, yawField);
         float pitch = env->GetFloatField(player, pitchField);
 
@@ -97,7 +100,7 @@ void Reach::OnTick() {
         double lookZ = (double)(h * j);
 
         jobject playersList = env->GetObjectField(world, playersField);
-        if (!playersList) goto cleanup; // FIX: Null check before calling method
+        if (!playersList) goto cleanup;
 
         int size = env->CallIntMethod(playersList, listSize);
         jobject bestTarget = nullptr;
@@ -141,8 +144,10 @@ void Reach::OnTick() {
         if (bestTarget) {
             env->CallVoidMethod(interactionManager, attackMethod, player, bestTarget);
             jobject mainHand = env->GetStaticObjectField(handClass, mainHandField);
-            env->CallVoidMethod(player, swingMethod, mainHand);
-            env->DeleteLocalRef(mainHand);
+            if (mainHand) {
+                env->CallVoidMethod(player, swingMethod, mainHand);
+                env->DeleteLocalRef(mainHand);
+            }
             env->DeleteLocalRef(bestTarget);
         }
 

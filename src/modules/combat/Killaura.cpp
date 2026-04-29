@@ -53,7 +53,7 @@ void Killaura::OnTick() {
         mappingsLoaded = true;
     }
 
-    if (!instanceField || !playerField || !worldField || !interactionManagerField) return;
+    if (!instanceField || !playerField || !worldField || !interactionManagerField || !playersField || !entX || !entY || !entZ || !yawField || !pitchField || !listSize || !listGet || !getHealth || !attackMethod || !swingMethod || !getCooldownMethod || !mainHandField) return;
 
     jobject mc = env->GetStaticObjectField(mcClass, instanceField);
     if (!mc) return;
@@ -76,7 +76,7 @@ void Killaura::OnTick() {
         double pz = env->GetDoubleField(player, entZ);
 
         jobject playersList = env->GetObjectField(world, playersField);
-        if (!playersList) goto cleanup; // FIX: Null check before calling method
+        if (!playersList) goto cleanup;
 
         int size = env->CallIntMethod(playersList, listSize);
         jobject bestTarget = nullptr;
@@ -131,8 +131,10 @@ void Killaura::OnTick() {
                 env->CallVoidMethod(interactionManager, attackMethod, player, bestTarget);
                 
                 jobject mainHand = env->GetStaticObjectField(handClass, mainHandField);
-                env->CallVoidMethod(player, swingMethod, mainHand);
-                env->DeleteLocalRef(mainHand);
+                if (mainHand) {
+                    env->CallVoidMethod(player, swingMethod, mainHand);
+                    env->DeleteLocalRef(mainHand);
+                }
             }
 
             env->DeleteLocalRef(bestTarget);

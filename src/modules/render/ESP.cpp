@@ -425,6 +425,12 @@ void ESP::RenderLoop() {
     jfieldID matrixFields[16];
     for (int i = 0; i < 16; i++) matrixFields[i] = env->GetFieldID(matrixClass, mNames[i], "F");
 
+    if (!instanceField || !localPlayerField || !worldField || !rendererField || !playersField || !listSize || !listGet || !entX || !entY || !entZ || !camField || !modelViewField || !projField || !camPosField) {
+        std::cout << "[MustyClient] Failed to resolve field IDs in ESP." << std::endl;
+        JNIHelper::vm->DetachCurrentThread();
+        return;
+    }
+
     while (running) {
         MSG msg;
         while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {

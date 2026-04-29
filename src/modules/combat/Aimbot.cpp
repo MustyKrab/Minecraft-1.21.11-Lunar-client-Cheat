@@ -53,7 +53,7 @@ void Aimbot::OnTick() {
         aimbotMappingsLoaded = true;
     }
 
-    if (!instanceField || !playerField || !worldField || !optionsField) return;
+    if (!instanceField || !playerField || !worldField || !optionsField || !playersField || !entX || !entY || !entZ || !yawField || !pitchField || !listSize || !listGet || !getHealth) return;
 
     jobject mc = env->GetStaticObjectField(mcClass, instanceField);
     if (!mc) return;
@@ -84,7 +84,7 @@ void Aimbot::OnTick() {
         float currentPitch = env->GetFloatField(player, pitchField);
 
         jobject playersList = env->GetObjectField(world, playersField);
-        if (!playersList) goto cleanup; // FIX: Null check before calling method
+        if (!playersList) goto cleanup;
 
         int size = env->CallIntMethod(playersList, listSize);
         jobject bestTarget = nullptr;
@@ -151,24 +151,30 @@ void Aimbot::OnTick() {
             float newPitch = currentPitch + (pitchDiff * smoothSpeed);
 
             // Apply GCD (Greatest Common Divisor) fix to bypass server-side rotation checks
-            jobject sensObj = env->GetObjectField(options, sensitivityField);
-            jobject sensDoubleObj = env->CallObjectMethod(sensObj, getDoubleValue);
-            
-            jclass doubleClass = env->FindClass("java/lang/Double");
-            jmethodID doubleValueMethod = env->GetMethodID(doubleClass, "doubleValue", "()D");
-            double sens = env->CallDoubleMethod(sensDoubleObj, doubleValueMethod);
-            
-            float f = (float)(sens * 0.6 + 0.2);
-            float gcd = f * f * f * 1.2f;
+            if (sensitivityField && getDoubleValue) {
+                jobject sensObj = env->GetObjectField(options, sensitivityField);
+                if (sensObj) {
+                    jobject sensDoubleObj = env->CallObjectMethod(sensObj, getDoubleValue);
+                    if (sensDoubleObj) {
+                        jclass doubleClass = env->FindClass("java/lang/Double");
+                        jmethodID doubleValueMethod = env->GetMethodID(doubleClass, "doubleValue", "()D");
+                        double sens = env->CallDoubleMethod(sensDoubleObj, doubleValueMethod);
+                        
+                        float f = (float)(sens * 0.6 + 0.2);
+                        float gcd = f * f * f * 1.2f;
 
-            newYaw -= std::fmod(newYaw, gcd);
-            newPitch -= std::fmod(newPitch, gcd);
+                        newYaw -= std::fmod(newYaw, gcd);
+                        newPitch -= std::fmod(newPitch, gcd);
+                        
+                        env->DeleteLocalRef(sensDoubleObj);
+                    }
+                    env->DeleteLocalRef(sensObj);
+                }
+            }
 
             env->SetFloatField(player, yawField, newYaw);
             env->SetFloatField(player, pitchField, newPitch);
 
-            env->DeleteLocalRef(sensDoubleObj);
-            env->DeleteLocalRef(sensObj);
             env->DeleteLocalRef(bestTarget);
         }
 
