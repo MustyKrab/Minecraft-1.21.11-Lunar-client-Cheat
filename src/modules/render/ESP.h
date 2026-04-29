@@ -20,6 +20,8 @@ private:
     bool guiOpen = false;
     bool insertPressed = false;
     bool wasClicked = false;
+    bool wasRightClicked = false;
+    
     bool draggingSlider = false;
     bool draggingAimSlider = false;
     bool draggingEspRangeSlider = false;
@@ -33,7 +35,7 @@ private:
     
     void Draw3DBox(Gdiplus::Graphics& g, Vec3 feet, float w, float h, Vec3 camPos, float* mv, float* p, int sW, int sH, Gdiplus::Color color);
     void DrawProfessionalESP(Gdiplus::Graphics& g, float x, float y, float w, float h, float health, float maxHealth, int screenW, int screenH, const std::wstring& name, double distance);
-    void DrawGUI(Gdiplus::Graphics& g, int mouseX, int mouseY, bool clickAction);
+    void DrawGUI(Gdiplus::Graphics& g, int mouseX, int mouseY, bool clickAction, bool rightClickAction);
 
 public:
     ESP();

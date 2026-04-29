@@ -137,191 +137,139 @@ void ESP::DrawProfessionalESP(Graphics& g, float x, float y, float w, float h, f
     g.DrawString(textBuf, -1, &font, textPos, &format, &textBrush);
 }
 
-void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction) {
-    SolidBrush bg(Color(240, 25, 25, 25));
-    g.FillRectangle(&bg, 100, 100, 400, 500);
-
-    SolidBrush header(Color(255, 15, 15, 15));
-    g.FillRectangle(&header, 100, 100, 400, 40);
-
+void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool rightClickAction) {
     FontFamily fontFamily(L"Verdana");
     Font titleFont(&fontFamily, 16, FontStyleBold, UnitPixel);
     Font modFont(&fontFamily, 14, FontStyleRegular, UnitPixel);
     SolidBrush textBrush(Color(255, 255, 255, 255));
-    
+
+    // Calculate total height needed
+    int totalHeight = 60; 
+    for (Module* mod : ModuleManager::GetModules()) {
+        totalHeight += 35;
+        if (mod->IsExpanded()) {
+            if (mod->GetName() == "XRay") totalHeight += 9 * 25 + 10;
+            else if (mod->GetName() == "Killaura") totalHeight += 40 + 10;
+            else if (mod->GetName() == "Aimbot") totalHeight += 40 + 10;
+            else if (mod->GetName() == "ESP") totalHeight += 40 + 10;
+            else if (mod->GetName() == "Reach") totalHeight += 40 + 10;
+        }
+    }
+
+    // Draw Main Background
+    SolidBrush bg(Color(240, 25, 25, 25));
+    g.FillRectangle(&bg, 100, 100, 400, totalHeight);
+
+    // Header
+    SolidBrush header(Color(255, 15, 15, 15));
+    g.FillRectangle(&header, 100, 100, 400, 40);
     g.DrawString(L"Vape V4 (MustyClient Edition)", -1, &titleFont, PointF(115, 110), nullptr, &textBrush);
 
-    int y = 160;
+    // Helpers for drawing settings
+    auto DrawCheckbox = [&](const wchar_t* label, bool& value, int cx, int cy) {
+        SolidBrush cbBg(Color(255, 45, 45, 45));
+        g.FillRectangle(&cbBg, cx, cy, 15, 15);
+        if (value) {
+            SolidBrush cbFill(Color(255, 46, 204, 113));
+            g.FillRectangle(&cbFill, cx + 2, cy + 2, 11, 11);
+        }
+        g.DrawString(label, -1, &modFont, PointF(cx + 25, cy), nullptr, &textBrush);
+        
+        if (clickAction && mouseX >= cx && mouseX <= cx + 200 && mouseY >= cy && mouseY <= cy + 15) {
+            value = !value;
+        }
+        return 25;
+    };
+
+    auto DrawSlider = [&](const wchar_t* label, float& value, float min, float max, bool& draggingFlag, int cx, int cy) {
+        int sW = 340;
+        int sH = 10;
+        float percent = (value - min) / (max - min);
+        if (percent < 0) percent = 0; if (percent > 1) percent = 1;
+
+        wchar_t buf[64];
+        swprintf_s(buf, L"%s: %.1f", label, value);
+        g.DrawString(buf, -1, &modFont, PointF(cx, cy), nullptr, &textBrush);
+        cy += 18;
+
+        SolidBrush sBg(Color(255, 45, 45, 45));
+        g.FillRectangle(&sBg, cx, cy, sW, sH);
+
+        SolidBrush sFill(Color(255, 46, 204, 113));
+        g.FillRectangle(&sFill, cx, cy, (int)(sW * percent), sH);
+
+        if (clickAction && mouseX >= cx && mouseX <= cx + sW && mouseY >= cy && mouseY <= cy + sH) {
+            draggingFlag = true;
+        }
+
+        if (draggingFlag) {
+            if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
+                draggingFlag = false;
+            } else {
+                float newPct = (float)(mouseX - cx) / sW;
+                if (newPct < 0) newPct = 0; if (newPct > 1) newPct = 1;
+                value = min + (newPct * (max - min));
+            }
+        }
+        return 40;
+    };
+
+    int y = 150;
     for (Module* mod : ModuleManager::GetModules()) {
         bool enabled = mod->IsEnabled();
         
+        // Module Button Background
         SolidBrush modBg(enabled ? Color(255, 46, 204, 113) : Color(255, 45, 45, 45));
         g.FillRectangle(&modBg, 120, y, 360, 30);
 
         std::wstring wName(mod->GetName().begin(), mod->GetName().end());
         g.DrawString(wName.c_str(), -1, &modFont, PointF(135, y + 6), nullptr, &textBrush);
+        
+        // Draw dropdown arrow indicator
+        g.DrawString(mod->IsExpanded() ? L"v" : L">", -1, &modFont, PointF(460, y + 6), nullptr, &textBrush);
 
-        if (clickAction && mouseX >= 120 && mouseX <= 480 && mouseY >= y && mouseY <= y + 30) {
+        bool hovered = (mouseX >= 120 && mouseX <= 480 && mouseY >= y && mouseY <= y + 30);
+        if (clickAction && hovered) {
             mod->Toggle();
         }
+        if (rightClickAction && hovered) {
+            mod->SetExpanded(!mod->IsExpanded());
+        }
         
-        y += 40;
-    }
+        y += 35;
 
-    // Draw Killaura Reach Slider
-    Killaura* ka = (Killaura*)ModuleManager::GetModule("Killaura");
-    if (ka) {
-        int sliderX = 120;
-        int sliderY = y + 20;
-        int sliderW = 360;
-        int sliderH = 15;
-
-        float reach = ka->GetReach();
-        float percent = (reach - 3.0f) / 3.0f;
-        if (percent < 0.0f) percent = 0.0f;
-        if (percent > 1.0f) percent = 1.0f;
-
-        SolidBrush sliderBg(Color(255, 45, 45, 45));
-        g.FillRectangle(&sliderBg, sliderX, sliderY, sliderW, sliderH);
-
-        SolidBrush sliderFill(Color(255, 46, 204, 113));
-        g.FillRectangle(&sliderFill, sliderX, sliderY, (int)(sliderW * percent), sliderH);
-
-        wchar_t buf[64];
-        swprintf_s(buf, L"Killaura Reach: %.1f", reach);
-        g.DrawString(buf, -1, &modFont, PointF(sliderX + 5, sliderY - 18), nullptr, &textBrush);
-
-        if (clickAction && mouseX >= sliderX && mouseX <= sliderX + sliderW && mouseY >= sliderY && mouseY <= sliderY + sliderH) {
-            draggingSlider = true;
-        }
-
-        if (draggingSlider) {
-            if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
-                draggingSlider = false;
-            } else {
-                float newPercent = (float)(mouseX - sliderX) / sliderW;
-                if (newPercent < 0.0f) newPercent = 0.0f;
-                if (newPercent > 1.0f) newPercent = 1.0f;
-                ka->SetReach(3.0f + (newPercent * 3.0f));
+        // Draw Settings Dropdown
+        if (mod->IsExpanded()) {
+            if (mod->GetName() == "XRay") {
+                XRay* xray = (XRay*)mod;
+                y += DrawCheckbox(L"Diamond Ore", xray->showDiamond, 130, y);
+                y += DrawCheckbox(L"Gold Ore", xray->showGold, 130, y);
+                y += DrawCheckbox(L"Iron Ore", xray->showIron, 130, y);
+                y += DrawCheckbox(L"Emerald Ore", xray->showEmerald, 130, y);
+                y += DrawCheckbox(L"Ancient Debris", xray->showNetherite, 130, y);
+                y += DrawCheckbox(L"Chests & Barrels", xray->showChests, 130, y);
+                y += DrawCheckbox(L"Ender Chests", xray->showEnderChests, 130, y);
+                y += DrawCheckbox(L"Spawners", xray->showSpawners, 130, y);
+                y += DrawCheckbox(L"Hoppers", xray->showHoppers, 130, y);
+            } else if (mod->GetName() == "Killaura") {
+                Killaura* ka = (Killaura*)mod;
+                float r = ka->GetReach();
+                y += DrawSlider(L"Reach", r, 3.0f, 6.0f, draggingSlider, 130, y);
+                ka->SetReach(r);
+            } else if (mod->GetName() == "Aimbot") {
+                Aimbot* aim = (Aimbot*)mod;
+                float s = aim->GetSmoothSpeed();
+                y += DrawSlider(L"Smooth Speed", s, 0.01f, 0.50f, draggingAimSlider, 130, y);
+                aim->SetSmoothSpeed(s);
+            } else if (mod->GetName() == "ESP") {
+                y += DrawSlider(L"ESP Range", espRange, 10.0f, 200.0f, draggingEspRangeSlider, 130, y);
+            } else if (mod->GetName() == "Reach") {
+                Reach* rm = (Reach*)mod;
+                float r = rm->GetReach();
+                y += DrawSlider(L"Reach Distance", r, 3.0f, 6.0f, draggingReachSlider, 130, y);
+                rm->SetReach(r);
             }
-        }
-        y += 50;
-    }
-
-    // Draw Aimbot Smoothness Slider
-    Aimbot* aim = (Aimbot*)ModuleManager::GetModule("Aimbot");
-    if (aim) {
-        int sliderX = 120;
-        int sliderY = y + 20;
-        int sliderW = 360;
-        int sliderH = 15;
-
-        float smooth = aim->GetSmoothSpeed();
-        float percent = (smooth - 0.01f) / 0.49f; // 0.01 to 0.50
-        if (percent < 0.0f) percent = 0.0f;
-        if (percent > 1.0f) percent = 1.0f;
-
-        SolidBrush sliderBg(Color(255, 45, 45, 45));
-        g.FillRectangle(&sliderBg, sliderX, sliderY, sliderW, sliderH);
-
-        SolidBrush sliderFill(Color(255, 46, 204, 113));
-        g.FillRectangle(&sliderFill, sliderX, sliderY, (int)(sliderW * percent), sliderH);
-
-        wchar_t buf[64];
-        swprintf_s(buf, L"Aimbot Speed: %.2f", smooth);
-        g.DrawString(buf, -1, &modFont, PointF(sliderX + 5, sliderY - 18), nullptr, &textBrush);
-
-        if (clickAction && mouseX >= sliderX && mouseX <= sliderX + sliderW && mouseY >= sliderY && mouseY <= sliderY + sliderH) {
-            draggingAimSlider = true;
-        }
-
-        if (draggingAimSlider) {
-            if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
-                draggingAimSlider = false;
-            } else {
-                float newPercent = (float)(mouseX - sliderX) / sliderW;
-                if (newPercent < 0.0f) newPercent = 0.0f;
-                if (newPercent > 1.0f) newPercent = 1.0f;
-                aim->SetSmoothSpeed(0.01f + (newPercent * 0.49f));
-            }
-        }
-        y += 50;
-    }
-
-    // Draw ESP Range Slider
-    {
-        int sliderX = 120;
-        int sliderY = y + 20;
-        int sliderW = 360;
-        int sliderH = 15;
-
-        float percent = (espRange - 10.0f) / 190.0f; // 10 to 200
-        if (percent < 0.0f) percent = 0.0f;
-        if (percent > 1.0f) percent = 1.0f;
-
-        SolidBrush sliderBg(Color(255, 45, 45, 45));
-        g.FillRectangle(&sliderBg, sliderX, sliderY, sliderW, sliderH);
-
-        SolidBrush sliderFill(Color(255, 46, 204, 113));
-        g.FillRectangle(&sliderFill, sliderX, sliderY, (int)(sliderW * percent), sliderH);
-
-        wchar_t buf[64];
-        swprintf_s(buf, L"ESP Range: %.0f", espRange);
-        g.DrawString(buf, -1, &modFont, PointF(sliderX + 5, sliderY - 18), nullptr, &textBrush);
-
-        if (clickAction && mouseX >= sliderX && mouseX <= sliderX + sliderW && mouseY >= sliderY && mouseY <= sliderY + sliderH) {
-            draggingEspRangeSlider = true;
-        }
-
-        if (draggingEspRangeSlider) {
-            if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
-                draggingEspRangeSlider = false;
-            } else {
-                float newPercent = (float)(mouseX - sliderX) / sliderW;
-                if (newPercent < 0.0f) newPercent = 0.0f;
-                if (newPercent > 1.0f) newPercent = 1.0f;
-                espRange = 10.0f + (newPercent * 190.0f);
-            }
-        }
-        y += 50;
-    }
-
-    // Draw Reach Tool Slider
-    Reach* reachMod = (Reach*)ModuleManager::GetModule("Reach");
-    if (reachMod) {
-        int sliderX = 120;
-        int sliderY = y + 20;
-        int sliderW = 360;
-        int sliderH = 15;
-
-        float reach = reachMod->GetReach();
-        float percent = (reach - 3.0f) / 3.0f; // 3.0 to 6.0
-        if (percent < 0.0f) percent = 0.0f;
-        if (percent > 1.0f) percent = 1.0f;
-
-        SolidBrush sliderBg(Color(255, 45, 45, 45));
-        g.FillRectangle(&sliderBg, sliderX, sliderY, sliderW, sliderH);
-
-        SolidBrush sliderFill(Color(255, 46, 204, 113));
-        g.FillRectangle(&sliderFill, sliderX, sliderY, (int)(sliderW * percent), sliderH);
-
-        wchar_t buf[64];
-        swprintf_s(buf, L"Reach Tool: %.2f", reach);
-        g.DrawString(buf, -1, &modFont, PointF(sliderX + 5, sliderY - 18), nullptr, &textBrush);
-
-        if (clickAction && mouseX >= sliderX && mouseX <= sliderX + sliderW && mouseY >= sliderY && mouseY <= sliderY + sliderH) {
-            draggingReachSlider = true;
-        }
-
-        if (draggingReachSlider) {
-            if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
-                draggingReachSlider = false;
-            } else {
-                float newPercent = (float)(mouseX - sliderX) / sliderW;
-                if (newPercent < 0.0f) newPercent = 0.0f;
-                if (newPercent > 1.0f) newPercent = 1.0f;
-                reachMod->SetReach(3.0f + (newPercent * 3.0f));
-            }
+            y += 10;
         }
     }
 }
@@ -429,13 +377,6 @@ void ESP::RenderLoop() {
     jfieldID matrixFields[16];
     for (int i = 0; i < 16; i++) matrixFields[i] = env->GetFieldID(matrixClass, mNames[i], "F");
 
-    FontFamily fontFamily(L"Consolas");
-    Font font(&fontFamily, 12, FontStyleBold, UnitPixel);
-    StringFormat format;
-    format.SetAlignment(StringAlignmentCenter);
-    SolidBrush shadowBrush(Color(255, 0, 0, 0));
-    SolidBrush textBrush(Color(255, 255, 255, 255));
-
     while (running) {
         GetWindowRect(mcWindow, &rect);
         int width = rect.right - rect.left;
@@ -461,9 +402,14 @@ void ESP::RenderLoop() {
         POINT cursorPos;
         GetCursorPos(&cursorPos);
         ScreenToClient(overlayWindow, &cursorPos);
+        
         bool isClicked = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
         bool clickAction = isClicked && !wasClicked;
         wasClicked = isClicked;
+
+        bool isRightClicked = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+        bool rightClickAction = isRightClicked && !wasRightClicked;
+        wasRightClicked = isRightClicked;
 
         HDC hdc = GetDC(overlayWindow);
         HDC memDC = CreateCompatibleDC(hdc);
@@ -576,7 +522,7 @@ void ESP::RenderLoop() {
                             double distance = std::sqrt(std::pow(camPos.x - blockPos.x, 2) + std::pow(camPos.y - blockPos.y, 2) + std::pow(camPos.z - blockPos.z, 2));
                             
                             if (distance <= espRange) {
-                                Draw3DBox(g, { (double)block.x, (double)block.y, (double)block.z }, 1.0f, 1.0f, camPos, mv, p, width, height, Color(255, 0, 255, 255)); // Cyan for diamonds
+                                Draw3DBox(g, { (double)block.x, (double)block.y, (double)block.z }, 1.0f, 1.0f, camPos, mv, p, width, height, Color(255, block.r, block.g, block.b));
                             }
                         }
                     }
@@ -593,7 +539,7 @@ void ESP::RenderLoop() {
         }
 
         if (guiOpen) {
-            DrawGUI(g, cursorPos.x, cursorPos.y, clickAction);
+            DrawGUI(g, cursorPos.x, cursorPos.y, clickAction, rightClickAction);
         }
 
         BitBlt(hdc, 0, 0, width, height, memDC, 0, 0, SRCCOPY);

@@ -65,15 +65,14 @@ void XRay::OnTick() {
     int py = (int)env->GetDoubleField(player, entY);
     int pz = (int)env->GetDoubleField(player, entZ);
 
-    std::vector<BlockPos> newFoundBlocks;
+    std::vector<XRayBlock> newFoundBlocks;
 
     jmethodID blockPosInit = env->GetMethodID(blockPosClass, "<init>", "(III)V");
 
     // Scan a 32x32x32 area around the player
     for (int x = px - scanRadius; x <= px + scanRadius; x++) {
         for (int y = py - scanRadius; y <= py + scanRadius; y++) {
-            // Don't scan above ground much or below bedrock
-            if (y < -64 || y > 100) continue; 
+            if (y < -64 || y > 320) continue; 
             
             for (int z = pz - scanRadius; z <= pz + scanRadius; z++) {
                 jobject posObj = env->NewObject(blockPosClass, blockPosInit, x, y, z);
@@ -86,9 +85,24 @@ void XRay::OnTick() {
                         if (keyStr) {
                             const char* rawKey = env->GetStringUTFChars(keyStr, nullptr);
                             
-                            // Check for Diamond Ore or Deepslate Diamond Ore
-                            if (strstr(rawKey, "diamond_ore") != nullptr) {
-                                newFoundBlocks.push_back({x, y, z});
+                            if (strstr(rawKey, "diamond_ore")) {
+                                if (showDiamond) newFoundBlocks.push_back({x, y, z, 0, 255, 255}); // Cyan
+                            } else if (strstr(rawKey, "gold_ore")) {
+                                if (showGold) newFoundBlocks.push_back({x, y, z, 255, 215, 0}); // Gold
+                            } else if (strstr(rawKey, "iron_ore")) {
+                                if (showIron) newFoundBlocks.push_back({x, y, z, 200, 200, 200}); // Silver
+                            } else if (strstr(rawKey, "emerald_ore")) {
+                                if (showEmerald) newFoundBlocks.push_back({x, y, z, 0, 255, 0}); // Green
+                            } else if (strstr(rawKey, "ancient_debris")) {
+                                if (showNetherite) newFoundBlocks.push_back({x, y, z, 100, 70, 70}); // Dark Brown
+                            } else if (strstr(rawKey, "ender_chest")) {
+                                if (showEnderChests) newFoundBlocks.push_back({x, y, z, 128, 0, 128}); // Purple
+                            } else if (strstr(rawKey, "chest") || strstr(rawKey, "barrel")) {
+                                if (showChests) newFoundBlocks.push_back({x, y, z, 255, 165, 0}); // Orange
+                            } else if (strstr(rawKey, "spawner")) {
+                                if (showSpawners) newFoundBlocks.push_back({x, y, z, 255, 0, 0}); // Red
+                            } else if (strstr(rawKey, "hopper")) {
+                                if (showHoppers) newFoundBlocks.push_back({x, y, z, 100, 100, 100}); // Gray
                             }
                             
                             env->ReleaseStringUTFChars(keyStr, rawKey);
