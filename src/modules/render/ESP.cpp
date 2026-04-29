@@ -280,7 +280,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
                     bool aimAssist = ka->IsAimAssistMode();
                     bool tpAura = ka->IsTeleportAuraEnabled();
                     
-                    y += DrawSlider(L"Reach", r, 3.0f, 10.0f, draggingSlider, 130, y);
+                    y += DrawSlider(L"Reach", r, 3.0f, 6.0f, draggingSlider, 130, y);
                     y += DrawSlider(L"Aimbot Intensity", intensity, 0.01f, 1.0f, draggingAimSlider, 130, y);
                     y += DrawCheckbox(L"Aim Assist Mode", aimAssist, 130, y);
                     y += DrawCheckbox(L"Teleport Aura", tpAura, 130, y);
@@ -318,7 +318,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
                 Reach* rm = (Reach*)mod;
                 if (rm) {
                     float r = rm->GetReach();
-                    y += DrawSlider(L"Reach Distance", r, 3.0f, 10.0f, draggingReachSlider, 130, y);
+                    y += DrawSlider(L"Reach Distance", r, 3.0f, 6.0f, draggingReachSlider, 130, y);
                     rm->SetReach(r);
                 }
             }
