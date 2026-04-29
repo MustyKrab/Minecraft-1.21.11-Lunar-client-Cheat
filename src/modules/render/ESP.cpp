@@ -86,8 +86,8 @@ void ESP::Draw3DBox(Graphics& g, Vec3 feet, float w, float h, Vec3 camPos, float
         valid[i] = WorldToScreen(corners[i], camPos, mv, p, s[i], sW, sH);
     }
 
-    Pen blackPen(Color(255, 0, 0, 0), 3.0f);
-    Pen pen(color, 1.5f);
+    Pen blackPen(Color(255, 0, 0, 0), 4.0f); // Thicker outline
+    Pen pen(color, 2.0f); // Thicker line
     
     auto drawLineIfValid = [&](int i, int j) {
         if (valid[i] && valid[j]) {
@@ -111,9 +111,9 @@ void ESP::DrawProfessionalESP(Graphics& g, float x, float y, float w, float h, f
     int gr = (int)(255.0f * hpPercent);
 
     // Thicker Health Bar with Black Outline
-    float barX = x - 7.0f;
+    float barX = x - 8.0f;
     float barY = y - 1.0f;
-    float barW = 5.0f;
+    float barW = 6.0f;
     float barH = h + 2.0f;
 
     SolidBrush bgBarBrush(Color(255, 0, 0, 0));
@@ -125,8 +125,8 @@ void ESP::DrawProfessionalESP(Graphics& g, float x, float y, float w, float h, f
     g.FillRectangle(&hpBrush, barX + 1.0f, hpFillY, barW - 2.0f, hpFillH);
 
     if (drawTracer) {
-        Pen blackTracerPen(Color(255, 0, 0, 0), 3.0f);
-        Pen tracerPen(Color(150, 255, 255, 255), 1.5f);
+        Pen blackTracerPen(Color(255, 0, 0, 0), 4.0f); // Thicker outline
+        Pen tracerPen(Color(150, 255, 255, 255), 2.0f); // Thicker line
         g.DrawLine(&blackTracerPen, (REAL)(screenW / 2), (REAL)screenH, x + w / 2, y + h);
         g.DrawLine(&tracerPen, (REAL)(screenW / 2), (REAL)screenH, x + w / 2, y + h);
     }
@@ -231,7 +231,9 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
         SolidBrush modBg(enabled ? Color(255, 46, 204, 113) : Color(255, 45, 45, 45));
         g.FillRectangle(&modBg, 120, y, 360, 30);
 
-        std::wstring wName(mod->GetName().begin(), mod->GetName().end());
+        // Fix for 0xC0000409 crash: Store string locally before getting iterators
+        std::string nameStr = mod->GetName();
+        std::wstring wName(nameStr.begin(), nameStr.end());
         g.DrawString(wName.c_str(), -1, &modFont, PointF(135, y + 6), nullptr, &textBrush);
         
         g.DrawString(mod->IsExpanded() ? L"v" : L">", -1, &modFont, PointF(460, y + 6), nullptr, &textBrush);
