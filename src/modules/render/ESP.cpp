@@ -1,6 +1,7 @@
 #include "ESP.h"
 #include "../../core/JNIHelper.h"
 #include "../ModuleManager.h"
+#include "../combat/Killaura.h"
 #include <iostream>
 #include <fstream>
 #include <cmath>
@@ -61,49 +62,58 @@ bool ESP::WorldToScreen(Vec3 pos, Vec3 camPos, float* mv, float* p, Vec2& screen
     return true;
 }
 
-void ESP::Draw3DBox(Graphics& g, Vec3 feet, float w, float h, Vec3 camPos, float* mv, float* p, int sW, int sH, Color color) {
-    float hw = w / 2.0f;
-    
-    // 8 Corners of the bounding box
-    Vec3 corners[8] = {
-        {feet.x - hw, feet.y, feet.z - hw},
-        {feet.x + hw, feet.y, feet.z - hw},
-        {feet.x + hw, feet.y, feet.z + hw},
-        {feet.x - hw, feet.y, feet.z + hw},
-        {feet.x - hw, feet.y + h, feet.z - hw},
-        {feet.x + hw, feet.y + h, feet.z - hw},
-        {feet.x + hw, feet.y + h, feet.z + hw},
-        {feet.x - hw, feet.y + h, feet.z + hw}
-    };
+void ESP::DrawProfessionalESP(Graphics& g, float x, float y, float w, float h, float health, float maxHealth, int screenW, int screenH, const std::wstring& name, double distance) {
+    SolidBrush fillBrush(Color(40, 0, 0, 0));
+    g.FillRectangle(&fillBrush, x, y, w, h);
 
-    Vec2 s[8];
-    bool valid[8];
-    for (int i = 0; i < 8; i++) {
-        valid[i] = WorldToScreen(corners[i], camPos, mv, p, s[i], sW, sH);
-    }
+    Pen outlinePen(Color(255, 255, 255, 255), 1.5f);
+    g.DrawRectangle(&outlinePen, x, y, w, h);
 
-    Pen pen(color, 1.5f);
-    
-    auto drawLineIfValid = [&](int i, int j) {
-        if (valid[i] && valid[j]) {
-            g.DrawLine(&pen, s[i].x, s[i].y, s[j].x, s[j].y);
-        }
-    };
+    Pen tracerPen(Color(150, 255, 255, 255), 1.0f);
+    g.DrawLine(&tracerPen, (REAL)(screenW / 2), (REAL)screenH, x + w / 2, y + h);
 
-    // Bottom rectangle
-    drawLineIfValid(0, 1); drawLineIfValid(1, 2); drawLineIfValid(2, 3); drawLineIfValid(3, 0);
-    // Top rectangle
-    drawLineIfValid(4, 5); drawLineIfValid(5, 6); drawLineIfValid(6, 7); drawLineIfValid(7, 4);
-    // Pillars
-    drawLineIfValid(0, 4); drawLineIfValid(1, 5); drawLineIfValid(2, 6); drawLineIfValid(3, 7);
+    if (maxHealth <= 0) maxHealth = 20.0f;
+    float hpPercent = health / maxHealth;
+    if (hpPercent > 1.0f) hpPercent = 1.0f;
+    if (hpPercent < 0.0f) hpPercent = 0.0f;
+
+    int r = (int)(255.0f * (1.0f - hpPercent));
+    int gr = (int)(255.0f * hpPercent);
+
+    float barX = x - 6.0f;
+    float barY = y;
+    float barW = 3.0f;
+    float barH = h;
+
+    SolidBrush bgBarBrush(Color(255, 0, 0, 0));
+    g.FillRectangle(&bgBarBrush, barX, barY, barW, barH);
+
+    SolidBrush hpBrush(Color(255, r, gr, 0));
+    float hpFillH = barH * hpPercent;
+    float hpFillY = barY + (barH - hpFillH);
+    g.FillRectangle(&hpBrush, barX + 1, hpFillY + 1, barW - 2, hpFillH - 2);
+
+    FontFamily fontFamily(L"Consolas");
+    Font font(&fontFamily, 12, FontStyleBold, UnitPixel);
+    StringFormat format;
+    format.SetAlignment(StringAlignmentCenter);
+
+    SolidBrush shadowBrush(Color(255, 0, 0, 0));
+    SolidBrush textBrush(Color(255, 255, 255, 255));
+
+    wchar_t textBuf[256];
+    swprintf_s(textBuf, L"%s [%.1fm]", name.c_str(), distance);
+
+    PointF textPos(x + w / 2.0f, y - 16.0f);
+
+    g.DrawString(textBuf, -1, &font, PointF(textPos.X + 1, textPos.Y + 1), &format, &shadowBrush);
+    g.DrawString(textBuf, -1, &font, textPos, &format, &textBrush);
 }
 
 void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction) {
-    // Main Window Background
     SolidBrush bg(Color(240, 25, 25, 25));
     g.FillRectangle(&bg, 100, 100, 400, 350);
 
-    // Header
     SolidBrush header(Color(255, 15, 15, 15));
     g.FillRectangle(&header, 100, 100, 400, 40);
 
@@ -114,24 +124,60 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction) {
     
     g.DrawString(L"Vape V4 (MustyClient Edition)", -1, &titleFont, PointF(115, 110), nullptr, &textBrush);
 
-    // Draw Modules
     int y = 160;
     for (Module* mod : ModuleManager::GetModules()) {
         bool enabled = mod->IsEnabled();
         
-        // Module Button Background
         SolidBrush modBg(enabled ? Color(255, 46, 204, 113) : Color(255, 45, 45, 45));
         g.FillRectangle(&modBg, 120, y, 360, 30);
 
         std::wstring wName(mod->GetName().begin(), mod->GetName().end());
         g.DrawString(wName.c_str(), -1, &modFont, PointF(135, y + 6), nullptr, &textBrush);
 
-        // Handle Click
         if (clickAction && mouseX >= 120 && mouseX <= 480 && mouseY >= y && mouseY <= y + 30) {
             mod->Toggle();
         }
         
         y += 40;
+    }
+
+    // Draw Killaura Slider
+    Killaura* ka = (Killaura*)ModuleManager::GetModule("Killaura");
+    if (ka) {
+        int sliderX = 120;
+        int sliderY = y + 20;
+        int sliderW = 360;
+        int sliderH = 15;
+
+        float reach = ka->GetReach();
+        float percent = (reach - 3.0f) / 3.0f;
+        if (percent < 0.0f) percent = 0.0f;
+        if (percent > 1.0f) percent = 1.0f;
+
+        SolidBrush sliderBg(Color(255, 45, 45, 45));
+        g.FillRectangle(&sliderBg, sliderX, sliderY, sliderW, sliderH);
+
+        SolidBrush sliderFill(Color(255, 46, 204, 113));
+        g.FillRectangle(&sliderFill, sliderX, sliderY, (int)(sliderW * percent), sliderH);
+
+        wchar_t buf[64];
+        swprintf_s(buf, L"Killaura Reach: %.1f", reach);
+        g.DrawString(buf, -1, &modFont, PointF(sliderX + 5, sliderY - 18), nullptr, &textBrush);
+
+        if (clickAction && mouseX >= sliderX && mouseX <= sliderX + sliderW && mouseY >= sliderY && mouseY <= sliderY + sliderH) {
+            draggingSlider = true;
+        }
+
+        if (draggingSlider) {
+            if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
+                draggingSlider = false;
+            } else {
+                float newPercent = (float)(mouseX - sliderX) / sliderW;
+                if (newPercent < 0.0f) newPercent = 0.0f;
+                if (newPercent > 1.0f) newPercent = 1.0f;
+                ka->SetReach(3.0f + (newPercent * 3.0f));
+            }
+        }
     }
 }
 
@@ -238,20 +284,12 @@ void ESP::RenderLoop() {
     jfieldID matrixFields[16];
     for (int i = 0; i < 16; i++) matrixFields[i] = env->GetFieldID(matrixClass, mNames[i], "F");
 
-    FontFamily fontFamily(L"Consolas");
-    Font font(&fontFamily, 12, FontStyleBold, UnitPixel);
-    StringFormat format;
-    format.SetAlignment(StringAlignmentCenter);
-    SolidBrush shadowBrush(Color(255, 0, 0, 0));
-    SolidBrush textBrush(Color(255, 255, 255, 255));
-
     while (running) {
         GetWindowRect(mcWindow, &rect);
         int width = rect.right - rect.left;
         int height = rect.bottom - rect.top;
         MoveWindow(overlayWindow, rect.left, rect.top, width, height, true);
 
-        // GUI Toggle Logic (Left Bracket '[')
         if (GetAsyncKeyState(VK_OEM_4) & 0x8000) {
             if (!insertPressed) {
                 guiOpen = !guiOpen;
@@ -268,7 +306,6 @@ void ESP::RenderLoop() {
             insertPressed = false;
         }
 
-        // Mouse Logic
         POINT cursorPos;
         GetCursorPos(&cursorPos);
         ScreenToClient(overlayWindow, &cursorPos);
@@ -333,15 +370,23 @@ void ESP::RenderLoop() {
                             env->GetDoubleField(player, entZ)
                         };
 
-                        // 1. Draw 3D Rectangular Prism (Vape Style)
-                        Draw3DBox(g, feetPos, 0.6f, 1.8f, camPos, mv, p, width, height, Color(255, 46, 204, 113));
+                        Vec3 headPos = feetPos;
+                        headPos.y += 2.0;
 
-                        // 2. Nametag & Health
-                        Vec3 headPos = { feetPos.x, feetPos.y + 2.0, feetPos.z };
-                        Vec2 screenHead;
-                        if (WorldToScreen(headPos, camPos, mv, p, screenHead, width, height)) {
-                            float hp = 20.0f;
-                            if (getHealth) hp = env->CallFloatMethod(player, getHealth);
+                        Vec2 screenFeet, screenHead;
+                        if (WorldToScreen(feetPos, camPos, mv, p, screenFeet, width, height) &&
+                            WorldToScreen(headPos, camPos, mv, p, screenHead, width, height)) {
+
+                            float boxHeight = screenFeet.y - screenHead.y;
+                            float boxWidth = boxHeight / 2.0f;
+                            float boxX = screenHead.x - boxWidth / 2.0f;
+                            float boxY = screenHead.y;
+
+                            float hp = 20.0f, maxHp = 20.0f;
+                            if (getHealth && getMaxHealth) {
+                                hp = env->CallFloatMethod(player, getHealth);
+                                maxHp = env->CallFloatMethod(player, getMaxHealth);
+                            }
 
                             double distance = sqrt(pow(camPos.x - feetPos.x, 2) + pow(camPos.y - feetPos.y, 2) + pow(camPos.z - feetPos.z, 2));
 
@@ -361,12 +406,7 @@ void ESP::RenderLoop() {
                                 }
                             }
 
-                            wchar_t textBuf[256];
-                            swprintf_s(textBuf, L"%s [%.1fm] \u2764%.1f", playerName.c_str(), distance, hp);
-                            
-                            PointF textPos(screenHead.x, screenHead.y - 16.0f);
-                            g.DrawString(textBuf, -1, &font, PointF(textPos.X + 1, textPos.Y + 1), &format, &shadowBrush);
-                            g.DrawString(textBuf, -1, &font, textPos, &format, &textBrush);
+                            DrawProfessionalESP(g, boxX, boxY, boxWidth, boxHeight, hp, maxHp, width, height, playerName, distance);
                         }
                         env->DeleteLocalRef(player);
                     }
@@ -382,7 +422,6 @@ void ESP::RenderLoop() {
             env->DeleteLocalRef(mcInstance);
         }
 
-        // Draw GUI on top of everything if open
         if (guiOpen) {
             DrawGUI(g, cursorPos.x, cursorPos.y, clickAction);
         }
@@ -394,7 +433,7 @@ void ESP::RenderLoop() {
         DeleteDC(memDC);
         ReleaseDC(overlayWindow, hdc);
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(8));
+        std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
 
     DestroyWindow(overlayWindow);

@@ -60,3 +60,45 @@ jclass JNIHelper::FindClassBySignature(const char* targetSig) {
     jvmti->Deallocate((unsigned char*)classes);
     return foundClass;
 }
+
+jclass JNIHelper::FindClassSafe(const char* sig, const char* fallbackName) {
+    jclass cls = FindClassBySignature(sig);
+    if (!cls && env) {
+        cls = env->FindClass(fallbackName);
+        if (env->ExceptionCheck()) env->ExceptionClear();
+    }
+    return cls;
+}
+
+jfieldID JNIHelper::GetFieldSafe(jclass cls, const char* name, const char* sig, const char* fallbackName) {
+    if (!cls || !env) return nullptr;
+    jfieldID fid = env->GetFieldID(cls, name, sig);
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        fid = env->GetFieldID(cls, fallbackName, sig);
+        if (env->ExceptionCheck()) env->ExceptionClear();
+    }
+    return fid;
+}
+
+jfieldID JNIHelper::GetStaticFieldSafe(jclass cls, const char* name, const char* sig, const char* fallbackName) {
+    if (!cls || !env) return nullptr;
+    jfieldID fid = env->GetStaticFieldID(cls, name, sig);
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        fid = env->GetStaticFieldID(cls, fallbackName, sig);
+        if (env->ExceptionCheck()) env->ExceptionClear();
+    }
+    return fid;
+}
+
+jmethodID JNIHelper::GetMethodSafe(jclass cls, const char* name, const char* sig, const char* fallbackName) {
+    if (!cls || !env) return nullptr;
+    jmethodID mid = env->GetMethodID(cls, name, sig);
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        mid = env->GetMethodID(cls, fallbackName, sig);
+        if (env->ExceptionCheck()) env->ExceptionClear();
+    }
+    return mid;
+}
