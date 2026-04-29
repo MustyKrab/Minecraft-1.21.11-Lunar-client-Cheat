@@ -6,6 +6,7 @@ private:
     float reach;
     float aimbotIntensity;
     bool aimAssistMode;
+    bool teleportAura;
 
 public:
     Killaura();
@@ -19,4 +20,7 @@ public:
 
     bool IsAimAssistMode() const { return aimAssistMode; }
     void SetAimAssistMode(bool m) { aimAssistMode = m; }
+
+    bool IsTeleportAuraEnabled() const { return teleportAura; }
+    void SetTeleportAura(bool t) { teleportAura = t; }
 };
