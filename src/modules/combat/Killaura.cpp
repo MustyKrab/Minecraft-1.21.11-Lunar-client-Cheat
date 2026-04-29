@@ -2,6 +2,7 @@
 #include "../../core/JNIHelper.h"
 #include <iostream>
 #include <cmath>
+#include <random>
 
 static bool mappingsLoaded = false;
 static jclass mcClass, worldClass, entityClass, livingClass, playerClass, interactionManagerClass, handClass, listClass;
@@ -144,9 +145,14 @@ void Killaura::OnTick() {
 
             float pitchDiff = targetPitch - currentPitch;
 
-            // Apply smoothing based on intensity
-            float smoothedYaw = currentYaw + (yawDiff * aimbotIntensity);
-            float smoothedPitch = currentPitch + (pitchDiff * aimbotIntensity);
+            // FOX FIX: Add randomization to the smoothing to bypass heuristic checks
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            std::uniform_real_distribution<float> randomSmooth(aimbotIntensity * 0.8f, aimbotIntensity * 1.2f);
+            float actualIntensity = randomSmooth(gen);
+
+            float smoothedYaw = currentYaw + (yawDiff * actualIntensity);
+            float smoothedPitch = currentPitch + (pitchDiff * actualIntensity);
 
             env->SetFloatField(player, yawField, smoothedYaw);
             env->SetFloatField(player, pitchField, smoothedPitch);
