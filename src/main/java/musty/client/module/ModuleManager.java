@@ -3,8 +3,10 @@ package musty.client.module;
 import musty.client.module.modules.combat.Killaura;
 import musty.client.module.modules.combat.Velocity;
 import musty.client.module.modules.player.NoFall;
+import musty.client.module.modules.render.ESP;
 import musty.client.module.modules.render.GlowESP;
 import musty.client.module.modules.render.HealthBars;
+import musty.client.module.modules.render.SkeletonESP;
 import musty.client.module.modules.render.Tracers;
 import java.util.ArrayList;
 import java.util.List;
@@ -15,7 +17,9 @@ public class ModuleManager {
     private final List<Module> modules = new ArrayList<>();
 
     public void init() {
+        modules.add(new ESP());
         modules.add(new GlowESP());
+        modules.add(new SkeletonESP());
         modules.add(new Tracers());
         modules.add(new HealthBars());
         modules.add(new Velocity());
