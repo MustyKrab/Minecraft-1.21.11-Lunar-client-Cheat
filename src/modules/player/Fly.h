@@ -1,4 +1,9 @@
-I3ByYWdtYSBvbmNlCiNpbmNsdWRlICIuLi9Nb2R1bGUuaCIKCmNsYXNzIEZs
-eSA6IHB1YmxpYyBNb2R1bGUgewpwdWJsaWM6CiAgICBGbHkoKTsKICAgIHZv
-aWQgT25UaWNrKCkgb3ZlcnJpZGU7CiAgICB2b2lkIE9uRGlzYWJsZSgpIG92
-ZXJyaWRlOwp9Owo=
+#pragma once
+#include "../Module.h"
+
+class Fly : public Module {
+public:
+    Fly();
+    void OnTick() override;
+    void OnDisable() override;
+};
