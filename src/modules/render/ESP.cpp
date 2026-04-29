@@ -1,591 +1,594 @@
-#include "ESP.h"
-#include "../../core/JNIHelper.h"
-#include "../ModuleManager.h"
-#include "../combat/Killaura.h"
-#include "../combat/Aimbot.h"
-#include "../combat/Reach.h"
-#include "../combat/AutoClicker.h"
-#include "../render/XRay.h"
-#include <iostream>
-#include <fstream>
-#include <cmath>
-#include <string>
-
-#pragma comment(lib, "gdiplus.lib")
-using namespace Gdiplus;
-
-ESP::ESP() : Module("ESP") {}
-
-ESP::~ESP() {
-    if (running) {
-        running = false;
-        if (renderThread.joinable()) {
-            if (std::this_thread::get_id() == renderThread.get_id()) {
-                renderThread.detach();
-            } else {
-                renderThread.join();
-            }
-        }
-    }
-}
-
-void ESP::OnEnable() {
-    running = true;
-    renderThread = std::thread(&ESP::RenderLoop, this);
-    std::cout << "[MustyClient] ESP Enabled." << std::endl;
-}
-
-void ESP::OnDisable() {
-    running = false;
-    if (renderThread.joinable()) {
-        // Prevent std::system_error by not joining the thread from itself
-        if (std::this_thread::get_id() == renderThread.get_id()) {
-            renderThread.detach();
-        } else {
-            renderThread.join();
-        }
-    }
-    std::cout << "[MustyClient] ESP Disabled." << std::endl;
-}
-
-LRESULT CALLBACK ESP::OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    if (msg == WM_ERASEBKGND) return 1;
-    return DefWindowProc(hwnd, msg, wParam, lParam);
-}
-
-bool ESP::WorldToScreen(Vec3 pos, Vec3 camPos, float* mv, float* p, Vec2& screen, int width, int height) {
-    float x = (float)(pos.x - camPos.x);
-    float y = (float)(pos.y - camPos.y);
-    float z = (float)(pos.z - camPos.z);
-
-    float viewX = mv[0] * x + mv[4] * y + mv[8] * z + mv[12];
-    float viewY = mv[1] * x + mv[5] * y + mv[9] * z + mv[13];
-    float viewZ = mv[2] * x + mv[6] * y + mv[10] * z + mv[14];
-    float viewW = mv[3] * x + mv[7] * y + mv[11] * z + mv[15];
-
-    float clipX = p[0] * viewX + p[4] * viewY + p[8] * viewZ + p[12] * viewW;
-    float clipY = p[1] * viewX + p[5] * viewY + p[9] * viewZ + p[13] * viewW;
-    float clipW = p[3] * viewX + p[7] * viewY + p[11] * viewZ + p[15] * viewW;
-
-    if (clipW < 0.1f) return false;
-
-    float ndcX = clipX / clipW;
-    float ndcY = clipY / clipW;
-
-    screen.x = (width / 2.0f) * (ndcX + 1.0f);
-    screen.y = (height / 2.0f) * (1.0f - ndcY);
-    return true;
-}
-
-void ESP::Draw3DBox(Graphics& g, Vec3 feet, float w, float h, Vec3 camPos, float* mv, float* p, int sW, int sH, Color color) {
-    float hw = w / 2.0f;
-    
-    Vec3 corners[8] = {
-        {feet.x - hw, feet.y, feet.z - hw},
-        {feet.x + hw, feet.y, feet.z - hw},
-        {feet.x + hw, feet.y, feet.z + hw},
-        {feet.x - hw, feet.y, feet.z + hw},
-        {feet.x - hw, feet.y + h, feet.z - hw},
-        {feet.x + hw, feet.y + h, feet.z - hw},
-        {feet.x + hw, feet.y + h, feet.z + hw},
-        {feet.x - hw, feet.y + h, feet.z + hw}
-    };
-
-    Vec2 s[8];
-    bool valid[8];
-    for (int i = 0; i < 8; i++) {
-        valid[i] = WorldToScreen(corners[i], camPos, mv, p, s[i], sW, sH);
-    }
-
-    Pen blackPen(Color(255, 0, 0, 0), 4.0f); // Thicker outline
-    Pen pen(color, 2.0f); // Thicker line
-    
-    auto drawLineIfValid = [&](int i, int j) {
-        if (valid[i] && valid[j]) {
-            g.DrawLine(&blackPen, s[i].x, s[i].y, s[j].x, s[j].y);
-            g.DrawLine(&pen, s[i].x, s[i].y, s[j].x, s[j].y);
-        }
-    };
-
-    drawLineIfValid(0, 1); drawLineIfValid(1, 2); drawLineIfValid(2, 3); drawLineIfValid(3, 0);
-    drawLineIfValid(4, 5); drawLineIfValid(5, 6); drawLineIfValid(6, 7); drawLineIfValid(7, 4);
-    drawLineIfValid(0, 4); drawLineIfValid(1, 5); drawLineIfValid(2, 6); drawLineIfValid(3, 7);
-}
-
-void ESP::DrawProfessionalESP(Graphics& g, float x, float y, float w, float h, float health, float maxHealth, int screenW, int screenH, const std::wstring& name, double distance, bool drawTracer) {
-    if (maxHealth <= 0) maxHealth = 20.0f;
-    float hpPercent = health / maxHealth;
-    if (hpPercent > 1.0f) hpPercent = 1.0f;
-    if (hpPercent < 0.0f) hpPercent = 0.0f;
-
-    int r = (int)(255.0f * (1.0f - hpPercent));
-    int gr = (int)(255.0f * hpPercent);
-
-    // Thicker Health Bar with Black Outline
-    float barX = x - 8.0f;
-    float barY = y - 1.0f;
-    float barW = 6.0f;
-    float barH = h + 2.0f;
-
-    SolidBrush bgBarBrush(Color(255, 0, 0, 0));
-    g.FillRectangle(&bgBarBrush, barX, barY, barW, barH);
-
-    SolidBrush hpBrush(Color(255, r, gr, 0));
-    float hpFillH = h * hpPercent;
-    float hpFillY = y + (h - hpFillH);
-    g.FillRectangle(&hpBrush, barX + 1.0f, hpFillY, barW - 2.0f, hpFillH);
-
-    if (drawTracer) {
-        Pen blackTracerPen(Color(255, 0, 0, 0), 4.0f); // Thicker outline
-        Pen tracerPen(Color(150, 255, 255, 255), 2.0f); // Thicker line
-        g.DrawLine(&blackTracerPen, (REAL)(screenW / 2), (REAL)screenH, x + w / 2, y + h);
-        g.DrawLine(&tracerPen, (REAL)(screenW / 2), (REAL)screenH, x + w / 2, y + h);
-    }
-
-    FontFamily fontFamily(L"Consolas");
-    Font font(&fontFamily, 12, FontStyleBold, UnitPixel);
-    StringFormat format;
-    format.SetAlignment(StringAlignmentCenter);
-
-    SolidBrush shadowBrush(Color(255, 0, 0, 0));
-    SolidBrush textBrush(Color(255, 255, 255, 255));
-
-    wchar_t textBuf[256];
-    swprintf_s(textBuf, L"%ls [%.1fm]", name.c_str(), distance);
-
-    PointF textPos(x + w / 2.0f, y - 16.0f);
-
-    g.DrawString(textBuf, -1, &font, PointF(textPos.X + 1, textPos.Y + 1), &format, &shadowBrush);
-    g.DrawString(textBuf, -1, &font, textPos, &format, &textBrush);
-}
-
-void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool rightClickAction) {
-    FontFamily fontFamily(L"Verdana");
-    Font titleFont(&fontFamily, 16, FontStyleBold, UnitPixel);
-    Font modFont(&fontFamily, 14, FontStyleRegular, UnitPixel);
-    SolidBrush textBrush(Color(255, 255, 255, 255));
-
-    int totalHeight = 60; 
-    for (Module* mod : ModuleManager::GetModules()) {
-        if (!mod) continue;
-        totalHeight += 35;
-        if (mod->IsExpanded()) {
-            if (mod->GetName() == "XRay") totalHeight += 9 * 25 + 10;
-            else if (mod->GetName() == "Killaura") totalHeight += 40 + 10;
-            else if (mod->GetName() == "Aimbot") totalHeight += 40 + 10;
-            else if (mod->GetName() == "AutoClicker") totalHeight += 2 * 40 + 25 + 10;
-            else if (mod->GetName() == "ESP") totalHeight += 40 + 10;
-            else if (mod->GetName() == "Reach") totalHeight += 40 + 10;
-        }
-    }
-
-    SolidBrush bg(Color(240, 25, 25, 25));
-    g.FillRectangle(&bg, 100, 100, 400, totalHeight);
-
-    SolidBrush header(Color(255, 15, 15, 15));
-    g.FillRectangle(&header, 100, 100, 400, 40);
-    g.DrawString(L"Musty Client", -1, &titleFont, PointF(115, 110), nullptr, &textBrush);
-
-    auto DrawCheckbox = [&](const wchar_t* label, bool& value, int cx, int cy) {
-        SolidBrush cbBg(Color(255, 45, 45, 45));
-        g.FillRectangle(&cbBg, cx, cy, 15, 15);
-        if (value) {
-            SolidBrush cbFill(Color(255, 46, 204, 113));
-            g.FillRectangle(&cbFill, cx + 2, cy + 2, 11, 11);
-        }
-        g.DrawString(label, -1, &modFont, PointF(cx + 25, cy), nullptr, &textBrush);
-        
-        if (clickAction && mouseX >= cx && mouseX <= cx + 200 && mouseY >= cy && mouseY <= cy + 15) {
-            value = !value;
-        }
-        return 25;
-    };
-
-    auto DrawSlider = [&](const wchar_t* label, float& value, float min, float max, bool& draggingFlag, int cx, int cy) {
-        int sW = 340;
-        int sH = 10;
-        float percent = (value - min) / (max - min);
-        if (percent < 0) percent = 0; if (percent > 1) percent = 1;
-
-        wchar_t buf[64];
-        swprintf_s(buf, L"%ls: %.1f", label, value);
-        g.DrawString(buf, -1, &modFont, PointF(cx, cy), nullptr, &textBrush);
-        cy += 18;
-
-        SolidBrush sBg(Color(255, 45, 45, 45));
-        g.FillRectangle(&sBg, cx, cy, sW, sH);
-
-        SolidBrush sFill(Color(255, 46, 204, 113));
-        g.FillRectangle(&sFill, cx, cy, (int)(sW * percent), sH);
-
-        if (clickAction && mouseX >= cx && mouseX <= cx + sW && mouseY >= cy && mouseY <= cy + sH) {
-            draggingFlag = true;
-        }
-
-        if (draggingFlag) {
-            if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
-                draggingFlag = false;
-            } else {
-                float newPct = (float)(mouseX - cx) / sW;
-                if (newPct < 0) newPct = 0; if (newPct > 1) newPct = 1;
-                value = min + (newPct * (max - min));
-            }
-        }
-        return 40;
-    };
-
-    int y = 150;
-    for (Module* mod : ModuleManager::GetModules()) {
-        if (!mod) continue;
-        bool enabled = mod->IsEnabled();
-        
-        SolidBrush modBg(enabled ? Color(255, 46, 204, 113) : Color(255, 45, 45, 45));
-        g.FillRectangle(&modBg, 120, y, 360, 30);
-
-        std::string nameStr = mod->GetName();
-        std::wstring wName(nameStr.begin(), nameStr.end());
-        g.DrawString(wName.c_str(), -1, &modFont, PointF(135, y + 6), nullptr, &textBrush);
-        
-        g.DrawString(mod->IsExpanded() ? L"v" : L">", -1, &modFont, PointF(460, y + 6), nullptr, &textBrush);
-
-        bool hovered = (mouseX >= 120 && mouseX <= 480 && mouseY >= y && mouseY <= y + 30);
-        if (clickAction && hovered) {
-            mod->Toggle();
-        }
-        if (rightClickAction && hovered) {
-            mod->SetExpanded(!mod->IsExpanded());
-        }
-        
-        y += 35;
-
-        if (mod->IsExpanded()) {
-            if (mod->GetName() == "XRay") {
-                XRay* xray = (XRay*)mod;
-                y += DrawCheckbox(L"Diamond Ore", xray->showDiamond, 130, y);
-                y += DrawCheckbox(L"Gold Ore", xray->showGold, 130, y);
-                y += DrawCheckbox(L"Iron Ore", xray->showIron, 130, y);
-                y += DrawCheckbox(L"Emerald Ore", xray->showEmerald, 130, y);
-                y += DrawCheckbox(L"Ancient Debris", xray->showNetherite, 130, y);
-                y += DrawCheckbox(L"Chest & Barrels", xray->showChests, 130, y);
-                y += DrawCheckbox(L"Ender Chests", xray->showEnderChests, 130, y);
-                y += DrawCheckbox(L"Spawners", xray->showSpawners, 130, y);
-                y += DrawCheckbox(L"Hoppers", xray->showHoppers, 130, y);
-            } else if (mod->GetName() == "Killaura") {
-                Killaura* ka = (Killaura*)mod;
-                float r = ka->GetReach();
-                y += DrawSlider(L"Reach", r, 3.0f, 6.0f, draggingSlider, 130, y);
-                ka->SetReach(r);
-            } else if (mod->GetName() == "Aimbot") {
-                Aimbot* aim = (Aimbot*)mod;
-                float s = aim->GetSmoothSpeed();
-                y += DrawSlider(L"Smooth Speed", s, 0.01f, 0.50f, draggingAimSlider, 130, y);
-                aim->SetSmoothSpeed(s);
-            } else if (mod->GetName() == "AutoClicker") {
-                AutoClicker* ac = (AutoClicker*)mod;
-                float minCps = ac->GetMinCps();
-                float maxCps = ac->GetMaxCps();
-                bool jitter = ac->IsJitterEnabled();
-                
-                y += DrawSlider(L"Min CPS", minCps, 1.0f, 20.0f, draggingAcMinSlider, 130, y);
-                y += DrawSlider(L"Max CPS", maxCps, 1.0f, 20.0f, draggingAcMaxSlider, 130, y);
-                y += DrawCheckbox(L"Jitter", jitter, 130, y);
-                
-                ac->SetMinCps(minCps);
-                ac->SetMaxCps(maxCps);
-                ac->SetJitter(jitter);
-            } else if (mod->GetName() == "ESP") {
-                y += DrawSlider(L"ESP Range", espRange, 10.0f, 200.0f, draggingEspRangeSlider, 130, y);
-            } else if (mod->GetName() == "Reach") {
-                Reach* rm = (Reach*)mod;
-                float r = rm->GetReach();
-                y += DrawSlider(L"Reach Distance", r, 3.0f, 6.0f, draggingReachSlider, 130, y);
-                rm->SetReach(r);
-            }
-            y += 10;
-        }
-    }
-}
-
-void ESP::RenderLoop() {
-    GdiplusStartupInput gdiplusStartupInput;
-    GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
-
-    mcWindow = FindWindowA("GLFW30", NULL);
-    if (!mcWindow) mcWindow = FindWindowA("LWJGL", NULL);
-
-    WNDCLASSEXA wc = { sizeof(WNDCLASSEXA), 0, OverlayProc, 0, 0, GetModuleHandle(NULL), NULL, NULL, NULL, NULL, "MustyOverlay", NULL };
-    RegisterClassExA(&wc);
-
-    RECT rect;
-    GetWindowRect(mcWindow, &rect);
-
-    overlayWindow = CreateWindowExA(
-        WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_TOOLWINDOW,
-        "MustyOverlay", "Musty ESP",
-        WS_POPUP,
-        rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top,
-        NULL, NULL, wc.hInstance, NULL
-    );
-
-    SetLayeredWindowAttributes(overlayWindow, RGB(0, 0, 0), 255, LWA_COLORKEY);
-    ShowWindow(overlayWindow, SW_SHOW);
-
-    JNIEnv* env = nullptr;
-    if (JNIHelper::vm->AttachCurrentThread((void**)&env, nullptr) != JNI_OK) return;
-    JNIHelper::env = env; // Set thread-local env for this thread
-
-    jclass mcClass = nullptr, worldClass = nullptr, entityClass = nullptr, livingEntityClass = nullptr;
-    jclass rendererClass = nullptr, cameraClass = nullptr, vec3dClass = nullptr, matrixClass = nullptr;
-    jclass textClass = nullptr;
-
-    int retries = 0;
-    while (retries < 100 && running) {
-        mcClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_310;", "net/minecraft/client/MinecraftClient");
-        worldClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_638;", "net/minecraft/client/world/ClientWorld");
-        entityClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_1297;", "net/minecraft/entity/Entity");
-        livingEntityClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_1309;", "net/minecraft/entity/LivingEntity");
-        rendererClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_757;", "net/minecraft/client/render/GameRenderer");
-        cameraClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_4184;", "net/minecraft/client/render/Camera");
-        vec3dClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_243;", "net/minecraft/util/math/Vec3d");
-        matrixClass = JNIHelper::FindClassSafe("Lorg/joml/Matrix4f;", "org/joml/Matrix4f");
-        textClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_2561;", "net/minecraft/text/Text");
-
-        if (mcClass && worldClass && entityClass && rendererClass && cameraClass && vec3dClass && matrixClass) {
-            break;
-        }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        retries++;
-    }
-
-    if (!mcClass || !worldClass || !entityClass || !rendererClass || !cameraClass || !vec3dClass || !matrixClass) {
-        std::cout << "[MustyClient] Failed to resolve obfuscated classes." << std::endl;
-        JNIHelper::vm->DetachCurrentThread();
-        return;
-    }
-
-    jfieldID instanceField = JNIHelper::GetStaticFieldSafe(mcClass, "field_1700", "Lnet/minecraft/class_310;", "instance");
-    jfieldID localPlayerField = JNIHelper::GetFieldSafe(mcClass, "field_1724", "Lnet/minecraft/class_746;", "player");
-    jfieldID worldField = JNIHelper::GetFieldSafe(mcClass, "field_1687", "Lnet/minecraft/class_638;", "world");
-    jfieldID rendererField = JNIHelper::GetFieldSafe(mcClass, "field_1773", "Lnet/minecraft/class_757;", "gameRenderer");
-
-    jfieldID playersField = JNIHelper::GetFieldSafe(worldClass, "field_18226", "Ljava/util/List;", "players");
-    jclass listClass = env->FindClass("java/util/List");
-    jmethodID listSize = env->GetMethodID(listClass, "size", "()I");
-    jmethodID listGet = env->GetMethodID(listClass, "get", "(I)Ljava/lang/Object;");
-
-    jfieldID entX = JNIHelper::GetFieldSafe(entityClass, "field_6014", "D", "x");
-    jfieldID entY = JNIHelper::GetFieldSafe(entityClass, "field_6036", "D", "y");
-    jfieldID entZ = JNIHelper::GetFieldSafe(entityClass, "field_5969", "D", "z");
-
-    jmethodID getNameMethod = JNIHelper::GetMethodSafe(entityClass, "method_5477", "()Lnet/minecraft/class_2561;", "getName");
-    jmethodID getStringMethod = nullptr;
-    if (textClass) getStringMethod = JNIHelper::GetMethodSafe(textClass, "method_10851", "()Ljava/lang/String;", "getString");
-
-    jmethodID getHealth = nullptr, getMaxHealth = nullptr;
-    if (livingEntityClass) {
-        getHealth = JNIHelper::GetMethodSafe(livingEntityClass, "method_6032", "()F", "getHealth");
-        getMaxHealth = JNIHelper::GetMethodSafe(livingEntityClass, "method_6063", "()F", "getMaxHealth");
-    }
-
-    jfieldID camField = JNIHelper::GetFieldSafe(rendererClass, "lunar$savedCamera", "Lnet/minecraft/class_4184;", "camera");
-    jfieldID modelViewField = JNIHelper::GetFieldSafe(rendererClass, "lunar$savedModelView$v1_19_3", "Lorg/joml/Matrix4f;", "modelView");
-    jfieldID projField = JNIHelper::GetFieldSafe(rendererClass, "lunar$savedProjection$v1_19_3", "Lorg/joml/Matrix4f;", "projection");
-    jfieldID camPosField = JNIHelper::GetFieldSafe(cameraClass, "field_18712", "Lnet/minecraft/class_243;", "pos");
-
-    jfieldID vec3dFields[3];
-    int vecIdx = 0;
-    jint fCount; jfieldID* fds;
-    JNIHelper::jvmti->GetClassFields(vec3dClass, &fCount, &fds);
-    for (int i = 0; i < fCount; i++) {
-        char* sig;
-        JNIHelper::jvmti->GetFieldName(vec3dClass, fds[i], nullptr, &sig, nullptr);
-        if (strcmp(sig, "D") == 0 && vecIdx < 3) vec3dFields[vecIdx++] = fds[i];
-        JNIHelper::jvmti->Deallocate((unsigned char*)sig);
-    }
-    JNIHelper::jvmti->Deallocate((unsigned char*)fds);
-
-    const char* mNames[] = { "m00","m01","m02","m03", "m10","m11","m12","m13", "m20","m21","m22","m23", "m30","m31","m32","m33" };
-    jfieldID matrixFields[16];
-    for (int i = 0; i < 16; i++) matrixFields[i] = env->GetFieldID(matrixClass, mNames[i], "F");
-
-    while (running) {
-        GetWindowRect(mcWindow, &rect);
-        int width = rect.right - rect.left;
-        int height = rect.bottom - rect.top;
-        MoveWindow(overlayWindow, rect.left, rect.top, width, height, true);
-
-        if (GetAsyncKeyState(VK_OEM_4) & 0x8000) {
-            if (!insertPressed) {
-                guiOpen = !guiOpen;
-                insertPressed = true;
-                LONG_PTR style = GetWindowLongPtrA(overlayWindow, GWL_EXSTYLE);
-                if (guiOpen) {
-                    SetWindowLongPtrA(overlayWindow, GWL_EXSTYLE, style & ~WS_EX_TRANSPARENT);
-                    SetForegroundWindow(overlayWindow);
-                } else {
-                    SetWindowLongPtrA(overlayWindow, GWL_EXSTYLE, style | WS_EX_TRANSPARENT);
-                }
-            }
-        } else {
-            insertPressed = false;
-        }
-
-        POINT cursorPos = {0, 0};
-        GetCursorPos(&cursorPos);
-        ScreenToClient(overlayWindow, &cursorPos);
-        
-        bool isClicked = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
-        bool clickAction = isClicked && !wasClicked;
-        wasClicked = isClicked;
-
-        bool isRightClicked = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
-        bool rightClickAction = isRightClicked && !wasRightClicked;
-        wasRightClicked = isRightClicked;
-
-        HDC hdc = GetDC(overlayWindow);
-        HDC memDC = CreateCompatibleDC(hdc);
-        HBITMAP memBitmap = CreateCompatibleBitmap(hdc, width, height);
-        HGDIOBJ oldBitmap = SelectObject(memDC, memBitmap);
-
-        RECT clientRect = { 0, 0, width, height };
-        HBRUSH bgBrush = CreateSolidBrush(RGB(0, 0, 0));
-        FillRect(memDC, &clientRect, bgBrush);
-        DeleteObject(bgBrush);
-
-        Graphics g(memDC);
-        g.SetSmoothingMode(SmoothingModeAntiAlias);
-        g.SetTextRenderingHint(TextRenderingHintAntiAlias);
-
-        jobject mcInstance = env->GetStaticObjectField(mcClass, instanceField);
-        if (mcInstance) {
-            jobject localPlayer = env->GetObjectField(mcInstance, localPlayerField);
-            jobject renderer = env->GetObjectField(mcInstance, rendererField);
-            jobject world = env->GetObjectField(mcInstance, worldField);
-
-            if (renderer && world) {
-                jobject camera = env->GetObjectField(renderer, camField);
-                jobject modelViewObj = env->GetObjectField(renderer, modelViewField);
-                jobject projObj = env->GetObjectField(renderer, projField);
-                jobject playersList = env->GetObjectField(world, playersField);
-
-                if (camera && modelViewObj && projObj && playersList) {
-                    jobject camPosObj = env->GetObjectField(camera, camPosField);
-                    Vec3 camPos = {
-                        env->GetDoubleField(camPosObj, vec3dFields[0]),
-                        env->GetDoubleField(camPosObj, vec3dFields[1]),
-                        env->GetDoubleField(camPosObj, vec3dFields[2])
-                    };
-                    env->DeleteLocalRef(camPosObj);
-
-                    float mv[16], p[16];
-                    for (int i = 0; i < 16; i++) {
-                        mv[i] = env->GetFloatField(modelViewObj, matrixFields[i]);
-                        p[i] = env->GetFloatField(projObj, matrixFields[i]);
-                    }
-
-                    jint size = env->CallIntMethod(playersList, listSize);
-                    for (int i = 0; i < size; i++) {
-                        jobject player = env->CallObjectMethod(playersList, listGet, i);
-                        if (!player) continue;
-
-                        if (localPlayer && env->IsSameObject(player, localPlayer)) {
-                            env->DeleteLocalRef(player);
-                            continue;
-                        }
-
-                        Vec3 feetPos = {
-                            env->GetDoubleField(player, entX),
-                            env->GetDoubleField(player, entY),
-                            env->GetDoubleField(player, entZ)
-                        };
-
-                        double distance = std::sqrt(std::pow(camPos.x - feetPos.x, 2) + std::pow(camPos.y - feetPos.y, 2) + std::pow(camPos.z - feetPos.z, 2));
-
-                        if (distance <= espRange) {
-                            Vec3 headPos = feetPos;
-                            headPos.y += 2.0;
-
-                            Vec2 screenFeet, screenHead;
-                            if (WorldToScreen(feetPos, camPos, mv, p, screenFeet, width, height) &&
-                                WorldToScreen(headPos, camPos, mv, p, screenHead, width, height)) {
-
-                                float boxHeight = screenFeet.y - screenHead.y;
-                                float boxWidth = boxHeight / 2.0f;
-                                float boxX = screenHead.x - boxWidth / 2.0f;
-                                float boxY = screenHead.y;
-
-                                // Draw 3D Box ESP
-                                Draw3DBox(g, feetPos, 0.6f, 1.8f, camPos, mv, p, width, height, Color(255, 46, 204, 113));
-
-                                float hp = 20.0f, maxHp = 20.0f;
-                                if (getHealth && getMaxHealth) {
-                                    hp = env->CallFloatMethod(player, getHealth);
-                                    maxHp = env->CallFloatMethod(player, getMaxHealth);
-                                }
-
-                                std::wstring playerName = L"Unknown";
-                                if (getNameMethod && getStringMethod) {
-                                    jobject textObj = env->CallObjectMethod(player, getNameMethod);
-                                    if (textObj) {
-                                        jstring nameStr = (jstring)env->CallObjectMethod(textObj, getStringMethod);
-                                        if (nameStr) {
-                                            const jchar* rawName = env->GetStringChars(nameStr, nullptr);
-                                            jsize len = env->GetStringLength(nameStr);
-                                            playerName = std::wstring((const wchar_t*)rawName, len);
-                                            env->ReleaseStringChars(nameStr, rawName);
-                                            env->DeleteLocalRef(nameStr);
-                                        }
-                                        env->DeleteLocalRef(textObj);
-                                    }
-                                }
-
-                                // Pass true to draw tracers
-                                DrawProfessionalESP(g, boxX, boxY, boxWidth, boxHeight, hp, maxHp, width, height, playerName, distance, true);
-                            }
-                        }
-                        env->DeleteLocalRef(player);
-                    }
-                    
-                    // Draw X-Ray Blocks
-                    XRay* xray = (XRay*)ModuleManager::GetModule("XRay");
-                    if (xray && xray->IsEnabled()) {
-                        for (const auto& block : xray->GetFoundBlocks()) {
-                            Vec3 blockPos = { (double)block.x + 0.5, (double)block.y + 0.5, (double)block.z + 0.5 };
-                            double distance = std::sqrt(std::pow(camPos.x - blockPos.x, 2) + std::pow(camPos.y - blockPos.y, 2) + std::pow(camPos.z - blockPos.z, 2));
-                            
-                            if (distance <= espRange) {
-                                Draw3DBox(g, { (double)block.x, (double)block.y, (double)block.z }, 1.0f, 1.0f, camPos, mv, p, width, height, Color(255, block.r, block.g, block.b));
-                            }
-                        }
-                    }
-                }
-                if (camera) env->DeleteLocalRef(camera);
-                if (modelViewObj) env->DeleteLocalRef(modelViewObj);
-                if (projObj) env->DeleteLocalRef(projObj);
-                if (playersList) env->DeleteLocalRef(playersList);
-            }
-            if (renderer) env->DeleteLocalRef(renderer);
-            if (world) env->DeleteLocalRef(world);
-            if (localPlayer) env->DeleteLocalRef(localPlayer);
-            env->DeleteLocalRef(mcInstance);
-        }
-
-        if (guiOpen) {
-            DrawGUI(g, cursorPos.x, cursorPos.y, clickAction, rightClickAction);
-        }
-
-        BitBlt(hdc, 0, 0, width, height, memDC, 0, 0, SRCCOPY);
-
-        SelectObject(memDC, oldBitmap);
-        DeleteObject(memBitmap);
-        DeleteDC(memDC);
-        ReleaseDC(overlayWindow, hdc);
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(16));
-    }
-
-    JNIHelper::vm->DetachCurrentThread();
-    DestroyWindow(overlayWindow);
-    GdiplusShutdown(gdiplusToken);
-}
+I2luY2x1ZGUgIkVTUC5oIgojaW5jbHVkZSAiLi4vLi4vY29yZS9KTklIZWxw
+ZXIuaCIKI2luY2x1ZGUgIi4uL01vZHVsZU1hbmFnZXIuaCIKI2luY2x1ZGUg
+Ii4uL2NvbWJhdC9LaWxsYXVyYS5oIgojaW5jbHVkZSAiLi4vY29tYmF0L0Fp
+bWJvdC5oIgojaW5jbHVkZSAiLi4vY29tYmF0L1JlYWNoLmgiCiNpbmNsdWRl
+ICIuLi9jb21iYXQvQXV0b0NsaWNrZXIuaCIKI2luY2x1ZGUgIi4uL3JlbmRl
+ci9YUmF5LmgiCiNpbmNsdWRlIDxpb3N0cmVhbT4KI2luY2x1ZGUgPGZzdHJl
+YW0+CiNpbmNsdWRlIDxjbWF0aD4KI2luY2x1ZGUgPHN0cmluZz4KCiNwcmFn
+bWEgY29tbWVudChsaWIsICJnZGlwbHVzLmxpYiIpCnVzaW5nIG5hbWVzcGFj
+ZSBHZGlwbHVzOwoKRVNQOjpFU1AoKSA6IE1vZHVsZSgiRVNQIikge30KCkVT
+UDo6fkVTUCgpIHsKICAgIGlmIChydW5uaW5nKSB7CiAgICAgICAgcnVubmlu
+ZyA9IGZhbHNlOwogICAgICAgIGlmIChyZW5kZXJUaHJlYWQuam9pbmFibGUo
+KSkgewogICAgICAgICAgICBpZiAoc3RkOjp0aGlzX3RocmVhZDo6Z2V0X2lk
+KCkgPT0gcmVuZGVyVGhyZWFkLmdldF9pZCgpKSB7CiAgICAgICAgICAgICAg
+ICByZW5kZXJUaHJlYWQuZGV0YWNoKCk7CiAgICAgICAgICAgIH0gZWxzZSB7
+CiAgICAgICAgICAgICAgICByZW5kZXJUaHJlYWQuam9pbigpOwogICAgICAg
+ICAgICB9CiAgICAgICAgfQogICAgfQp9Cgp2b2lkIEVTUDo6T25FbmFibGUo
+KSB7CiAgICBydW5uaW5nID0gdHJ1ZTsKICAgIHJlbmRlclRocmVhZCA9IHN0
+ZDo6dGhyZWFkKCZFU1A6OlJlbmRlckxvb3AsIHRoaXMpOwogICAgc3RkOjpj
+b3V0IDw8ICJbTXVzdHlDbGllbnRdIEVTUCBFbmFibGVkLiIgPDwgc3RkOjpl
+bmRsOwp9Cgp2b2lkIEVTUDo6T25EaXNhYmxlKCkgewogICAgcnVubmluZyA9
+IGZhbHNlOwogICAgaWYgKHJlbmRlclRocmVhZC5qb2luYWJsZSgpKSB7CiAg
+ICAgICAgLy8gUHJldmVudCBzdGQ6OnN5c3RlbV9lcnJvciBieSBub3Qgam9p
+bmluZyB0aGUgdGhyZWFkIGZyb20gaXRzZWxmCiAgICAgICAgaWYgKHN0ZDo6
+dGhpc190aHJlYWQ6OmdldF9pZCgpID09IHJlbmRlclRocmVhZC5nZXRfaWQo
+KSkgewogICAgICAgICAgICByZW5kZXJUaHJlYWQuZGV0YWNoKCk7CiAgICAg
+ICAgfSBlbHNlIHsKICAgICAgICAgICAgcmVuZGVyVGhyZWFkLmpvaW4oKTsK
+ICAgICAgICB9CiAgICB9CiAgICBzdGQ6OmNvdXQgPDwgIltNdXN0eUNsaWVu
+dF0gRVNQIERpc2FibGVkLiIgPDwgc3RkOjplbmRsOwp9CgpMUkVTVUxUIENB
+TExCQUNLIEVTUDo6T3ZlcmxheVByb2MoSFdORCBod25kLCBVSU5UIG1zZywg
+V1BBUkFNIHdQYXJhbSwgTFBBUkFNIGxQYXJhbSkgewogICAgaWYgKG1zZyA9
+PSBXTV9FUkFTRUJLR05EKSByZXR1cm4gMTsKICAgIHJldHVybiBEZWZXaW5k
+b3dQcm9jKGh3bmQsIG1zZywgd1BhcmFtLCBsUGFyYW0pOwp9Cgpib29sIEVT
+UDo6V29ybGRUb1NjcmVlbihWZWMzIHBvcywgVmVjMyBjYW1Qb3MsIGZsb2F0
+KiBtdiwgZmxvYXQqIHAsIFZlYzImIHNjcmVlbiwgaW50IHdpZHRoLCBpbnQg
+aGVpZ2h0KSB7CiAgICBmbG9hdCB4ID0gKGZsb2F0KShwb3MueCAtIGNhbVBv
+cy54KTsKICAgIGZsb2F0IHkgPSAoZmxvYXQpKHBvcy55IC0gY2FtUG9zLnkp
+OwogICAgZmxvYXQgeiA9IChmbG9hdCkocG9zLnogLSBjYW1Qb3Mueik7Cgog
+ICAgZmxvYXQgdmlld1ggPSBtdlswXSAqIHggKyBtdls0XSAqIHkgKyBtdls4
+XSAqIHogKyBtdlsxMl07CiAgICBmbG9hdCB2aWV3WSA9IG12WzFdICogeCAr
+IG12WzVdICogeSArIG12WzldICogeiArIG12WzEzXTsKICAgIGZsb2F0IHZp
+ZXdaID0gbXZbMl0gKiB4ICsgbXZbNl0gKiB5ICsgbXZbMTBdICogeiArIG12
+WzE0XTsKICAgIGZsb2F0IHZpZXdXID0gbXZbM10gKiB4ICsgbXZbN10gKiB5
+ICsgbXZbMTFdICogeiArIG12WzE1XTsKCiAgICBmbG9hdCBjbGlwWCA9IHBb
+MF0gKiB2aWV3WCArIHBbNF0gKiB2aWV3WSArIHBbOF0gKiB2aWV3WiArIHBb
+MTJdICogdmlld1c7CiAgICBmbG9hdCBjbGlwWSA9IHBbMV0gKiB2aWV3WCAr
+IHBbNV0gKiB2aWV3WSArIHBbOV0gKiB2aWV3WiArIHBbMTNdICogdmlld1c7
+CiAgICBmbG9hdCBjbGlwVyA9IHBbM10gKiB2aWV3WCArIHBbN10gKiB2aWV3
+WSArIHBbMTFdICogdmlld1ogKyBwWzE1XSAqIHZpZXdXOwoKICAgIGlmIChj
+bGlwVyA8IDAuMWYpIHJldHVybiBmYWxzZTsKCiAgICBmbG9hdCBuZGNYID0g
+Y2xpcFggLyBjbGlwVzsKICAgIGZsb2F0IG5kY1kgPSBjbGlwWSAvIGNsaXBX
+OwoKICAgIHNjcmVlbi54ID0gKHdpZHRoIC8gMi4wZikgKiAobmRjWCArIDEu
+MGYpOwogICAgc2NyZWVuLnkgPSAoaGVpZ2h0IC8gMi4wZikgKiAoMS4wZiAt
+IG5kY1kpOwogICAgcmV0dXJuIHRydWU7Cn0KCnZvaWQgRVNQOjpEcmF3M0RC
+b3goR3JhcGhpY3MmIGcsIFZlYzMgZmVldCwgZmxvYXQgdywgZmxvYXQgaCwg
+VmVjMyBjYW1Qb3MsIGZsb2F0KiBtdiwgZmxvYXQqIHAsIGludCBzVywgaW50
+IHNILCBDb2xvciBjb2xvcikgewogICAgZmxvYXQgaHcgPSB3IC8gMi4wZjsK
+ICAgIAogICAgVmVjMyBjb3JuZXJzWzhdID0gewogICAgICAgIHtmZWV0Lngg
+LSBodywgZmVldC55LCBmZWV0LnogLSBod30sCiAgICAgICAge2ZlZXQueCAr
+IGh3LCBmZWV0LnksIGZlZXQueiAtIGh3fSwKICAgICAgICB7ZmVldC54ICsg
+aHcsIGZlZXQueSwgZmVldC56ICsgaHd9LAogICAgICAgIHtmZWV0LnggLSBo
+dywgZmVldC55LCBmZWV0LnogKyBod30sCiAgICAgICAge2ZlZXQueCAtIGh3
+LCBmZWV0LnkgKyBoLCBmZWV0LnogLSBod30sCiAgICAgICAge2ZlZXQueCAr
+IGh3LCBmZWV0LnkgKyBoLCBmZWV0LnogLSBod30sCiAgICAgICAge2ZlZXQu
+eCArIGh3LCBmZWV0LnkgKyBoLCBmZWV0LnogKyBod30sCiAgICAgICAge2Zl
+ZXQueCAtIGh3LCBmZWV0LnkgKyBoLCBmZWV0LnogKyBod30KICAgIH07Cgog
+ICAgVmVjMiBzWzhdOwogICAgYm9vbCB2YWxpZFs4XTsKICAgIGZvciAoaW50
+IGkgPSAwOyBpIDwgODsgaSsrKSB7CiAgICAgICAgdmFsaWRbaV0gPSBXb3Js
+ZFRvU2NyZWVuKGNvcm5lcnNbaV0sIGNhbVBvcywgbXYsIHAsIHNbaV0sIHNX
+LCBzSCk7CiAgICB9CgogICAgUGVuIGJsYWNrUGVuKENvbG9yKDI1NSwgMCwg
+MCwgMCksIDQuMGYpOyAvLyBUaGlja2VyIG91dGxpbmUKICAgIFBlbiBwZW4o
+Y29sb3IsIDIuMGYpOyAvLyBUaGlja2VyIGxpbmUKICAgIAogICAgYXV0byBk
+cmF3TGluZUlmVmFsaWQgPSBbJl0oaW50IGksIGludCBqKSB7CiAgICAgICAg
+aWYgKHZhbGlkW2ldICYmIHZhbGlkW2pdKSB7CiAgICAgICAgICAgIGcuRHJh
+d0xpbmUoJmJsYWNrUGVuLCBzW2ldLngsIHNbaV0ueSwgc1tqXS54LCBzW2pd
+LnkpOwogICAgICAgICAgICBnLkRyYXdMaW5lKCZwZW4sIHNbaV0ueCwgc1tp
+XS55LCBzW2pdLngsIHNbal0ueSk7CiAgICAgICAgfQogICAgfTsKCiAgICBk
+cmF3TGluZUlmVmFsaWQoMCwgMSk7IGRyYXdMaW5lSWZWYWxpZCgxLCAyKTsg
+ZHJhd0xpbmVJZlZhbGlkKDIsIDMpOyBkcmF3TGluZUlmVmFsaWQoMywgMCk7
+CiAgICBkcmF3TGluZUlmVmFsaWQoNCwgNSk7IGRyYXdMaW5lSWZWYWxpZCg1
+LCA2KTsgZHJhd0xpbmVJZlZhbGlkKDYsIDcpOyBkcmF3TGluZUlmVmFsaWQo
+NywgNCk7CiAgICBkcmF3TGluZUlmVmFsaWQoMCwgNCk7IGRyYXdMaW5lSWZW
+YWxpZCgxLCA1KTsgZHJhd0xpbmVJZlZhbGlkKDIsIDYpOyBkcmF3TGluZUlm
+VmFsaWQoMywgNyk7Cn0KCnZvaWQgRVNQOjpEcmF3UHJvZmVzc2lvbmFsRVNQ
+KEdyYXBoaWNzJiBnLCBmbG9hdCB4LCBmbG9hdCB5LCBmbG9hdCB3LCBmbG9h
+dCBoLCBmbG9hdCBoZWFsdGgsIGZsb2F0IG1heEhlYWx0aCwgaW50IHNjcmVl
+blcsIGludCBzY3JlZW5ILCBjb25zdCBzdGQ6OndzdHJpbmcmIG5hbWUsIGRv
+dWJsZSBkaXN0YW5jZSwgYm9vbCBkcmF3VHJhY2VyKSB7CiAgICBpZiAobWF4
+SGVhbHRoIDw9IDApIG1heEhlYWx0aCA9IDIwLjBmOwogICAgZmxvYXQgaHBQ
+ZXJjZW50ID0gaGVhbHRoIC8gbWF4SGVhbHRoOwogICAgaWYgKGhwUGVyY2Vu
+dCA+IDEuMGYpIGhwUGVyY2VudCA9IDEuMGY7CiAgICBpZiAoaHBQZXJjZW50
+IDwgMC4wZikgaHBQZXJjZW50ID0gMC4wZjsKCiAgICBpbnQgciA9IChpbnQp
+KDI1NS4wZiAqICgxLjBmIC0gaHBQZXJjZW50KSk7CiAgICBpbnQgZ3IgPSAo
+aW50KSgyNTUuMGYgKiBocFBlcmNlbnQpOwoKICAgIC8vIFRoaWNrZXIgSGVh
+bHRoIEJhciB3aXRoIEJsYWNrIE91dGxpbmUKICAgIGZsb2F0IGJhclggPSB4
+IC0gOC4wZjsKICAgIGZsb2F0IGJhclkgPSB5IC0gMS4wZjsKICAgIGZsb2F0
+IGJhclcgPSA2LjBmOwogICAgZmxvYXQgYmFySCA9IGggKyAyLjBmOwoKICAg
+IFNvbGlkQnJ1c2ggYmdCYXJCcnVzaChDb2xvcigyNTUsIDAsIDAsIDApKTsK
+ICAgIGcuRmlsbFJlY3RhbmdsZSgmYmdCYXJCcnVzaCwgYmFyWCwgYmFyWSwg
+YmFyVywgYmFySCk7CgogICAgU29saWRCcnVzaCBocEJydXNoKENvbG9yKDI1
+NSwgciwgZ3IsIDApKTsKICAgIGZsb2F0IGhwRmlsbEggPSBoICogaHBQZXJj
+ZW50OwogICAgZmxvYXQgaHBGaWxsWSA9IHkgKyAoaCAtIGhwRmlsbEgpOwog
+ICAgZy5GaWxsUmVjdGFuZ2xlKCZocEJydXNoLCBiYXJYICsgMS4wZiwgaHBG
+aWxsWSwgYmFyVyAtIDIuMGYsIGhwRmlsbEgpOwoKICAgIGlmIChkcmF3VHJh
+Y2VyKSB7CiAgICAgICAgUGVuIGJsYWNrVHJhY2VyUGVuKENvbG9yKDI1NSwg
+MCwgMCwgMCksIDQuMGYpOyAvLyBUaGlja2VyIG91dGxpbmUKICAgICAgICBQ
+ZW4gdHJhY2VyUGVuKENvbG9yKDE1MCwgMjU1LCAyNTUsIDI1NSksIDIuMGYp
+OyAvLyBUaGlja2VyIGxpbmUKICAgICAgICBnLkRyYXdMaW5lKCZibGFja1Ry
+YWNlclBlbiwgKFJFQUwpKHNjcmVlblcgLyAyKSwgKFJFQUwpc2NyZWVuSCwg
+eCArIHcgLyAyLCB5ICsgaCk7CiAgICAgICAgZy5EcmF3TGluZSgmdHJhY2Vy
+UGVuLCAoUkVBTCkoc2NyZWVuVyAvIDIpLCAoUkVBTClzY3JlZW5ILCB4ICsg
+dyAvIDIsIHkgKyBoKTsKICAgIH0KCiAgICBGb250RmFtaWx5IGZvbnRGYW1p
+bHkoTCJDb25zb2xhcyIpOwogICAgRm9udCBmb250KCZmb250RmFtaWx5LCAx
+MiwgRm9udFN0eWxlQm9sZCwgVW5pdFBpeGVsKTsKICAgIFN0cmluZ0Zvcm1h
+dCBmb3JtYXQ7CiAgICBmb3JtYXQuU2V0QWxpZ25tZW50KFN0cmluZ0FsaWdu
+bWVudENlbnRlcik7CgogICAgU29saWRCcnVzaCBzaGFkb3dCcnVzaChDb2xv
+cigyNTUsIDAsIDAsIDApKTsKICAgIFNvbGlkQnJ1c2ggdGV4dEJydXNoKENv
+bG9yKDI1NSwgMjU1LCAyNTUsIDI1NSkpOwoKICAgIHdjaGFyX3QgdGV4dEJ1
+ZlsyNTZdOwogICAgc3dwcmludGZfcyh0ZXh0QnBufSwgTCIlbHMgWyUuMWZt
+XSIsIG5hbWUuY19zdHIoKSwgZGlzdGFuY2UpOwoKICAgIFBvaW50RiB0ZXh0
+UG9zKHggKyB3IC8gMi4wZiwgeSAtIDE2LjBmKTsKCiAgICBnLkRyYXdTdHJp
+bmcodGV4dEJ1ZiwgLTEsICZmb250LCBQb2ludEYodGV4dFBvcy5YICsgMSwg
+dGV4dFBvcy5ZICsgMSksICZmb3JtYXQsICZzaGFkb3dCcnVzaCk7CiAgICBn
+LkRyYXdTdHJpbmcodGV4dEJ1ZiwgLTEsICZmb250LCB0ZXh0UG9zLCAmZm9y
+bWF0LCAmdGV4dEJydXNoKTsKfQoKdm9pZCBFU1A6OkRyYXdHVUkoR3JhcGhp
+Y3MmIGcsIGludCBtb3VzZVgsIGludCBtb3VzZVksIGJvb2wgY2xpY2tBY3Rp
+b24sIGJvb2wgcmlnaHRDbGlja0FjdGlvbikgewogICAgRm9udEZhbWlseSBm
+b250RmFtaWx5KEwiVmVyZGFuYSIpOwogICAgRm9udCB0aXRsZUZvbnQoJmZv
+bnRGYW1pbHksIDE2LCBGb250U3R5bGVCb2xkLCBVbml0UGl4ZWwpOwogICAg
+Rm9udCBtb2RGb250KCZmb250RmFtaWx5LCAxNCwgRm9udFN0eWxlUmVndWxh
+ciwgVW5pdFBpeGVsKTsKICAgIFNvbGlkQnJ1c2ggdGV4dEJydXNoKENvbG9y
+KDI1NSwgMjU1LCAyNTUsIDI1NSkpOwoKICAgIGludCB0b3RhbEhlaWdodCA9
+IDYwOyAKICAgIGZvciAoTW9kdWxlKiBtb2QgOiBNb2R1bGVNYW5hZ2VyOjpH
+ZXRNb2R1bGVzKCkpIHsKICAgICAgICBpZiAoIW1vZCkgY29udGludWU7CiAg
+ICAgICAgdG90YWxIZWlnaHQgKz0gMzU7CiAgICAgICAgaWYgKG1vZC0+SXNF
+eHBhbmRlZCgpKSB7CiAgICAgICAgICAgIGlmIChtb2QtPkdldE5hbWUoKSA9
+PSAiWFJheSIpIHRvdGFsSGVpZ2h0ICs9IDkgKiAyNSArIDEwOwogICAgICAg
+ICAgICBlbHNlIGlmIChtb2QtPkdldE5hbWUoKSA9PSAiS2lsbGF1cmEiKSB0
+b3RhbEhlaWdodCArPSA0MCArIDEwOwogICAgICAgICAgICBlbHNlIGlmICht
+b2QtPkdldE5hbWUoKSA9PSAiQWltYm90IikgdG90YWxIZWlnaHQgKz0gNDAg
+KyAxMDsKICAgICAgICAgICAgZWxzZSBpZiAobW9kLT5HZXROYW1lKCkgPT0g
+IkF1dG9DbGlja2VyIikgdG90YWxIZWlnaHQgKz0gMiAqIDQwICsgMjUgKyAx
+MDsKICAgICAgICAgICAgZWxzZSBpZiAobW9kLT5HZXROYW1lKCkgPT0gIkVT
+UCIpIHRvdGFsSGVpZ2h0ICs9IDQwICsgMTA7CiAgICAgICAgICAgIGVsc2Ug
+aWYgKG1vZC0+R2V0TmFtZSgpID09ICJSZWFjaCIpIHRvdGFsSGVpZ2h0ICs9
+IDQwICsgMTA7CiAgICAgICAgfQogICAgfQoKICAgIFNvbGlkQnJ1c2ggYmco
+Q29sb3IoMjQwLCAyNSwgMjUsIDI1KSk7CiAgICBnLkZpbGxSZWN0YW5nbGUo
+JmJnLCAxMDAsIDEwMCwgNDAwLCB0b3RhbEhlaWdodCk7CgogICAgU29saWRC
+cnVzaCBoZWFkZXIoQ29sb3IoMjU1LCAxNSwgMTUsIDE1KSk7CiAgICBnLkZp
+bGxSZWN0YW5nbGUoJmhlYWRlciwgMTAwLCAxMDAsIDQwMCwgNDApOwogICAg
+Zy5EcmF3U3RyaW5nKEwiTXVzdHkgQ2xpZW50IiwgLTEsICZ0aXRsZUZvbnQs
+IFBvaW50RigxMTUsIDExMCksIG51bGxwdHIsICZ0ZXh0QnJ1c2gpOwoKICAg
+IGF1dG8gRHJhd0NoZWNrYm94ID0gWyZdKGNvbnN0IHdjaGFyX3QqIGxhYmVs
+LCBib29sJiB2YWx1ZSwgaW50IGN4LCBpbnQgY3kpIHsKICAgICAgICBTb2xp
+ZEJydXNoIGNiQmcoQ29sb3IoMjU1LCA0NSwgNDUsIDQ1KSk7CiAgICAgICAg
+Zy5GaWxsUmVjdGFuZ2xlKCZjYkJnLCBjeCwgY3ksIDE1LCAxNSk7CiAgICAg
+ICAgaWYgKHZhbHVlKSB7CiAgICAgICAgICAgIFNvbGlkQnJ1c2ggY2JGaWxs
+KENvbG9yKDI1NSwgNDYsIDIwNCwgMTEzKSk7CiAgICAgICAgICAgIGcuRmls
+bFJlY3RhbmdsZSgmY2JGaWxsLCBjeCArIDIsIGN5ICsgMiwgMTEsIDExKTsK
+ICAgICAgICB9CiAgICAgICAgZy5EcmF3U3RyaW5nKGxhYmVsLCAtMSwgJm1v
+ZEZvbnQsIFBvaW50RihjeCArIDI1LCBjeSksIG51bGxwdHIsICZ0ZXh0QnJ1
+c2gpOwogICAgICAgIAogICAgICAgIGlmIChjbGlja0FjdGlvbiAmJiBtb3Vz
+ZVggPj0gY3ggJiYgbW91c2VYIDw9IGN4ICsgMjAwICYmIG1vdXNlWSA+PSBj
+eSAmJiBtb3VzZVkgPD0gY3kgKyAxNSkgewogICAgICAgICAgICB2YWx1ZSA9
+ICF2YWx1ZTsKICAgICAgICB9CiAgICAgICAgcmV0dXJuIDI1OwogICAgfTsK
+CiAgICBhdXRvIERyYXdTbGlkZXIgPSBbJl0oY29uc3Qgd2NoYXJfdCogbGFi
+ZWwsIGZsb2F0JiB2YWx1ZSwgZmxvYXQgbWluLCBmbG9hdCBtYXgsIGJvb2wm
+IGRyYWdnaW5nRmxhZywgaW50IGN4LCBpbnQgY3kpIHsKICAgICAgICBpbnQg
+c1cgPSAzNDA7CiAgICAgICAgaW50IHNIID0gMTA7CiAgICAgICAgZmxvYXQg
+cGVyY2VudCA9ICh2YWx1ZSAtIG1pbikgLyAobWF4IC0gbWluKTsKICAgICAg
+ICBpZiAocGVyY2VudCA8IDApIHBlcmNlbnQgPSAwOyBpZiAocGVyY2VudCA+
+IDEpIHBlcmNlbnQgPSAxOwoKICAgICAgICB3Y2hhcl90IGJ1Zls2NF07CiAg
+ICAgICAgc3dwcmludGZfcyhidWYsIEwiJWxzOiAlLjFmIiwgbGFiZWwsIHZh
+bHVlKTsKICAgICAgICBnLkRyYXdTdHJpbmcoYnVmLCAtMSwgJm1vZEZvbnQs
+IFBvaW50RihjeCwgY3kpLCBudWxscHRyLCAmdGV4dEJydXNoKTsKICAgICAg
+ICBjeSArPSAxODsKCiAgICAgICAgU29saWRCcnVzaCBzQmcoQ29sb3IoMjU1
+LCA0NSwgNDUsIDQ1KSk7CiAgICAgICAgZy5GaWxsUmVjdGFuZ2xlKCZzQmcs
+IGN4LCBjeSwgc1csIHNIKTsKCiAgICAgICAgU29saWRCcnVzaCBzRmlsbChD
+b2xvcigyNTUsIDQ2LCAyMDQsIDExMykpOwogICAgICAgIGcuRmlsbFJlY3Rh
+bmdsZSgmc0ZpbGwsIGN4LCBjeSwgKGludCkoc1cgKiBwZXJjZW50KSwgc0gp
+OwoKICAgICAgICBpZiAoY2xpY2tBY3Rpb24gJiYgbW91c2VYID49IGN4ICYm
+IG1vdXNlWCA8PSBjeCArIHNXICYmIG1vdXNlWSA+PSBjeSAmJiBtb3VzZVkg
+PD0gY3kgKyBzSCkgewogICAgICAgICAgICBkcmFnZ2luZ0ZsYWcgPSB0cnVl
+OwogICAgICAgIH0KCiAgICAgICAgaWYgKGRyYWdnaW5nRmxhZykgewogICAg
+ICAgICAgICBpZiAoIShHZXRBc3luY0tleVN0YXRlKFZLX0xCVVRUT04pICYg
+MHg4MDAwKSkgewogICAgICAgICAgICAgICAgZHJhZ2dpbmdGbGFnID0gZmFs
+c2U7CiAgICAgICAgICAgIH0gZWxzZSB7CiAgICAgICAgICAgICAgICBmbG9h
+dCBuZXdQY3QgPSAoZmxvYXQpKG1vdXNlWCAtIGN4KSAvIHNXOwogICAgICAg
+ICAgICAgICAgaWYgKG5ld1BjdCA8IDApIG5ld1BjdCA9IDA7IGlmIChuZXdQ
+Y3QgPiAxKSBuZXdQY3QgPSAxOwogICAgICAgICAgICAgICAgdmFsdWUgPSBt
+aW4gKyAobmV3UGN0ICogKG1heCAtIG1pbikpOwogICAgICAgICAgICB9CiAg
+ICAgICAgfQogICAgICAgIHJldHVybiA0MDsKICAgIH07CgogICAgaW50IHkg
+PSAxNTA7CiAgICBmb3IgKE1vZHVsZSogbW9kIDogTW9kdWxlTWFuYWdlcjo6
+R2V0TW9kdWxlcygpKSB7CiAgICAgICAgaWYgKCFtb2QpIGNvbnRpbnVlOwog
+ICAgICAgIGJvb2wgZW5hYmxlZCA9IG1vZC0+SXNFbmFibGVkKCk7CiAgICAg
+ICAgCiAgICAgICAgU29saWRCcnVzaCBtb2RCZyhlbmFibGVkID8gQ29sb3Io
+MjU1LCA0NiwgMjA0LCAxMTMpIDogQ29sb3IoMjU1LCA0NSwgNDUsIDQ1KSk7
+CiAgICAgICAgZy5GaWxsUmVjdGFuZ2xlKCZtb2RCZywgMTIwLCB5LCAzNjAs
+IDMwKTsKCiAgICAgICAgc3RkOjpzdHJpbmcgbmFtZVN0ciA9IG1vZC0+R2V0
+TmFtZSgpOwogICAgICAgIHN0ZDo6d3N0cmluZyB3TmFtZShuYW1lU3RyLmJl
+Z2luKCksIG5hbWVTdHIuZW5kKCkpOwogICAgICAgIGcuRHJhd1N0cmluZyh3
+TmFtZS5jX3N0cigpLCAtMSwgJm1vZEZvbnQsIFBvaW50RigxMzUsIHkgKyA2
+KSwgbnVsbHB0ciwgJnRleHRCcnVzaCk7CiAgICAgICAgCiAgICAgICAgZy5E
+cmF3U3RyaW5nKG1vZC0+SXNFeHBhbmRlZCgpID8gTCJ2IiA6IEwiPiIsIC0x
+LCAmbW9kRm9udCwgUG9pbnRGKDQ2MCwgeSArIDYpLCBudWxscHRyLCAmdGV4
+dEJydXNoKTsKCiAgICAgICAgYm9vbCBob3ZlcmVkID0gKG1vdXNlWCA+PSAx
+MjAgJiYgbW91c2VYIDw9IDQ4MCAmJiBtb3VzZVkgPj0geSAmJiBtb3VzZVkg
+PD0geSArIDMwKTsKICAgICAgICBpZiAoY2xpY2tBY3Rpb24gJiYgaG92ZXJl
+ZCkgewogICAgICAgICAgICBtb2QtPlRvZ2dsZSgpOwogICAgICAgIH0KICAg
+ICAgICBpZiAocmlnaHRDbGlja0FjdGlvbiAmJiBob3ZlcmVkKSB7CiAgICAg
+ICAgICAgIG1vZC0+U2V0RXhwYW5kZWQoIW1vZC0+SXNFeHBhbmRlZCgpKTsK
+ICAgICAgICB9CiAgICAgICAgCiAgICAgICAgeSArPSAzNTsKCiAgICAgICAg
+aWYgKG1vZC0+SXNFeHBhbmRlZCgpKSB7CiAgICAgICAgICAgIGlmIChtb2Qt
+PkdldE5hbWUoKSA9PSAiWFJheSIpIHsKICAgICAgICAgICAgICAgIFhSYXkq
+IHhyYXkgPSAoWFJheSopbW9kOwogICAgICAgICAgICAgICAgeSArPSBEcmF3
+Q2hlY2tib3goTCJEaWFtb25kIE9yZSIsIHhyYXktPnNob3dEaWFtb25kLCAx
+MzAsIHkpOwogICAgICAgICAgICAgICAgeSArPSBEcmF3Q2hlY2tib3goTCJH
+b2xkIE9yZSIsIHhyYXktPnNob3dHb2xkLCAxMzAsIHkpOwogICAgICAgICAg
+ICAgICAgeSArPSBEcmF3Q2hlY2tib3goTCJJcm9uIE9yZSIsIHhyYXktPnNo
+b3dJcm9uLCAxMzAsIHkpOwogICAgICAgICAgICAgICAgeSArPSBEcmF3Q2hl
+Y2tib3goTCJFbWVyYWxkIE9yZSIsIHhyYXktPnNob3dFbWVyYWxkLCAxMzAs
+IHkpOwogICAgICAgICAgICAgICAgeSArPSBEcmF3Q2hlY2tib3goTCJBbmNp
+ZW50IERlYnJpcyIsIHhyYXktPnNob3ROZXRoZXJpdGUsIDEzMCwgeSk7CiAg
+ICAgICAgICAgICAgICB5ICs9IERyYXdDaGVja2JveChMIkNoZXN0ICYgQmFy
+cmVscyIsIHhyYXktPnNob3dDaGVzdHMsIDEzMCwgeSk7CiAgICAgICAgICAg
+ICAgICB5ICs9IERyYXdDaGVja2JveChMIkVuZGVyIENoZXN0cyIsIHhyYXkt
+PnNob3dFbmRlckNoZXN0cywgMTMwLCB5KTsKICAgICAgICAgICAgICAgIHkg
+Kz0gRHJhd0NoZWNrYm94KEwiU3Bhd25lcnMiLCB4cmF5LT5zaG93U3Bhd25l
+cnMsIDEzMCwgeSk7CiAgICAgICAgICAgICAgICB5ICs9IERyYXdDaGVja2Jv
+eChMIkhvcHBlcnMiLCB4cmF5LT5zaG93SG9wcGVycywgMTMwLCB5KTsKICAg
+ICAgICAgICAgfSBlbHNlIGlmIChtb2QtPkdldE5hbWUoKSA9PSAiS2lsbGF1
+cmEiKSB7CiAgICAgICAgICAgICAgICBLaWxsYXVyYSoga2EgPSAoS2lsbGF1
+cmEqKW1vZDsKICAgICAgICAgICAgICAgIGZsb2F0IHIgPSBrYS0+R2V0UmVh
+Y2goKTsKICAgICAgICAgICAgICAgIHkgKz0gRHJhd1NsaWRlcihMIlJlYWNo
+IiwgciwgMy4wZiwgNi4wZiwgZHJhZ2dpbmdTbGlkZXIsIDEzMCwgeSk7CiAg
+ICAgICAgICAgICAgICBrYS0+U2V0UmVhY2gocik7CiAgICAgICAgICAgIH0g
+ZWxzZSBpZiAobW9kLT5HZXROYW1lKCkgPT0gIkFpbWJvdCIpIHsKICAgICAg
+ICAgICAgICAgIEFpbWJvdCogYWltID0gKEFpbWJvdCopbW9kOwogICAgICAg
+ICAgICAgICAgZmxvYXQgcyA9IGFpbS0+R2V0U21vb3RoU3BlZWQoKTsKICAg
+ICAgICAgICAgICAgIHkgKz0gRHJhd1NsaWRlcihMIlNtb290aCBTcGVlZCIs
+IHMsIDAuMDFmLCAwLjUwZiwgZHJhZ2dpbmdBaW1TbGlkZXIsIDEzMCwgeSk7
+CiAgICAgICAgICAgICAgICBhaW0tPlNldFNtb290aFNwZWVkKHMpOwogICAg
+ICAgICAgICB9IGVsc2UgaWYgKG1vZC0+R2V0TmFtZSgpID09ICJBdXRvQ2xp
+Y2tlciIpIHsKICAgICAgICAgICAgICAgIEF1dG9DbGlja2VyKiBhYyA9IChB
+dXRvQ2xpY2tlciopbW9kOwogICAgICAgICAgICAgICAgZmxvYXQgbWluQ3Bz
+ID0gYWMtPkdldE1pbkNwcygpOwogICAgICAgICAgICAgICAgZmxvYXQgbWF4
+Q3BzID0gYWMtPkdldE1heENwcygpOwogICAgICAgICAgICAgICAgYm9vbCBq
+aXR0ZXIgPSBhYy0+SXNKaXR0ZXJFbmFibGVkKCk7CiAgICAgICAgICAgICAg
+ICAKICAgICAgICAgICAgICAgIHkgKz0gRHJhd1NsaWRlcihMIk1pbiBDUFMi
+LCBtaW5DcHMsIDEuMGYsIDIwLjBmLCBkcmFnZ2luZ0FjTWluU2xpZGVyLCAx
+MzAsIHkpOwogICAgICAgICAgICAgICAgeSArPSBEcmF3U2xpZGVyKEwiTWF4
+IENQUyIsIG1heENwcywgMS4wZiwgMjAuMGYsIGRyYWdnaW5nQWNNYXhTbGlk
+ZXIsIDEzMCwgeSk7CiAgICAgICAgICAgICAgICB5ICs9IERyYXdDaGVja2Jv
+eChMIkppdHRlciIsIGppdHRlciwgMTMwLCB5KTsKICAgICAgICAgICAgICAg
+IAogICAgICAgICAgICAgICAgYWMtPlNldE1pbkNwcyhtaW5DcHMpOwogICAg
+ICAgICAgICAgICAgYWMtPlNldE1heENwcyhtYXhDcHMpOwogICAgICAgICAg
+ICAgICAgYWMtPlNldEppdHRlcihqaXR0ZXIpOwogICAgICAgICAgICB9IGVs
+c2UgaWYgKG1vZC0+R2V0TmFtZSgpID09ICJFU1AiKSB7CiAgICAgICAgICAg
+ICAgICB5ICs9IERyYXdTbGlkZXIoTCJFU1AgUmFuZ2UiLCBlc3BSYW5nZSwg
+MTAuMGYsIDIwMC4wZiwgZHJhZ2dpbmdFc3BSYW5nZVNsaWRlciwgMTMwLCB5
+KTsKICAgICAgICAgICAgfSBlbHNlIGlmIChtb2QtPkdldE5hbWUoKSA9PSAi
+UmVhY2giKSB7CiAgICAgICAgICAgICAgICBSZWFjaCogcm0gPSAoUmVhY2gq
+KW1vZDsKICAgICAgICAgICAgICAgIGZsb2F0IHIgPSBybS0+R2V0UmVhY2go
+KTsKICAgICAgICAgICAgICAgIHkgKz0gRHJhd1NsaWRlcihMIlJlYWNoIERp
+c3RhbmNlIiwgciwgMy4wZiwgNi4wZiwgZHJhZ2dpbmdSZWFjaFNsaWRlciwg
+MTMwLCB5KTsKICAgICAgICAgICAgICAgIHJtLT5TZXRSZWFjaChyKTsKICAg
+ICAgICAgICAgfQogICAgICAgICAgICB5ICs9IDEwOwogICAgICAgIH0KICAg
+IH0KfQoKdm9pZCBFU1A6OlJlbmRlckxvb3AoKSB7CiAgICBHZGlwbHVzU3Rh
+cnR1cElucHV0IGdkaXBsdXNTdGFydHVwSW5wdXQ7CiAgICBHZGlwbHVzU3Rh
+cnR1cCgmZ2RpcGx1c1Rva2VuLCAmZ2RpcGx1c1N0YXJ0dXBJbnB1dCwgTlVM
+TCk7CgogICAgbWNXaW5kb3cgPSBGaW5kV2luZG93QSgiR0xGVzMwIiwgTlVM
+TCk7CiAgICBpZiAoIW1jV2luZG93KSBtY1dpbmRvdyA9IEZpbmRXaW5kb3dB
+KCJMV0pHTCIsIE5VTEwpOwoKICAgIFdORENMQVNTRVhBIHdjID0geyBzaXpl
+b2YoV05EQ0xBU1NFWEEpLCAwLCBPdmVybGF5UHJvYywgMCwgMCwgR2V0TW9k
+dWxlSGFuZGxlKE5VTEwpLCBOVUxMLCBOVUxMLCBOVUxMLCBOVUxMLCAiTXVz
+dHlPdmVybGF5IiwgTlVMTCB9OwogICAgUmVnaXN0ZXJDbGFzc0V4QSgmd2Mp
+OwoKICAgIFJFQ1QgcmVjdDsKICAgIEdldFdpbmRvd1JlY3QobWNXaW5kb3cs
+ICZyZWN0KTsKCiAgICBvdmVybGF5V2luZG93ID0gQ3JlYXRlV2luZG93RXhB
+KAogICAgICAgIFdTX0VYX1RPUE1PU1QgfCBXU19FWF9UUkFOU1BBUkVOVCB8
+IFdTX0VYX0xBWUVSRUQgfCBXU19FWF9UT09MV0lORE9XLAogICAgICAgICJN
+dXN0eU92ZXJsYXkiLCAiTXVzdHkgRVNQIiwKICAgICAgICBXU19QT1BVUCwK
+ICAgICAgICByZWN0LmxlZnQsIHJlY3QudG9wLCByZWN0LnJpZ2h0IC0gcmVj
+dC5sZWZ0LCByZWN0LmJvdHRvbSAtIHJlY3QudG9wLAogICAgICAgIE5VTEws
+IE5VTEwsIHdjLmhJbnN0YW5jZSwgTlVMTAogICAgKTsKCiAgICBTZXRMYXll
+cmVkV2luZG93QXR0cmlidXRlcyhvdmVybGF5V2luZG93LCBSR0IoMCwgMCwg
+MCksIDI1NSwgTFdBX0NPTE9SS0VZKTsKICAgIFNob3dXaW5kb3cob3Zlcmxh
+eVdpbmRvdywgU1dfU0hPVyk7CgogICAgSk5JRW52KiBlbnYgPSBudWxscHRy
+OwogICAgaWYgKEpOSUhlbHBlcjo6dm0tPkF0dGFjaEN1cnJlbnRUaHJlYWQo
+KHZvaWQqKikmZW52LCBudWxscHRyKSAhPSBKTklfT0spIHJldHVybjsKICAg
+IEpOSUhlbHBlcjo6ZW52ID0gZW52OyAvLyBTZXQgdGhyZWFkLWxvY2FsIGVu
+diBmb3IgdGhpcyB0aHJlYWQKCiAgICBqY2xhc3MgbWNDbGFzcyA9IG51bGxw
+dHIsIHdvcmxkQ2xhc3MgPSBudWxscHRyLCBlbnRpdHlDbGFzcyA9IG51bGxw
+dHIsIGxpdmluZ0VudGl0eUNsYXNzID0gbnVsbHB0cjsKICAgIGpjbGFzcyBy
+ZW5kZXJlckNsYXNzID0gbnVsbHB0ciwgY2FtZXJhQ2xhc3MgPSBudWxscHRy
+LCB2ZWMzZENsYXNzID0gbnVsbHB0ciwgbWF0cml4Q2xhc3MgPSBudWxscHRy
+OwogICAgamNsYXNzIHRleHRDbGFzcyA9IG51bGxwdHI7CgogICAgaW50IHJl
+dHJpZXMgPSAwOwogICAgd2hpbGUgKHJldHJpZXMgPCAxMDAgJiYgcnVubmlu
+ZykgewogICAgICAgIG1jQ2xhc3MgPSBKTklIZWxwZXI6OkZpbmRDbGFzc1Nh
+ZmUoIkxuZXQvbWluZWNyYWZ0L2NsYXNzXzMxMDsiLCAibmV0L21pbmVjcmFm
+dC9jbGllbnQvTWluZWNyYWZ0Q2xpZW50Iik7CiAgICAgICAgd29ybGRDbGFz
+cyA9IEpOSUhlbHBlcjo6RmluZENsYXNzU2FmZSgiTG5ldC9taW5lY3JhZnQv
+Y2xhc3NfNjM4OyIsICJuZXQvbWluZWNyYWZ0L2NsaWVudC93b3JsZC9DbGll
+bnRXb3JsZCIpOwogICAgICAgIGVudGl0eUNsYXNzID0gSk5JSGVscGVyOjpG
+aW5kQ2xhc3NTYWZlKCJMbmV0L21pbmVjcmFmdC9jbGFzc18xMjk3OyIsICJu
+ZXQvbWluZWNyYWZ0L2VudGl0eS9FbnRpdHkiKTsKICAgICAgICBsaXZpbmdF
+bnRpdHlDbGFzcyA9IEpOSUhlbHBlcjo6RmluZENsYXNzU2FmZSgiTG5ldC9t
+aW5lY3JhZnQvY2xhc3NfMTMwOTsiLCAibmV0L21pbmVjcmFmdC9lbnRpdHkv
+TGl2aW5nRW50aXR5Iik7CiAgICAgICAgcmVuZGVyZXJDbGFzcyA9IEpOSUhl
+bHBlcjo6RmluZENsYXNzU2FmZSgiTG5ldC9taW5lY3JhZnQvY2xhc3NfNzU3
+OyIsICJuZXQvbWluZWNyYWZ0L2NsaWVudC9yZW5kZXIvR2FtZVJlbmRlcmVy
+Iik7CiAgICAgICAgY2FtZXJhQ2xhc3MgPSBKTklIZWxwZXI6OkZpbmRDbGFz
+c1NhZmUoIkxuZXQvbWluZWNyYWZ0L2NsYXNzXzQxODQ7IiwgIm5ldC9taW5l
+Y3JhZnQvY2xpZW50L3JlbmRlci9DYW1lcmEiKTsKICAgICAgICB2ZWMzZENs
+YXNzID0gSk5JSGVscGVyOjpGaW5kQ2xhc3NTYWZlKCJMbmV0L21pbmVjcmFm
+dC9jbGFzc18yNDM7IiwgIm5ldC9taW5lY3JhZnQvdXRpbC9tYXRoL1ZlYzNk
+Iik7CiAgICAgICAgbWF0cml4Q2xhc3MgPSBKTklIZWxwZXI6OkZpbmRDbGFz
+c1NhZmUoIkxvcmcvam9tbC9NYXRyaXg0ZjsiLCAib3JnL2pvbWwvTWF0cml4
+NGYiKTsKICAgICAgICB0ZXh0Q2xhc3MgPSBKTklIZWxwZXI6OkZpbmRDbGFz
+c1NhZmUoIkxuZXQvbWluZWNyYWZ0L2NsYXNzXzI1NjE7IiwgIm5ldC9taW5l
+Y3JhZnQvdGV4dC9UZXh0Iik7CgogICAgICAgIGlmIChtY0NsYXNzICYmIHdv
+cmxkQ2xhc3MgJiYgZW50aXR5Q2xhc3MgJikgcmVuZGVyZXJDbGFzcyAmJiBj
+YW1lcmFDbGFzcyAmJiB2ZWMzZENsYXNzICYmIG1hdHJpeENsYXNzKSB7CiAg
+ICAgICAgICAgIGJyZWFrOwogICAgICAgIH0KCiAgICAgICAgc3RkOjp0aGlz
+X3RocmVhZDo6c2xlZXBfZm9yKHN0ZDo6Y2hyb25vOjptaWxsaXNlY29uZHMo
+NTAwKSk7CiAgICAgICAgcmV0cmllcysrOwogICAgfQoKICAgIGlmICghbWND
+bGFzcyB8fCAhd29ybGRDbGFzcyB8fCAhZW50aXR5Q2xhc3MgfHwgIXJlbmRl
+cmVyQ2xhc3MgfHwgIWNhbWVyYUNsYXNzIHx8ICF2ZWMzZENsYXNzIHx8ICFt
+YXRyaXhDbGFzcykgewogICAgICAgIHN0ZDo6Y291dCA8PCAiW011c3R5Q2xp
+ZW50XSBGYWlsZWQgdG8gcmVzb2x2ZSBvYmZ1c2NhdGVkIGNsYXNzZXMuIiA8
+PCBzdGQ6OmVuZGw7CiAgICAgICAgSk5JSGVscGVyOjp2bS0+RGV0YWNoQ3Vy
+cmVudFRocmVhZCgpOwogICAgICAgIHJldHVybjsKICAgIH0KCiAgICBqZmll
+bGRJRCBpbnN0YW5jZUZpZWxkID0gSk5JSGVscGVyOjpHZXRTdGF0aWNGaWVs
+ZFNhZmUobWNDbGFzcywgImZpZWxkXzE3MDAiLCAiTG5ldC9taW5lY3JhZnQv
+Y2xhc3NfMzEwOyIsICJpbnN0YW5jZSIpOwogICAgamZpZWxkSUQgbG9jYWxQ
+bGF5ZXJGaWVsZCA9IEpOSUhlbHBlcjo6R2V0RmllbGRTYWZlKG1jQ2xhc3Ms
+ICJmaWVsZF8xNzI0IiwgIkxuZXQvbWluZWNyYWZ0L2NsYXNzXzc0NjsiLCAi
+cGxheWVyIik7CiAgICBqZmllbGRJRCB3b3JsZEZpZWxkID0gSk5JSGVscGVy
+OjpHZXRGaWVsZFNhZmUobWNDbGFzcywgImZpZWxkXzE2ODciLCAiTG5ldC9t
+aW5lY3JhZnQvY2xhc3NfNjM4OyIsICJ3b3JsZCIpOwogICAgamZpZWxkSUQg
+cmVuZGVyZXJGaWVsZCA9IEpOSUhlbHBlcjo6R2V0RmllbGRTYWZlKG1jQ2xh
+c3MsICJmaWVsZF8xNzczIiwgIkxuZXQvbWluZWNyYWZ0L2NsYXNzXzc1Nzsi
+LCAiZ2FtZVJlbmRlcmVyIik7CgogICAgamZpZWxkSUQgcGxheWVyc0ZpZWxk
+ID0gSk5JSGVscGVyOjpHZXRGaWVsZFNhZmUod29ybGRDbGFzcywgImZpZWxk
+XzE4MjI2IiwgIkxqYXZhL3V0aWwvTGlzdDsiLCAicGxheWVycyIpOwogICAg
+amNsYXNzIGxpc3RDbGFzcyA9IGVudi0+RmluZENsYXNzKCJqYXZhL3V0aWwv
+TGlzdCIpOwogICAgam1ldGhvZElEIGxpc3RTaXplID0gZW52LT5HZXRNZXRo
+b2RJRChsaXN0Q2xhc3MsICJzaXplIiwgIigpSSIpOwogICAgam1ldGhvZElE
+IGxpc3RHZXQgPSBlbnYtPkdldE1ldGhvZElEKGxpc3RDbGFzcywgImdldCIs
+ICIoSSlMamF2YS9sYW5nL09iamVjdDsiKTsKCiAgICBqZmllbGRJRCBlbnRY
+ID0gSk5JSGVscGVyOjpHZXRGaWVsZFNhZmUoZW50aXR5Q2xhc3MsICJmaWVs
+ZF82MDE0IiwgIkQiLCAieCIpOwogICAgamZpZWxkSUQgZW50WSA9IEpOSUhl
+bHBlcjo6R2V0RmllbGRTYWZlKGVudGl0eUNsYXNzLCAiZmllbGRfNjAzNiIs
+ICJEIiwgInkiKTsKICAgIGpmaWVsZElEIGVudFogPSBKTklIZWxwZXI6Okdl
+dEZpZWxkU2FmZShlbnRpdHlDbGFzcywgImZpZWxkXzU5NjkiLCAiRCIsICJ6
+Iik7CgogICAgam1ldGhvZElEIGdldE5hbWVNZXRob2QgPSBKTklIZWxwZXI6
+OkdldE1ldGhvZFNhZmUoZW50aXR5Q2xhc3MsICJtZXRob2RfNTQ3NyIsICIo
+KUxuZXQvbWluZWNyYWZ0L2NsYXNzXzI1NjE7IiwgImdldE5hbWUiKTsKICAg
+IGptZXRob2RJRCBnZXRTdHJpbmdNZXRob2QgPSBudWxscHRyOwogICAgaWYg
+KHRleHRDbGFzcykgZ2V0U3RyaW5nTWV0aG9kID0gSk5JSGVscGVyOjpHZXRN
+ZXRob2RTYWZlKHRleHRDbGFzcywgIm1ldGhvZF8xMDg1MSIsICIoKUxqYXZh
+L2xhbmcvU3RyaW5nOyIsICJnZXRTdHJpbmciKTsKCiAgICBqbWV0aG9kSUQg
+Z2V0SGVhbHRoID0gbnVsbHB0ciwgZ2V0TWF4SGVhbHRoID0gbnVsbHB0cjsK
+ICAgIGlmIChsaXZpbmdFbnRpdHlDbGFzcykgewogICAgICAgIGdldEhlYWx0
+aCA9IEpOSUhlbHBlcjo6R2V0TWV0aG9kU2FmZShsaXZpbmdFbnRpdHlDbGFz
+cywgIm1ldGhvZF82MDMyIiwgIigpRiIsICJnZXRIZWFsdGgiKTsKICAgICAg
+ICBnZXRNYXhIZWFsdGggPSBKTklIZWxwZXI6OkdldE1ldGhvZFNhZmUobGl2
+aW5nRW50aXR5Q2xhc3MsICJtZXRob2RfNjA2MyIsICIoKUYiLCAiZ2V0TWF4
+SGVhbHRoIik7CiAgICB9CgogICAgamZpZWxkSUQgY2FtRmllbGQgPSBKTklI
+ZWxwZXI6OkdldEZpZWxkU2FmZShyZW5kZXJlckNsYXNzLCAibHVuYXIkc2F2
+ZWRDYW1lcmEiLCAiTG5ldC9taW5lY3JhZnQvY2xhc3NfNDE4NDsiLCAiY2Ft
+ZXJhIik7CiAgICBqZmllbGRJRCBtb2RlbFZpZXdGaWVsZCA9IEpOSUhlbHBl
+cjo6R2V0RmllbGRTYWZlKHJlbmRlcmVyQ2xhc3MsICJsdW5hciRzYXZlZE1v
+ZGVsVmlldyR2MV8xOV8zIiwgIkxvcmcvam9tbC9NYXRyaXg0ZjsiLCAibW9k
+ZWxWaWV3Iik7CiAgICBqZmllbGRJRCBwcm9qRmllbGQgPSBKTklIZWxwZXI6
+OkdldEZpZWxkU2FmZShyZW5kZXJlckNsYXNzLCAibHVuYXIkc2F2ZWRQcm9q
+ZWN0aW9uJHYxXzE5XzMiLCAiTG9yZy9qb21sL01hdHJpeDRmOyIsICJwcm9q
+ZWN0aW9uIik7CiAgICBqZmllbGRJRCBjYW1Qb3NGaWVsZCA9IEpOSUhlbHBl
+cjo6R2V0RmllbGRTYWZlKGNhbWVyYUNsYXNzLCAiZmllbGRfMTg3MTIiLCAi
+TG5ldC9taW5lY3JhZnQvY2xhc3NfMjQzOyIsICJwb3MiKTsKCiAgICBqZmll
+bGRJRCB2ZWMzZEZpZWxkc1szXTsKICAgIGludCB2ZWNJZHggPSAwOwogICAg
+amludCBmQ291bnQ7IGpmaWVsZElEKiBmZHM7CiAgICBKTklIZWxwZXI6Omp2
+bXRpLT5HZXRDbGFzc0ZpZWxkcyh2ZWMzZENsYXNzLCAmZkNvdW50LCAmZmRz
+KTsKICAgIGZvciAoaW50IGkgPSAwOyBpIDwgZkNvdW50OyBpKyspIHsKICAg
+ICAgICBjaGFyKiBzaWc7CiAgICAgICAgSk5JSGVscGVyOjpqdm10aS0+R2V0
+RmllbGROYW1lKHZlYzNkQ2xhc3MsIGZkc1tpXSwgbnVsbHB0ciwgJnNpZywg
+bnVsbHB0cik7CiAgICAgICAgaWYgKHN0cmNtcChzaWcsICJEIikgPT0gMCAm
+JiB2ZWNJZHggPCAzKSB2ZWMzZEZpZWxkc1t2ZWNJZHgrK10gPSBmZHNbaV07
+CiAgICAgICAgSk5JSGVscGVyOjpqdm10aS0+RGVhbGxvY2F0ZSgodW5zaWdu
+ZWQgY2hhciopc2lnKTsKICAgIH0KICAgIEpOSUhlbHBlcjo6anZtdGktPkRl
+YWxsb2NhdGUoKHVuc2lnbmVkIGNoYXIqKWZkcyk7CgogICAgY29uc3QgY2hh
+ciogbU5hbWVzW10gPSB7ICJtMDAiLCJtMDEiLCJtMDIiLCJtMDMiLCAibTEw
+IiwibTExIiwibTEyIiwibTEzIiwgIm0yMCIsIm0yMSIsIm0yMiIsIm0yMyIs
+ICJtMzAiLCJtMzEiLCJtMzIiLCJtMzMiIH07CiAgICBqZmllbGRJRCBtYXRy
+aXhGaWVsZHNbMTZdOwogICAgZm9yIChpbnQgaSA9IDA7IGkgPCAxNjsgaSsr
+KSBtYXRyaXhGaWVsZHNbaV0gPSBlbnYtPkdldEZpZWxkSUQobWF0cml4Q2xh
+c3MsIG1OYW1lc1tpXSwgIkYiKTsKCiAgICB3aGlsZSAocnVubmluZykgewog
+ICAgICAgIE1TRyBtc2c7CiAgICAgICAgd2hpbGUgKFBlZWtNZXNzYWdlKCZt
+c2csIE5VTEwsIDAsIDAsIFBNX1JFTU9WRSkpIHsKICAgICAgICAgICAgVHJh
+bnNsYXRlTWVzc2FnZSgmbXNnKTsKICAgICAgICAgICAgRGlzcGF0Y2hNZXNz
+YWdlKCZtc2cpOwogICAgICAgIH0KICAgICAgICAKICAgICAgICBHZXRXaW5k
+b3dSZWN0KG1jV2luZG93LCAmcmVjdCk7CiAgICAgICAgaW50IHdpZHRoID0g
+cmVjdC5yaWdodCAtIHJlY3QubGVmdDsKICAgICAgICBpbnQgaGVpZ2h0ID0g
+cmVjdC5ib3R0b20gLSByZWN0LnRvcDsKICAgICAgICBNb3ZlV2luZG93KG92
+ZXJsYXlXaW5kb3csIHJlY3QubGVmdCwgcmVjdC50b3AsIHdpZHRoLCBoZWln
+aHQsIHRydWUpOwoKICAgICAgICBpZiAoR2V0QXN5bmNLZXlTdGF0ZShWS19P
+RU1fNCkgJiAweDgwMDApIHsKICAgICAgICAgICAgaWYgKCFpbnNlcnRQcmVz
+c2VkKSB7CiAgICAgICAgICAgICAgICBndWlPcGVuID0gIWd1aU9wZW47CiAg
+ICAgICAgICAgICAgICBpbnNlcnRQcmVzc2VkID0gdHJ1ZTsKICAgICAgICAg
+ICAgICAgIExPTkdfUFRSIHN0eWxlID0gR2V0V2luZG93TG9uZ1B0ckEob3Zl
+cmxheVdpbmRvdywgR1dMX0VYU1RZTEUpOwogICAgICAgICAgICAgICAgaWYg
+KGd1aU9wZW4pIHsKICAgICAgICAgICAgICAgICAgICBTZXRXaW5kb3dMb25n
+UHRyQShvdmVybGF5V2luZG93LCBHV0xfRVhTVFlMRSwgc3R5bGUgJiB+V1Nf
+RVhfVFJBTlNQQVJFTlQpOwogICAgICAgICAgICAgICAgICAgIFNldEZvcmVn
+cm91bmRXaW5kb3cob3ZlcmxheVdpbmRvdyk7CiAgICAgICAgICAgICAgICB9
+IGVsc2UgewogICAgICAgICAgICAgICAgICAgIFNldFdpbmRvd0xvbmdQdHJB
+KG92ZXJsYXlXaW5kb3csIEdXTF9FWFNUWUxFLCBzdHlsZSB8IFdTX0VYX1RS
+QU5TUEFSRU5UKTsKICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgfQog
+ICAgICAgIH0gZWxzZSB7CiAgICAgICAgICAgIGluc2VydFByZXNzZWQgPSBm
+YWxzZTsKICAgICAgICB9CgogICAgICAgIFBPSU5UIGN1cnNvclBvcyA9IHsw
+LCAwfTsKICAgICAgICBHZXRDdXJzb3JQb3MoJmN1cnNvclBvcyk7CiAgICAg
+ICAgU2NyZWVuVG9DbGllbnQob3ZlcmxheVdpbmRvdywgJmN1cnNvclBvcyk7
+CiAgICAgICAgCiAgICAgICAgYm9vbCBpc0NsaWNrZWQgPSAoR2V0QXN5bmNL
+ZXlTdGF0ZShWS19MQlVUVE9OKSAmIDB4ODAwMCkgIT0gMDsKICAgICAgICBi
+b29sIGNsaWNrQWN0aW9uID0gaXNDbGlja2VkICYmICF3YXNDbGlja2VkOwog
+ICAgICAgIHdhc0NsaWNrZWQgPSBpc0NsaWNrZWQ7CgogICAgICAgIGJvb2wg
+aXNSaWdodENsaWNrZWQgPSAoR2V0QXN5bmNLZXlTdGF0ZShWS19SQlVUVE9O
+KSAmIDB4ODAwMCkgIT0gMDsKICAgICAgICBib29sIHJpZ2h0Q2xpY2tBY3Rp
+b24gPSBpc1JpZ2h0Q2xpY2tlZCAmJiAhd2FzUmlnaHRDbGlja2VkOwogICAg
+ICAgIHdhc1JpZ2h0Q2xpY2tlZCA9IGlzUmlnaHRDbGlja2VkOwoKICAgICAg
+ICBIREMgaGRjID0gR2V0REMob3ZlcmxheVdpbmRvdyk7CiAgICAgICAgSERD
+IG1lbURDID0gQ3JlYXRlQ29tcGF0aWJsZURDKGhkYyk7CiAgICAgICAgSEJJ
+VE1BUCBtZW1CaXRtYXAgPSBDcmVhdGVDb21wYXRpYmxlQml0bWFwKGhkYywg
+d2lkdGgsIGhlaWdodCk7CiAgICAgICAgSEdESU9CSiBvbGRCaXRtYXAgPSBT
+ZWxlY3RPYmplY3QobWVtREMsIG1lbUJpdG1hcCk7CgogICAgICAgIFJFQ1Qg
+Y2xpZW50UmVjdCA9IHsgMCwgMCwgd2lkdGgsIGhlaWdodCB9OwogICAgICAg
+IEhCUlVTSCBiZ0JydXNoID0gQ3JlYXRlU29saWRCcnVzaChSR0IoMCwgMCwg
+MCkpOwogICAgICAgIEZpbGxSZWN0KG1lbURDLCAmY2xpZW50UmVjdCwgYmdC
+cnVzaCk7CiAgICAgICAgRGVsZXRlT2JqZWN0KGJnQnJ1c2gpOwoKICAgICAg
+ICBHcmFwaGljcyBnKG1lbURDKTsKICAgICAgICBnLlNldFNtb290aGluZ01v
+ZGUoU21vb3RoaW5nTW9kZUFudGlBbGlhcyk7CiAgICAgICAgZy5TZXRUZXh0
+UmVuZGVyaW5nSGludChUZXh0UmVuZGVyaW5nSGludEFudGlBbGlhcyk7Cgog
+ICAgICAgIGpvYmplY3QgbWNJbnN0YW5jZSA9IGVudi0+R2V0U3RhdGljT2Jq
+ZWN0RmllbGQobWNDbGFzcywgaW5zdGFuY2VGaWVsZCk7CiAgICAgICAgaWYg
+KG1jSW5zdGFuY2UpIHsKICAgICAgICAgICAgam9iamVjdCBsb2NhbFBsYXll
+ciA9IGVudi0+R2V0T2JqZWN0RmllbGQobWNJbnN0YW5jZSwgbG9jYWxQbGF5
+ZXJGaWVsZCk7CiAgICAgICAgICAgIGpvYmplY3QgcmVuZGVyZXIgPSBlbnYt
+PkdldE9iamVjdEZpZWxkKG1jSW5zdGFuY2UsIHJlbmRlcmVyRmllbGQpOwog
+ICAgICAgICAgICBqb2JqZWN0IHdvcmxkID0gZW52LT5HZXRPYmplY3RGaWVs
+ZChtY0luc3RhbmNlLCB3b3JsZEZpZWxkKTsKCiAgICAgICAgICAgIGlmIChy
+ZW5kZXJlciAmJiB3b3JsZCkgewogICAgICAgICAgICAgICAgam9iamVjdCBj
+YW1lcmEgPSBlbnYtPkdldE9iamVjdEZpZWxkKHJlbmRlcmVyLCBjYW1GaWVs
+ZCk7CiAgICAgICAgICAgICAgICBqb2JqZWN0IG1vZGVsVmlld09iaiA9IGVu
+di0+R2V0T2JqZWN0RmllbGQocmVuZGVyZXIsIG1vZGVsVmlld0ZpZWxkKTsK
+ICAgICAgICAgICAgICAgIGpvYmplY3QgcHJvak9iaiA9IGVudi0+R2V0T2Jq
+ZWN0RmllbGQocmVuZGVyZXIsIHByb2pGaWVsZCk7CiAgICAgICAgICAgICAg
+ICBqb2JqZWN0IHBsYXllcnNMaXN0ID0gZW52LT5HZXRPYmplY3RGaWVsZCh3
+b3JsZCwgcGxheWVyc0ZpZWxkKTsKCiAgICAgICAgICAgICAgICBpZiAoY2Ft
+ZXJhICYmIG1vZGVsVmlld09iaiAmJiBwcm9qT2JqICYmIHBsYXllcnNMaXN0
+KSB7CiAgICAgICAgICAgICAgICAgICAgam9iamVjdCBjYW1Qb3NPYmogPSBl
+bnYtPkdldE9iamVjdEZpZWxkKGNhbWVyYSwgY2FtUG9zRmllbGQpOwogICAg
+ICAgICAgICAgICAgICAgIFZlYzMgY2FtUG9zID0gewogICAgICAgICAgICAg
+ICAgICAgICAgICBlbnYtPkdldERvdWJsZUZpZWxkKGNhbVBvc09iaiwgdmVj
+M2RGaWVsZHNbMF0pLAogICAgICAgICAgICAgICAgICAgICAgICBlbnYtPkdl
+dERvdWJsZUZpZWxkKGNhbVBvc09iaiwgdmVjM2RGaWVsZHNbMV0pLAogICAg
+ICAgICAgICAgICAgICAgICAgICBlbnYtPkdldERvdWJsZUZpZWxkKGNhbVBv
+c09iaiwgdmVjM2RGaWVsZHNbMl0pCiAgICAgICAgICAgICAgICAgICAgfTsK
+ICAgICAgICAgICAgICAgICAgICBlbnYtPkRlbGV0ZUxvY2FsUmVmKGNhbVBv
+c09iaik7CgogICAgICAgICAgICAgICAgICAgIGZsb2F0IG12WzE2XSwgcFsx
+Nl07CiAgICAgICAgICAgICAgICAgICAgZm9yIChpbnQgaSA9IDA7IGkgPCAx
+NjsgaSsrKSB7CiAgICAgICAgICAgICAgICAgICAgICAgIG12W2ldID0gZW52
+LT5HZXRGbG9hdEZpZWxkKG1vZGVsVmlld09iaiwgbWF0cml4RmllbGRzW2ld
+KTsKICAgICAgICAgICAgICAgICAgICAgICAgcFtpXSA9IGVudi0+R2V0Rmxv
+YXRGaWVsZChwcm9qT2JqLCBtYXRyaXhGaWVsZHNbaV0pOwogICAgICAgICAg
+ICAgICAgICAgIH0KCiAgICAgICAgICAgICAgICAgICAgamludCBzaXplID0g
+ZW52LT5DYWxsSW50TWV0aG9kKHBsYXllcnNMaXN0LCBsaXN0U2l6ZSk7CiAg
+ICAgICAgICAgICAgICAgICAgZm9yIChpbnQgaSA9IDA7IGkgPCBzaXplOyBp
+KyspIHsKICAgICAgICAgICAgICAgICAgICAgICAgam9iamVjdCBwbGF5ZXIg
+PSBlbnYtPkNhbGxPYmplY3RNZXRob2QocGxheWVyc0xpc3QsIGxpc3RHZXQs
+IGkpOwogICAgICAgICAgICAgICAgICAgICAgICBpZiAoIXBsYXllcikgY29u
+dGludWU7CgogICAgICAgICAgICAgICAgICAgICAgICBpZiAobG9jYWxQbGF5
+ZXIgJiYgZW52LT5Jc1NhbWVPYmplY3QocGxheWVyLCBsb2NhbFBsYXllcikp
+IHsKICAgICAgICAgICAgICAgICAgICAgICAgICAgIGVudi0+RGVsZXRlTG9j
+YWxSZWYocGxheWVyKTsKICAgICAgICAgICAgICAgICAgICAgICAgICAgIGNv
+bnRpbnVlOwogICAgICAgICAgICAgICAgICAgICAgICB9CgogICAgICAgICAg
+ICAgICAgICAgICAgICBWZWMzIGZlZXRQb3MgPSB7CiAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICBlbnYtPkdldERvdWJsZUZpZWxkKHBsYXllciwgZW50
+WCksCiAgICAgICAgICAgICAgICAgICAgICAgICAgICBlbnYtPkdldERvdWJs
+ZUZpZWxkKHBsYXllciwgZW50WSksCiAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICBlbnYtPkdldERvdWJsZUZpZWxkKHBsYXllciwgZW50WikKICAgICAg
+ICAgICAgICAgICAgICAgICAgfTsKCiAgICAgICAgICAgICAgICAgICAgICAg
+IGRvdWJsZSBkaXN0YW5jZSA9IHN0ZDo6c3FydChzdGQ6OnBvdyhjYW1Qb3Mu
+eCAtIGZlZXRQb3MueCwgMikgKyBzdGQ6OnBvdyhjYW1Qb3MueSAtIGZlZXRQ
+b3MueSwgMikgKyBzdGQ6OnBvdyhjYW1Qb3MueiAtIGZlZXRQb3MueiwgMikp
+OwoKICAgICAgICAgICAgICAgICAgICAgICAgaWYgKGRpc3RhbmNlIDw9IGVz
+cFJhbmdlKSB7CiAgICAgICAgICAgICAgICAgICAgICAgICAgICBWZWMzIGhl
+YWRQb3MgPSBmZWV0UG9zOwogICAgICAgICAgICAgICAgICAgICAgICAgICAg
+aGVhZFBvcy55ICs9IDIuMDsKCiAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICBWZWMyIHNjcmVlbkZlZXQsIHNjcmVlbkhlYWQ7CiAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICBpZiAoV29ybGRUb1NjcmVlbihmZWV0UG9zLCBjYW1Q
+b3MsIG12LCBwLCBzY3JlZW5GZWV0LCB3aWR0aCwgaGVpZ2h0KSAmJgogICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgIFdvcmxkVG9TY3JlZW4oaGVh
+ZFBvcywgY2FtUG9zLCBtdiwgcCwgc2NyZWVuSGVhZCwgd2lkdGgsIGhlaWdo
+dCkpIHsKCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgZmxvYXQg
+Ym94SGVpZ2h0ID0gc2NyZWVuRmVldC55IC0gc2NyZWVuSGVhZC55OwogICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgIGZsb2F0IGJveFdpZHRoID0g
+Ym94SGVpZ2h0IC8gMi4wZjsKICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICBmbG9hdCBib3hYID0gc2NyZWVuSGVhZC54IC0gYm94V2lkdGggLyAy
+LjBmOwogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGZsb2F0IGJv
+eFkgPSBzY3JlZW5IZWFkLnk7CgogICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgIC8vIERyYXcgM0QgQm94IEVTUAogICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgIERyYXczREJveChnLCBmZWV0UG9zLCAwLjZmLCAxLjhm
+LCBjYW1Qb3MsIG12LCBwLCB3aWR0aCwgaGVpZ2h0LCBDb2xvcigyNTUsIDQ2
+LCAyMDQsIDExMykpOwoKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICBmbG9hdCBocCA9IDIwLjBmLCBtYXhIcCA9IDIwLjBmOwogICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgIGlmIChnZXRIZWFsdGggJiYgZ2V0TWF4
+SGVhbHRoKSB7CiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+IGhwID0gZW52LT5DYWxsRmxvYXRNZXRob2QocGxheWVyLCBnZXRIZWFsdGgp
+OwogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBtYXhIcCA9
+IGVudi0+Q2FsbEZsb2F0TWV0aG9kKHBsYXllciwgZ2V0TWF4SGVhbHRoKTsK
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICB9CgogICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgIHN0ZDo6d3N0cmluZyBwbGF5ZXJOYW1l
+ID0gTCJVbmtub3duIjsKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICBpZiAoZ2V0TmFtZU1ldGhvZCAmJiBnZXRTdHJpbmdNZXRob2QpIHsKICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgam9iamVjdCB0ZXh0
+T2JqID0gZW52LT5DYWxsT2JqZWN0TWV0aG9kKHBsYXllciwgZ2V0TmFtZU1l
+dGhvZCk7CiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGlm
+ICh0ZXh0T2JqKSB7CiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICBqc3RyaW5nIG5hbWVTdHIgPSAianN0cmluZyllbnYtPkNhbGxP
+YmplY3RNZXRob2QodGV4dE9iaiwgZ2V0U3RyaW5nTWV0aG9kKTsKICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGlmIChuYW1lU3Ry
+KSB7CiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgY29uc3QgamNoYXIqIHJhd05hbWUgPSBlbnYtPkdldFN0cmluZ0NoYXJz
+KG5hbWVTdHIsIG51bGxwdHIpOwogICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgIGpzaXplIGxlbiA9IGVudi0+R2V0U3RyaW5n
+TGVuZ3RoKG5hbWVTdHIpOwogICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgIHBsYXllck5hbWUgPSBzdGQ6OndzdHJpbmcoKGNv
+bnN0IHdjaGFyX3QqKXJhd05hbWUsIGxlbik7CiAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgZW52LT5SZWxlYXNlU3RyaW5n
+Q2hhcnMobmFtZVN0ciwgcmF3TmFtZSk7CiAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgZW52LT5EZWxldGVMb2NhbFJlZihu
+YW1lU3RyKTsKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgIH0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+IGVudi0+RGVsZXRlTG9jYWxSZWYodGV4dE9iaik7CiAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICB9CgogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+IC8vIFBhc3MgdHJ1ZSB0byBkcmF3IHRyYWNlcnMKICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICBEcmF3UHJvZmVzc2lvbmFsRVNQKGcsIGJveFgs
+IGJveFksIGJveFdpZHRoLCBib3hIZWlnaHQsIGhwLCBtYXhIcCwgd2lkdGgs
+IGhlaWdodCwgcGxheWVyTmFtZSwgZGlzdGFuY2UsIHRydWUpOwogICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgfQogICAgICAgICAgICAgICAgICAgICAg
+ICB9CiAgICAgICAgICAgICAgICAgICAgICAgIGVudi0+RGVsZXRlTG9jYWxS
+ZWYocGxheWVyKTsKICAgICAgICAgICAgICAgICAgICB9CiAgICAgICAgICAg
+ICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgLy8gRHJhdyBYLVJheSBC
+bG9ja3MKICAgICAgICAgICAgICAgICAgICBYUmF5KiB4cmF5ID0gKFhSYXkq
+KU1vZHVsZU1hbmFnZXI6OkdldE1vZHVsZSgiWFJheSIpOwogICAgICAgICAg
+ICAgICAgICAgIGlmICh4cmF5ICYmIHhyYXktPklzRW5hYmxlZCgpKSB7CiAg
+ICAgICAgICAgICAgICAgICAgICAgIGZvciAoY29uc3QgYXV0byYgYmxvY2sg
+OiB4cmF5LT5HZXRGb3VuZEJsb2NrcygpKSB7CiAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICBWZWMzIGJsb2NrUG9zID0geyAoZG91YmxlKWJsb2NrLngg
+KyAwLjUsIChkb3VibGUpYmxvY2sueSArIDAuNSwgKGRvdWJsZSlibG9jay56
+ICsgMC41IH07CiAgICAgICAgICAgICAgICAgICAgICAgICAgICBkb3VibGUg
+ZGlzdGFuY2UgPSBzdGQ6OnNxcnQoc3RkOjpwb3coY2FtUG9zLnggLSBibG9j
+a1Bvcy54LCAyKSArIHN0ZDo6cG93KGNhbVBvcy55IC0gYmxvY2tQb3MueSwg
+MikgKyBzdGQ6OnBvdyhjYW1Qb3MueiAtIGJsb2NrUG9zLnosIDIpKTsKICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgaWYgKGRpc3RhbmNlIDw9IGVzcFJhbmdlKSB7CiAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgRHJhdzNEQm94KGcsIHsgKGRvdWJs
+ZSlibG9jay54LCAoZG91YmxlKWJsb2NrLnksIChkb3VibGUpYmxvY2sueiB9
+LCAxLjBmLCAxLjBmLCBjYW1Qb3MsIG12LCBwLCB3aWR0aCwgaGVpZ2h0LCBD
+b2xvcigyNTUsIGJsb2NrLnIsIGJsb2NrLmcsIGJsb2NrLmIpKTsKICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgICAgICAgICAg
+ICAgfQogICAgICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgICAgIH0K
+ICAgICAgICAgICAgICAgIGlmIChjYW1lcmEpIGVudi0+RGVsZXRlTG9jYWxS
+ZWYoY2FtZXJhKTsKICAgICAgICAgICAgICAgIGlmIChtb2RlbFZpZXdPYmop
+IGVudi0+RGVsZXRlTG9jYWxSZWYobW9kZWxWaWV3T2JqKTsKICAgICAgICAg
+ICAgICAgIGlmIChwcm9qT2JqKSBlbnYtPkRlbGV0ZUxvY2FsUmVmKHByb2pP
+YmopOwogICAgICAgICAgICAgICAgaWYgKHBsYXllcnNMaXN0KSBlbnYtPkRl
+bGV0ZUxvY2FsUmVmKHBsYXllcnNMaXN0KTsKICAgICAgICAgICAgfQogICAg
+ICAgICAgICBpZiAocmVuZGVyZXIpIGVudi0+RGVsZXRlTG9jYWxSZWYocmVu
+ZGVyZXIpOwogICAgICAgICAgICBpZiAod29ybGQpIGVudi0+RGVsZXRlTG9j
+YWxSZWYod29ybGQpOwogICAgICAgICAgICBpZiAobG9jYWxQbGF5ZXIpIGVu
+di0+RGVsZXRlTG9jYWxSZWYobG9jYWxQbGF5ZXIpOwogICAgICAgICAgICBl
+bnYtPkRlbGV0ZUxvY2FsUmVmKG1jSW5zdGFuY2UpOwogICAgICAgIH0KCiAg
+ICAgICAgaWYgKGd1aU9wZW4pIHsKICAgICAgICAgICAgRHJhd0dVSShnLCBj
+dXJzb3JQb3MueCwgY3Vyc29yUG9zLnksIGNsaWNrQWN0aW9uLCByaWdodENs
+aWNrQWN0aW9uKTsKICAgICAgICB9CgogICAgICAgIEJpdEJsdChoZGMsIDAs
+IDAsIHdpZHRoLCBoZWlnaHQsIG1lbURDLCAwLCAwLCBTUkNDT1BZKTsKCiAg
+ICAgICAgU2VsZWN0T2JqZWN0KG1lbURDLCBvbGRCaXRtYXApOwogICAgICAg
+IERlbGV0ZU9iamVjdChtZW1CaXRtYXApOwogICAgICAgIERlbGV0ZURDKG1l
+bURDKTsKICAgICAgICBSZWxlYXNlREMob3ZlcmxheVdpbmRvdywgaGRjKTsK
+CiAgICAgICAgc3RkOjp0aGlzX3RocmVhZDo6c2xlZXBfZm9yKHN0ZDo6Y2hy
+b25vOjptaWxsaXNlY29uZHMoMTYpKTsKICAgIH0KCiAgICBKTklIZWxwZXI6
+OnZtLT5EZXRhY2hDdXJyZW50VGhyZWFkKCk7CiAgICBEZXN0cm95V2luZG93
+KG92ZXJsYXlXaW5kb3cpOwogICAgR2RpcGx1c1NodXRkb3duKGdkaXBsdXNU
+b2tlbik7Cn0K
