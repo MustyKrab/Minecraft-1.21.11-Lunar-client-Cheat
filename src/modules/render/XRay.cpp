@@ -1,144 +1,125 @@
-I2luY2x1ZGUgIlhSYXkuaCIKI2luY2x1ZGUgIi4uLy4uL2NvcmUvSk5JSGVs
-cGVyLmgiCiNpbmNsdWRlIDxpb3N0cmVhbT4KI2luY2x1ZGUgPGNzdHJpbmc+
-CgpzdGF0aWMgYm9vbCB4cmF5TWFwcGluZ3NMb2FkZWQgPSBmYWxzZTsKc3Rh
-dGljIGpjbGFzcyBtY0NsYXNzLCB3b3JsZENsYXNzLCBibG9ja1Bvc0NsYXNz
-LCBibG9ja1N0YXRlQ2xhc3MsIGJsb2NrQ2xhc3MsIHJlZ2lzdHJ5Q2xhc3M7
-CnN0YXRpYyBqZmllbGRJRCBpbnN0YW5jZUZpZWxkLCBwbGF5ZXJGaWVsZCwg
-d29ybGRGaWVsZDsKc3RhdGljIGpmaWVsZElEIGVudFgsIGVudFksIGVudFo7
-CnN0YXRpYyBqbWV0aG9kSUQgZ2V0QmxvY2tTdGF0ZU1ldGhvZCwgZ2V0Qmxv
-Y2tNZXRob2QsIGdldFRyYW5zbGF0aW9uS2V5TWV0aG9kOwoKWFJheTo6WFJh
-eSgpIDogTW9kdWxlKCJYUmF5Iikge30KCnZvaWQgWFJheTo6T25UaWNrKCkg
-ewogICAgSk5JRW52KiBlbnYgPSBKTklIZWxwZXI6OmVudjsKICAgIGlmICgh
-ZW52KSByZXR1cm47CgogICAgaWYgKCF4cmF5TWFwcGluZ3NMb2FkZWQpIHsK
-ICAgICAgICBtY0NsYXNzID0gSk5JSGVscGVyOjpGaW5kQ2xhc3NTYWZlKCJM
-bmV0L21pbmVjcmFmdC9jbGFzc18zMTA7IiwgIm5ldC9taW5lY3JhZnQvY2xp
-ZW50L01pbmVjcmFmdENsaWVudCIpOwogICAgICAgIHdvcmxkQ2xhc3MgPSBK
-TklIZWxwZXI6OkZpbmRDbGFzc1NhZmUoIkxuZXQvbWluZWNyYWZ0L2NsYXNz
-XzYzODsiLCAibmV0L21pbmVjcmFmdC9jbGllbnQvd29ybGQvQ2xpZW50V29y
-bGQiKTsKICAgICAgICBibG9ja1Bvc0NsYXNzID0gSk5JSGVscGVyOjpGaW5k
-Q2xhc3NTYWZlKCJMbmV0L21pbmVjcmFmdC9jbGFzc18yMzM4OyIsICJuZXQv
-bWluZWNyYWZ0L3V0aWwvbWF0aC9CbG9ja1BvcyIpOwogICAgICAgIGJsb2Nr
-U3RhdGVDbGFzcyA9IEpOSUhlbHBlcjo6RmluZENsYXNzU2FmZSgiTG5ldC9t
-aW5lY3JhZnQvY2xhc3NfMjY4MDsiLCAibmV0L21pbmVjcmFmdC9ibG9jay9C
-bG9ja1N0YXRlIik7CiAgICAgICAgYmxvY2tDbGFzcyA9IEpOSUhlbHBlcjo6
-RmluZENsYXNzU2FmZSgiTG5ldC9taW5lY3JhZnQvY2xhc3NfMjI0ODsiLCAi
-bmV0L21pbmVjcmFmdC9ibG9jay9CbG9jayIpOwogICAgICAgIHJlZ2lzdHJ5
-Q2xhc3MgPSBKTklIZWxwZXI6OkZpbmRDbGFzc1NhZmUoIkxuZXQvbWluZWNy
-YWZ0L2NsYXNzXzIzNzg7IiwgIm5ldC9taW5lY3JhZnQvcmVnaXN0cnkvUmVn
-aXN0cnkiKTsKCiAgICAgICAgaWYgKCFtY0NsYXNzIHx8ICF3b3JsZENsYXNz
-IHx8ICFibG9ja1Bvc0NsYXNzIHx8ICFibG9ja1N0YXRlQ2xhc3MgfHwgIWJs
-b2NrQ2xhc3MpIHJldHVybjsKCiAgICAgICAgaW5zdGFuY2VGaWVsZCA9IEpO
-SUhlbHBlcjo6R2V0U3RhdGljRmllbGRTYWZlKG1jQ2xhc3MsICJmaWVsZF8x
-NzAwIiwgIkxuZXQvbWluZWNyYWZ0L2NsYXNzXzMxMDsiLCAiaW5zdGFuY2Ui
-KTsKICAgICAgICBwbGF5ZXJGaWVsZCA9IEpOSUhlbHBlcjo6R2V0RmllbGRT
-YWZlKG1jQ2xhc3MsICJmaWVsZF8xNzI0IiwgIkxuZXQvbWluZWNyYWZ0L2Ns
-YXNzXzc0NjsiLCAicGxheWVyIik7CiAgICAgICAgd29ybGRGaWVsZCA9IEpO
-SUhlbHBlcjo6R2V0RmllbGRTYWZlKG1jQ2xhc3MsICJmaWVsZF8xNjg3Iiwg
-IkxuZXQvbWluZWNyYWZ0L2NsYXNzXzYzODsiLCAid29ybGQiKTsKCiAgICAg
-ICAgamNsYXNzIGVudGl0eUNsYXNzID0gSk5JSGVscGVyOjpGaW5kQ2xhc3NT
-YWZlKCJMbmV0L21pbmVjcmFmdC9jbGFzc18xMjk3OyIsICJuZXQvbWluZWNy
-YWZ0L2VudGl0eS9FbnRpdHkiKTsKICAgICAgICBlbnRYID0gSk5JSGVscGVy
-OjpHZXRGaWVsZFNhZmUoZW50aXR5Q2xhc3MsICJmaWVsZF82MDE0IiwgIkQi
-LCAieCIpOwogICAgICAgIGVudFkgPSBKTklIZWxwZXI6OkdldEZpZWxkU2Fm
-ZShlbnRpdHlDbGFzcywgImZpZWxkXzYwMzYiLCAiRCIsICJ5Iik7CiAgICAg
-ICAgZW50WiA9IEpOSUhlbHBlcjo6R2V0RmllbGRTYWZlKGVudGl0eUNsYXNz
-LCAiZmllbGRfNTk2OSIsICJEIiwgInoiKTsKCiAgICAgICAgZ2V0QmxvY2tT
-dGF0ZU1ldGhvZCA9IEpOSUhlbHBlcjo6R2V0TWV0aG9kU2FmZSh3b3JsZENs
-YXNzLCAibWV0aG9kXzgzMjAiLCAiKExuZXQvbWluZWNyYWZ0L2NsYXNzXzIz
-Mzg7KUxuZXQvbWluZWNyYWZ0L2NsYXNzXzI2ODA7IiwgImdldEJsb2NrU3Rh
-dGUiKTsKICAgICAgICBnZXRCbG9ja01ldGhvZCA9IEpOSUhlbHBlcjo6R2V0
-TWV0aG9kU2FmZShibG9ja1N0YXRlQ2xhc3MsICJtZXRob2RfMjYyMDQiLCAi
-KClMbmV0L21pbmVjcmFmdC9jbGFzc18yMjQ4OyIsICJnZXRCbG9jayIpOwog
-ICAgICAgIGdldFRyYW5zbGF0aW9uS2V5TWV0aG9kID0gSk5JSGVscGVyOjpH
-ZXRNZXRob2RTYWZlKGJsb2NrQ2xhc3MsICJtZXRob2RfOTUzOSIsICIoKUxq
-YXZhL2xhbmcvU3RyaW5nOyIsICJnZXRUcmFuc2xhdGlvbktleSIpOwoKICAg
-ICAgICB4cmF5TWFwcGluZ3NMb2FkZWQgPSB0cnVlOwogICAgfQoKICAgIGlm
-ICghaW5zdGFuY2VGaWVsZCB8fCAhd29ybGRGaWVsZCB8fCAhZ2V0QmxvY2tT
-dGF0ZU1ldGhvZCkgcmV0dXJuOwoKICAgIC8vIE9ubHkgc2NhbiBldmVyeSAy
-MCB0aWNrcyAoMSBzZWNvbmQpIHRvIHByZXZlbnQgbWFzc2l2ZSBsYWcKICAg
-IHRpY2tDb3VudGVyKys7CiAgICBpZiAodGlja0NvdW50ZXIgPCAyMCkgcmV0
-dXJuOwogICAgdGlja0NvdW50ZXIgPSAwOwoKICAgIGpvYmplY3QgbWMgPSBl
-bnYtPkdldFN0YXRpY09iamVjdEZpZWxkKG1jQ2xhc3MsIGluc3RhbmNlRmll
-bGQpOwogICAgaWYgKCFtYykgcmV0dXJuOwoKICAgIGpvYmplY3QgcGxheWVy
-ID0gZW52LT5HZXRPYmplY3RGaWVsZChtYywgcGxheWVyRmllbGQpOwogICAg
-am9iamVjdCB3b3JsZCA9IGVudi0+R2V0T2JqZWN0RmllbGQobWMsIHdvcmxk
-RmllbGQpOwoKICAgIGlmICghcGxheWVyIHx8ICF3b3JsZCkgewogICAgICAg
-IGlmIChwbGF5ZXIpIGVudi0+RGVsZXRlTG9jYWxSZWYocGxheWVyKTsKICAg
-ICAgICBpZiAod29ybGQpIGVudi0+RGVsZXRlTG9jYWxSZWYod29ybGQpOwog
-ICAgICAgIGVudi0+RGVsZXRlTG9jYWxSZWYobWMpOwogICAgICAgIHJldHVy
-bjsKICAgIH0KCiAgICBpbnQgcHggPSAoaW50KWVudi0+R2V0RG91YmxlRmll
-bGQocGxheWVyLCBlbnRYKTsKICAgIGludCBweSA9IChpbnQpZW52LT5HZXRE
-b3VibGVGaWVsZChwbGF5ZXIsIGVudFkpOwogICAgaW50IHB6ID0gKGludCll
-bnYtPkdldERvdWJsZUZpZWxkKHBsYXllciwgZW50Wik7CgogICAgc3RkOjp2
-ZWN0b3I8WFJheUJsb2NrPiBuZXdGb3VuZEJsb2NrczsKCiAgICBqbWV0aG9k
-SUQgYmxvY2tQb3NJbml0ID0gZW52LT5HZXRNZXRob2RJRChibG9ja1Bvc0Ns
-YXNzLCAiPGluaXQ+IiwgIihJSUkpViIpOwoKICAgIC8vIFNjYW4gYSAzMngz
-MngzMiBhcmVhIGFyb3VuZCB0aGUgcGxheWVyCiAgICBmb3IgKGludCB4ID0g
-cHggLSBzY2FuUmFkaXVzOyB4IDw9IHB4ICsgc2NhblJhZGl1czsgeCsrKSB7
-CiAgICAgICAgZm9yIChpbnQgeSA9IHB5IC0gc2NhblJhZGl1czsgeSA8PSBw
-eSArIHNjYW5SYWRpdXM7IHkrKykgewogICAgICAgICAgICBpZiAoeSA8IC02
-NCB8fCB5ID4gMzIwKSBjb250aW51ZTsgCiAgICAgICAgICAgIAogICAgICAg
-ICAgICBmb3IgKGludCB6ID0gcHogLSBzY2FuUmFkaXVzOyB6IDw9IHB6ICsg
-c2NhblJhZGl1czsgeisrKSB7CiAgICAgICAgICAgICAgICBqb2JqZWN0IHBv
-c09iaiA9IGVudi0+TmV3T2JqZWN0KGJsb2NrUG9zQ2xhc3MsIGJsb2NrUG9z
-SW5pdCwgeCwgeSwgeik7CiAgICAgICAgICAgICAgICBqb2JqZWN0IHN0YXRl
-T2JqID0gZW52LT5DYWxsT2JqZWN0TWV0aG9kKHdvcmxkLCBnZXRCbG9ja1N0
-YXRlTWV0aG9kLCBwb3NPYmopOwogICAgICAgICAgICAgICAgCiAgICAgICAg
-ICAgICAgICBpZiAoc3RhdGVPYmopIHsKICAgICAgICAgICAgICAgICAgICBq
-b2JqZWN0IGJsb2NrT2JqID0gZW52LT5DYWxsT2JqZWN0TWV0aG9kKHN0YXRl
-T2JqLCBnZXRCbG9ja01ldGhvZCk7CiAgICAgICAgICAgICAgICAgICAgaWYg
-KGJsb2NrT2JqKSB7CiAgICAgICAgICAgICAgICAgICAgICAgIGpzdHJpbmcg
-a2V5U3RyID0gKGpzdHJpbmcpZW52LT5DYWxsT2JqZWN0TWV0aG9kKGJsb2Nr
-T2JqLCBnZXRUcmFuc2xhdGlvbktleU1ldGhvZCk7CiAgICAgICAgICAgICAg
-ICAgICAgICAgIGlmIChrZXlTdHIpIHsKICAgICAgICAgICAgICAgICAgICAg
-ICAgICAgIGNvbnN0IGNoYXIqIHJhd0tleSA9IGVudi0+R2V0U3RyaW5nVVRG
-Q2hhcnMoa2V5U3RyLCBudWxscHRyKTsKICAgICAgICAgICAgICAgICAgICAg
-ICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgaWYgKHN0cnN0
-cihyYXdLZXksICJkaWFtb25kX29yZSIpKSB7CiAgICAgICAgICAgICAgICAg
-ICAgICAgICAgICAgICAgaWYgKHNob3dEaWFtb25kKSBuZXdGb3VuZEJsb2Nr
-cy5wdXNoX2JhY2soe3gsIHksIHosIDAsIDI1NSwgMjU1fSk7IC8vIEN5YW4K
-ICAgICAgICAgICAgICAgICAgICAgICAgICAgIH0gZWxzZSBpZiAoc3Ryc3Ry
-KHJhd0tleSwgImdvbGRfb3JlIikpIHsKICAgICAgICAgICAgICAgICAgICAg
-ICAgICAgICAgICBpZiAoc2hvd0dvbGQpIG5ld0ZvdW5kQmxvY2tzLnB1c2hf
-YmFjayh7eCwgeSwgeiwgMjU1LCAyMTUsIDB9KTsgLy8gR29sZAogICAgICAg
-ICAgICAgICAgICAgICAgICAgICAgfSBlbHNlIGlmIChzdHJzdHIocmF3S2V5
-LCAiaXJvbl9vcmUiKSkgewogICAgICAgICAgICAgICAgICAgICAgICAgICAg
-ICAgIGlmIChzaG93SXJvbikgbmV3Rm91bmRCbG9ja3MucHVzaF9iYWNrKHt4
-LCB5LCB6LCAyMDAsIDIwMCwgMjAwfSk7IC8vIFNpbHZlcgogICAgICAgICAg
-ICAgICAgICAgICAgICAgICAgfSBlbHNlIGlmIChzdHJzdHIocmF3S2V5LCAi
-ZW1lcmFsZF9vcmUiKSkgewogICAgICAgICAgICAgICAgICAgICAgICAgICAg
-ICAgIGlmIChzaG93RW1lcmFsZCkgbmV3Rm91bmRCbG9ja3MucHVzaF9iYWNr
-KHt4LCB5LCB6LCAwLCAyNTUsIDB9KTsgLy8gR3JlZW4KICAgICAgICAgICAg
-ICAgICAgICAgICAgICAgIH0gZWxzZSBpZiAoc3Ryc3RyKHJhd0tleSwgImFu
-Y2llbnRfZGVicmlzIikpIHsKICAgICAgICAgICAgICAgICAgICAgICAgICAg
-ICAgICBpZiAoc2hvd05ldGhlcml0ZSkgbmV3Rm91bmRCbG9ja3MucHVzaF9i
-YWNrKHt4LCB5LCB6LCAxMDAsIDcwLCA3MH0pOyAvLyBEYXJrIEJyb3duCiAg
-ICAgICAgICAgICAgICAgICAgICAgICAgICB9IGVsc2UgaWYgKHN0cnN0cihy
-YXdLZXksICJlbmRlcl9jaGVzdCIpKSB7CiAgICAgICAgICAgICAgICAgICAg
-ICAgICAgICAgICAgaWYgKHNob3dFbmRlckNoZXN0cykgbmV3Rm91bmRCbG9j
-a3MucHVzaF9iYWNrKHt4LCB5LCB6LCAxMjgsIDAsIDEyOH0pOyAvLyBQdXJw
-bGUKICAgICAgICAgICAgICAgICAgICAgICAgICAgIH0gZWxzZSBpZiAoc3Ry
-c3RyKHJhd0tleSwgImNoZXN0IikgfHwgc3Ryc3RyKHJhd0tleSwgImJhcnJl
-bCIpKSB7CiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgaWYgKHNo
-b3dDaGVzdHMpIG5ld0ZvdW5kQmxvY2tzLnB1c2hfYmFjayh7eCwgeSwgeiwg
-MjU1LCAxNjUsIDB9KTsgLy8gT3JhbmdlCiAgICAgICAgICAgICAgICAgICAg
-ICAgICAgICB9IGVsc2UgaWYgKHN0cnN0cihyYXdLZXksICJzcGF3bmVyIikp
-IHsKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBpZiAoc2hvd1Nw
-YXduZXJzKSBuZXdGb3VuZEJsb2Nrcy5wdXNoX2JhY2soe3gsIHksIHosIDI1
-NSwgMCwgMH0pOyAvLyBSZWQKICAgICAgICAgICAgICAgICAgICAgICAgICAg
-IH0gZWxzZSBpZiAoc3Ryc3RyKHJhd0tleSwgImhvcHBlciIpKSB7CiAgICAg
-ICAgICAgICAgICAgICAgICAgICAgICAgICAgaWYgKHNob3dIb3BwZXJzKSBu
-ZXdGb3VuZEJsb2Nrcy5wdXNoX2JhY2soe3gsIHksIHosIDEwMCwgMTAwLCAx
-MDB9KTsgLy8gR3JheQogICAgICAgICAgICAgICAgICAgICAgICAgICAgfQog
-ICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAg
-ICAgICAgICAgICBlbnYtPlJlbGVhc2VTdHJpbmdVVEZDaGFycyhrZXlTdHIs
-IHJhd0tleSk7CiAgICAgICAgICAgICAgICAgICAgICAgICAgICBlbnYtPkRl
-bGV0ZUxvY2FsUmVmKGtleVN0cik7CiAgICAgICAgICAgICAgICAgICAgICAg
-IH0KICAgICAgICAgICAgICAgICAgICAgICAgZW52LT5EZWxldGVMb2NhbFJl
-ZihibG9ja09iaik7CiAgICAgICAgICAgICAgICAgICAgfQogICAgICAgICAg
-ICAgICAgICAgIGVudi0+RGVsZXRlTG9jYWxSZWYoc3RhdGVPYmopOwogICAg
-ICAgICAgICAgICAgfQogICAgICAgICAgICAgICAgZW52LT5EZWxldGVMb2Nh
-bFJlZihwb3NPYmopOwogICAgICAgICAgICB9CiAgICAgICAgfQogICAgfQoK
-ICAgIFNldEZvdW5kQmxvY2tzKG5ld0ZvdW5kQmxvY2tzKTsKCiAgICBlbnYt
-PkRlbGV0ZUxvY2FsUmVmKHdvcmxkKTsKICAgIGVudi0+RGVsZXRlTG9jYWxS
-ZWYocGxheWVyKTsKICAgIGVudi0+RGVsZXRlTG9jYWxSZWYobWMpOwp9Cg==
+#include "XRay.h"
+#include "../../core/JNIHelper.h"
+#include <iostream>
+#include <cstring>
+
+static bool xrayMappingsLoaded = false;
+static jclass mcClass, worldClass, blockPosClass, blockStateClass, blockClass, registryClass;
+static jfieldID instanceField, playerField, worldField;
+static jfieldID entX, entY, entZ;
+static jmethodID getBlockStateMethod, getBlockMethod, getTranslationKeyMethod;
+
+XRay::XRay() : Module("XRay") {}
+
+void XRay::OnTick() {
+    JNIEnv* env = JNIHelper::env;
+    if (!env) return;
+
+    if (!xrayMappingsLoaded) {
+        mcClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_310;", "net/minecraft/client/MinecraftClient");
+        worldClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_638;", "net/minecraft/client/world/ClientWorld");
+        blockPosClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_2338;", "net/minecraft/util/math/BlockPos");
+        blockStateClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_2680;", "net/minecraft/block/BlockState");
+        blockClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_2248;", "net/minecraft/block/Block");
+        registryClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_2378;", "net/minecraft/registry/Registry");
+
+        if (!mcClass || !worldClass || !blockPosClass || !blockStateClass || !blockClass) return;
+
+        instanceField = JNIHelper::GetStaticFieldSafe(mcClass, "field_1700", "Lnet/minecraft/class_310;", "instance");
+        playerField = JNIHelper::GetFieldSafe(mcClass, "field_1724", "Lnet/minecraft/class_746;", "player");
+        worldField = JNIHelper::GetFieldSafe(mcClass, "field_1687", "Lnet/minecraft/class_638;", "world");
+
+        jclass entityClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_1297;", "net/minecraft/entity/Entity");
+        entX = JNIHelper::GetFieldSafe(entityClass, "field_6014", "D", "x");
+        entY = JNIHelper::GetFieldSafe(entityClass, "field_6036", "D", "y");
+        entZ = JNIHelper::GetFieldSafe(entityClass, "field_5969", "D", "z");
+
+        getBlockStateMethod = JNIHelper::GetMethodSafe(worldClass, "method_8320", "(Lnet/minecraft/class_2338;)Lnet/minecraft/class_2680;", "getBlockState");
+        getBlockMethod = JNIHelper::GetMethodSafe(blockStateClass, "method_26204", "()Lnet/minecraft/class_2248;", "getBlock");
+        getTranslationKeyMethod = JNIHelper::GetMethodSafe(blockClass, "method_9539", "()Ljava/lang/String;", "getTranslationKey");
+
+        xrayMappingsLoaded = true;
+    }
+
+    if (!instanceField || !worldField || !getBlockStateMethod) return;
+
+    // Only scan every 20 ticks (1 second) to prevent massive lag
+    tickCounter++;
+    if (tickCounter < 20) return;
+    tickCounter = 0;
+
+    jobject mc = env->GetStaticObjectField(mcClass, instanceField);
+    if (!mc) return;
+
+    jobject player = env->GetObjectField(mc, playerField);
+    jobject world = env->GetObjectField(mc, worldField);
+
+    if (!player || !world) {
+        if (player) env->DeleteLocalRef(player);
+        if (world) env->DeleteLocalRef(world);
+        env->DeleteLocalRef(mc);
+        return;
+    }
+
+    int px = (int)env->GetDoubleField(player, entX);
+    int py = (int)env->GetDoubleField(player, entY);
+    int pz = (int)env->GetDoubleField(player, entZ);
+
+    std::vector<XRayBlock> newFoundBlocks;
+
+    jmethodID blockPosInit = env->GetMethodID(blockPosClass, "<init>", "(III)V");
+
+    // Scan a 32x32x32 area around the player
+    for (int x = px - scanRadius; x <= px + scanRadius; x++) {
+        for (int y = py - scanRadius; y <= py + scanRadius; y++) {
+            if (y < -64 || y > 320) continue; 
+            
+            for (int z = pz - scanRadius; z <= pz + scanRadius; z++) {
+                jobject posObj = env->NewObject(blockPosClass, blockPosInit, x, y, z);
+                jobject stateObj = env->CallObjectMethod(world, getBlockStateMethod, posObj);
+                
+                if (stateObj) {
+                    jobject blockObj = env->CallObjectMethod(stateObj, getBlockMethod);
+                    if (blockObj) {
+                        jstring keyStr = (jstring)env->CallObjectMethod(blockObj, getTranslationKeyMethod);
+                        if (keyStr) {
+                            const char* rawKey = env->GetStringUTFChars(keyStr, nullptr);
+                            
+                            if (strstr(rawKey, "diamond_ore")) {
+                                if (showDiamond) newFoundBlocks.push_back({x, y, z, 0, 255, 255}); // Cyan
+                            } else if (strstr(rawKey, "gold_ore")) {
+                                if (showGold) newFoundBlocks.push_back({x, y, z, 255, 215, 0}); // Gold
+                            } else if (strstr(rawKey, "iron_ore")) {
+                                if (showIron) newFoundBlocks.push_back({x, y, z, 200, 200, 200}); // Silver
+                            } else if (strstr(rawKey, "emerald_ore")) {
+                                if (showEmerald) newFoundBlocks.push_back({x, y, z, 0, 255, 0}); // Green
+                            } else if (strstr(rawKey, "ancient_debris")) {
+                                if (showNetherite) newFoundBlocks.push_back({x, y, z, 100, 70, 70}); // Dark Brown
+                            } else if (strstr(rawKey, "ender_chest")) {
+                                if (showEnderChests) newFoundBlocks.push_back({x, y, z, 128, 0, 128}); // Purple
+                            } else if (strstr(rawKey, "chest") || strstr(rawKey, "barrel")) {
+                                if (showChests) newFoundBlocks.push_back({x, y, z, 255, 165, 0}); // Orange
+                            } else if (strstr(rawKey, "spawner")) {
+                                if (showSpawners) newFoundBlocks.push_back({x, y, z, 255, 0, 0}); // Red
+                            } else if (strstr(rawKey, "hopper")) {
+                                if (showHoppers) newFoundBlocks.push_back({x, y, z, 100, 100, 100}); // Gray
+                            }
+                            
+                            env->ReleaseStringUTFChars(keyStr, rawKey);
+                            env->DeleteLocalRef(keyStr);
+                        }
+                        env->DeleteLocalRef(blockObj);
+                    }
+                    env->DeleteLocalRef(stateObj);
+                }
+                env->DeleteLocalRef(posObj);
+            }
+        }
+    }
+
+    SetFoundBlocks(newFoundBlocks);
+
+    env->DeleteLocalRef(world);
+    env->DeleteLocalRef(player);
+    env->DeleteLocalRef(mc);
+}
