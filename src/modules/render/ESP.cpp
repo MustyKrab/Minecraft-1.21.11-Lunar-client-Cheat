@@ -171,7 +171,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
         totalHeight += 35;
         if (mod->IsExpanded()) {
             if (mod->GetName() == "XRay") totalHeight += 9 * 25 + 10;
-            else if (mod->GetName() == "Killaura") totalHeight += 3 * 40 + 10; // Increased height for new options
+            else if (mod->GetName() == "Killaura") totalHeight += 3 * 40 + 25 + 10; // Increased height for new options
             else if (mod->GetName() == "Aimbot") totalHeight += 40 + 10;
             else if (mod->GetName() == "AutoClicker") totalHeight += 2 * 40 + 25 + 10;
             else if (mod->GetName() == "ESP") totalHeight += 40 + 10;
