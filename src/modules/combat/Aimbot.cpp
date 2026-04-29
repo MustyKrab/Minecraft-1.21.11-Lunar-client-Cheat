@@ -3,6 +3,7 @@
 #include <iostream>
 #include <cmath>
 #include <windows.h>
+#include <random>
 
 static bool aimbotMappingsLoaded = false;
 static jclass mcClass, worldClass, entityClass, livingClass, playerClass, optionsClass, doubleOptionClass;
@@ -48,7 +49,7 @@ void Aimbot::OnTick() {
         getHealth = JNIHelper::GetMethodSafe(livingClass, "method_6032", "()F", "getHealth");
         
         sensitivityField = JNIHelper::GetFieldSafe(optionsClass, "field_1844", "Lnet/minecraft/class_7172;", "mouseSensitivity");
-        getDoubleValue = JNIHelper::GetMethodSafe(doubleOptionClass, "method_41753", "()Ljava/lang/lang/Object;", "getValue");
+        getDoubleValue = JNIHelper::GetMethodSafe(doubleOptionClass, "method_41753", "()Ljava/lang/Object;", "getValue");
 
         aimbotMappingsLoaded = true;
     }
@@ -58,7 +59,7 @@ void Aimbot::OnTick() {
     jobject mc = env->GetStaticObjectField(mcClass, instanceField);
     if (!mc) return;
 
-    // Only aim if left mouse button is held (AimAssist style)
+    // Only aim if left mouse button is held (Aim Assist style)
     if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
         env->DeleteLocalRef(mc);
         return;
@@ -147,8 +148,14 @@ void Aimbot::OnTick() {
 
             float pitchDiff = targetPitch - currentPitch;
             
-            float newYaw = currentYaw + (yawDiff * smoothSpeed);
-            float newPitch = currentPitch + (pitchDiff * smoothSpeed);
+            // FOX FIX: Add randomization to the smoothing to bypass heuristic checks
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            std::uniform_real_distribution<float> randomSmooth(smoothSpeed * 0.8f, smoothSpeed * 1.2f);
+            float actualSmoothSpeed = randomSmooth(gen);
+            
+            float newYaw = currentYaw + (yawDiff * actualSmoothSpeed);
+            float newPitch = currentPitch + (pitchDiff * actualSmoothSpeed);
 
             // Apply GCD (Greatest Common Divisor) fix to bypass server-side rotation checks
             if (sensitivityField && getDoubleValue) {
