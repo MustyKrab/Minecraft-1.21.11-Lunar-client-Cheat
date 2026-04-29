@@ -3,7 +3,7 @@
 #include <iostream>
 
 JavaVM* JNIHelper::vm = nullptr;
-JNIEnv* JNIHelper::env = nullptr;
+thread_local JNIEnv* JNIHelper::env = nullptr;
 jvmtiEnv* JNIHelper::jvmti = nullptr;
 
 bool JNIHelper::Initialize() {
@@ -33,7 +33,13 @@ void JNIHelper::Cleanup() {
 
 jclass JNIHelper::FindClass(const char* name) {
     if (!env) return nullptr;
-    return env->FindClass(name);
+    jclass localCls = env->FindClass(name);
+    if (localCls) {
+        jclass globalCls = (jclass)env->NewGlobalRef(localCls);
+        env->DeleteLocalRef(localCls);
+        return globalCls;
+    }
+    return nullptr;
 }
 
 jclass JNIHelper::FindClassBySignature(const char* targetSig) {
@@ -49,12 +55,12 @@ jclass JNIHelper::FindClassBySignature(const char* targetSig) {
         char* sig;
         jvmti->GetClassSignature(classes[i], &sig, nullptr);
         if (sig) {
-            if (strcmp(sig, targetSig) == 0) {
-                foundClass = classes[i];
+            if (!foundClass && strcmp(sig, targetSig) == 0) {
+                foundClass = (jclass)env->NewGlobalRef(classes[i]); // Make global ref
             }
             jvmti->Deallocate((unsigned char*)sig);
         }
-        if (foundClass) break;
+        env->DeleteLocalRef(classes[i]); // Prevent local ref table overflow!
     }
 
     jvmti->Deallocate((unsigned char*)classes);
@@ -64,8 +70,12 @@ jclass JNIHelper::FindClassBySignature(const char* targetSig) {
 jclass JNIHelper::FindClassSafe(const char* sig, const char* fallbackName) {
     jclass cls = FindClassBySignature(sig);
     if (!cls && env) {
-        cls = env->FindClass(fallbackName);
+        jclass localCls = env->FindClass(fallbackName);
         if (env->ExceptionCheck()) env->ExceptionClear();
+        if (localCls) {
+            cls = (jclass)env->NewGlobalRef(localCls); // Make global ref
+            env->DeleteLocalRef(localCls);
+        }
     }
     return cls;
 }

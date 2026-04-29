@@ -6,7 +6,7 @@
 class JNIHelper {
 public:
     static JavaVM* vm;
-    static JNIEnv* env;
+    static thread_local JNIEnv* env;
     static jvmtiEnv* jvmti;
 
     static bool Initialize();

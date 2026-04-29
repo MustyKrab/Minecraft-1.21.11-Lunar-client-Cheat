@@ -311,14 +311,14 @@ void ESP::RenderLoop() {
     SetLayeredWindowAttributes(overlayWindow, RGB(0, 0, 0), 255, LWA_COLORKEY);
     ShowWindow(overlayWindow, SW_SHOW);
 
-    JNIEnv* env = JNIHelper::env;
-    if (!env) return;
+    JNIEnv* env = nullptr;
+    if (JNIHelper::vm->AttachCurrentThread((void**)&env, nullptr) != JNI_OK) return;
+    JNIHelper::env = env; // Set thread-local env for this thread
 
     jclass mcClass = nullptr, worldClass = nullptr, entityClass = nullptr, livingEntityClass = nullptr;
     jclass rendererClass = nullptr, cameraClass = nullptr, vec3dClass = nullptr, matrixClass = nullptr;
     jclass textClass = nullptr;
 
-    // Retry loop for class resolution
     int retries = 0;
     while (retries < 100 && running) {
         mcClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_310;", "net/minecraft/client/MinecraftClient");
@@ -341,6 +341,7 @@ void ESP::RenderLoop() {
 
     if (!mcClass || !worldClass || !entityClass || !rendererClass || !cameraClass || !vec3dClass || !matrixClass) {
         std::cout << "[MustyClient] Failed to resolve obfuscated classes." << std::endl;
+        JNIHelper::vm->DetachCurrentThread();
         return;
     }
 
@@ -565,6 +566,7 @@ void ESP::RenderLoop() {
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
 
+    JNIHelper::vm->DetachCurrentThread();
     DestroyWindow(overlayWindow);
     GdiplusShutdown(gdiplusToken);
 }
