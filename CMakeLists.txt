@@ -18,6 +18,8 @@ add_library(MustyClient SHARED
     src/modules/combat/Aimbot.h
     src/modules/combat/Reach.cpp
     src/modules/combat/Reach.h
+    src/modules/combat/WTap.cpp
+    src/modules/combat/WTap.h
     src/modules/render/ESP.cpp
     src/modules/render/ESP.h
     src/modules/render/XRay.cpp
