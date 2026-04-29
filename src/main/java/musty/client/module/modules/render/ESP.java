@@ -37,8 +37,21 @@ public class ESP extends Module {
                     // Draw filled box (semi-transparent black)
                     context.fill((int)boxX, (int)boxY, (int)(boxX + boxWidth), (int)(boxY + boxHeight), 0x40000000);
                     
-                    // Draw outline
-                    context.drawBorder((int)boxX, (int)boxY, (int)boxWidth, (int)boxHeight, 0xFFFFFFFF);
+                    // Draw outline manually since drawBorder might not exist in this mapping version
+                    int color = 0xFFFFFFFF;
+                    int x = (int)boxX;
+                    int y = (int)boxY;
+                    int w = (int)boxWidth;
+                    int h = (int)boxHeight;
+                    
+                    // Top
+                    context.fill(x, y, x + w, y + 1, color);
+                    // Bottom
+                    context.fill(x, y + h - 1, x + w, y + h, color);
+                    // Left
+                    context.fill(x, y, x + 1, y + h, color);
+                    // Right
+                    context.fill(x + w - 1, y, x + w, y + h, color);
 
                     // Draw Nametag & Distance
                     String name = entity.getName().getString();
