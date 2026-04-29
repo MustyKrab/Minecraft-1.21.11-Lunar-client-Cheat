@@ -4,7 +4,7 @@
 
 static bool flyMappingsLoaded = false;
 static jclass mcClass, playerClass, abilitiesClass;
-static jfieldID instanceField, playerField, abilitiesField, flyingField;
+static jfieldID instanceField, playerField, abilitiesField, flyingField, allowFlyingField;
 
 Fly::Fly() : Module("Fly") {}
 
@@ -21,13 +21,17 @@ void Fly::OnTick() {
 
         instanceField = JNIHelper::GetStaticFieldSafe(mcClass, "field_1700", "Lnet/minecraft/class_310;", "instance");
         playerField = JNIHelper::GetFieldSafe(mcClass, "field_1724", "Lnet/minecraft/class_746;", "player");
-        abilitiesField = JNIHelper::GetFieldSafe(playerClass, "field_7500", "Lnet/minecraft/class_1656;", "abilities");
+        
+        jclass playerEntityClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_1657;", "net/minecraft/entity/player/PlayerEntity");
+        abilitiesField = JNIHelper::GetFieldSafe(playerEntityClass ? playerEntityClass : playerClass, "field_7500", "Lnet/minecraft/class_1656;", "abilities");
+        
         flyingField = JNIHelper::GetFieldSafe(abilitiesClass, "field_7478", "Z", "flying");
+        allowFlyingField = JNIHelper::GetFieldSafe(abilitiesClass, "field_7479", "Z", "allowFlying");
 
         flyMappingsLoaded = true;
     }
 
-    if (!instanceField || !playerField || !abilitiesField || !flyingField) return;
+    if (!instanceField || !playerField || !abilitiesField || !flyingField || !allowFlyingField) return;
 
     jobject mc = env->GetStaticObjectField(mcClass, instanceField);
     if (!mc) return;
@@ -36,6 +40,7 @@ void Fly::OnTick() {
     if (player) {
         jobject abilities = env->GetObjectField(player, abilitiesField);
         if (abilities) {
+            env->SetBooleanField(abilities, allowFlyingField, JNI_TRUE);
             env->SetBooleanField(abilities, flyingField, JNI_TRUE);
             env->DeleteLocalRef(abilities);
         }
@@ -55,6 +60,7 @@ void Fly::OnDisable() {
     if (player) {
         jobject abilities = env->GetObjectField(player, abilitiesField);
         if (abilities) {
+            env->SetBooleanField(abilities, allowFlyingField, JNI_FALSE);
             env->SetBooleanField(abilities, flyingField, JNI_FALSE);
             env->DeleteLocalRef(abilities);
         }
