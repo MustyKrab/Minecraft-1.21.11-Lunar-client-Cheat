@@ -205,7 +205,6 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction) {
         swprintf_s(buf, L"Aimbot Speed: %.2f", smooth);
         g.DrawString(buf, -1, &modFont, PointF(sliderX + 5, sliderY - 18), nullptr, &textBrush);
 
-        static bool draggingAimSlider = false;
         if (clickAction && mouseX >= sliderX && mouseX <= sliderX + sliderW && mouseY >= sliderY && mouseY <= sliderY + sliderH) {
             draggingAimSlider = true;
         }
@@ -218,6 +217,44 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction) {
                 if (newPercent < 0.0f) newPercent = 0.0f;
                 if (newPercent > 1.0f) newPercent = 1.0f;
                 aim->SetSmoothSpeed(0.01f + (newPercent * 0.49f));
+            }
+        }
+        y += 50;
+    }
+
+    // Draw ESP Range Slider
+    {
+        int sliderX = 120;
+        int sliderY = y + 20;
+        int sliderW = 360;
+        int sliderH = 15;
+
+        float percent = (espRange - 10.0f) / 190.0f; // 10 to 200
+        if (percent < 0.0f) percent = 0.0f;
+        if (percent > 1.0f) percent = 1.0f;
+
+        SolidBrush sliderBg(Color(255, 45, 45, 45));
+        g.FillRectangle(&sliderBg, sliderX, sliderY, sliderW, sliderH);
+
+        SolidBrush sliderFill(Color(255, 46, 204, 113));
+        g.FillRectangle(&sliderFill, sliderX, sliderY, (int)(sliderW * percent), sliderH);
+
+        wchar_t buf[64];
+        swprintf_s(buf, L"ESP Range: %.0f", espRange);
+        g.DrawString(buf, -1, &modFont, PointF(sliderX + 5, sliderY - 18), nullptr, &textBrush);
+
+        if (clickAction && mouseX >= sliderX && mouseX <= sliderX + sliderW && mouseY >= sliderY && mouseY <= sliderY + sliderH) {
+            draggingEspRangeSlider = true;
+        }
+
+        if (draggingEspRangeSlider) {
+            if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
+                draggingEspRangeSlider = false;
+            } else {
+                float newPercent = (float)(mouseX - sliderX) / sliderW;
+                if (newPercent < 0.0f) newPercent = 0.0f;
+                if (newPercent > 1.0f) newPercent = 1.0f;
+                espRange = 10.0f + (newPercent * 190.0f);
             }
         }
     }
@@ -326,13 +363,6 @@ void ESP::RenderLoop() {
     jfieldID matrixFields[16];
     for (int i = 0; i < 16; i++) matrixFields[i] = env->GetFieldID(matrixClass, mNames[i], "F");
 
-    FontFamily fontFamily(L"Consolas");
-    Font font(&fontFamily, 12, FontStyleBold, UnitPixel);
-    StringFormat format;
-    format.SetAlignment(StringAlignmentCenter);
-    SolidBrush shadowBrush(Color(255, 0, 0, 0));
-    SolidBrush textBrush(Color(255, 255, 255, 255));
-
     while (running) {
         GetWindowRect(mcWindow, &rect);
         int width = rect.right - rect.left;
@@ -419,43 +449,46 @@ void ESP::RenderLoop() {
                             env->GetDoubleField(player, entZ)
                         };
 
-                        Vec3 headPos = feetPos;
-                        headPos.y += 2.0;
+                        double distance = std::sqrt(std::pow(camPos.x - feetPos.x, 2) + std::pow(camPos.y - feetPos.y, 2) + std::pow(camPos.z - feetPos.z, 2));
 
-                        Vec2 screenFeet, screenHead;
-                        if (WorldToScreen(feetPos, camPos, mv, p, screenFeet, width, height) &&
-                            WorldToScreen(headPos, camPos, mv, p, screenHead, width, height)) {
+                        // Check ESP Range
+                        if (distance <= espRange) {
+                            Vec3 headPos = feetPos;
+                            headPos.y += 2.0;
 
-                            float boxHeight = screenFeet.y - screenHead.y;
-                            float boxWidth = boxHeight / 2.0f;
-                            float boxX = screenHead.x - boxWidth / 2.0f;
-                            float boxY = screenHead.y;
+                            Vec2 screenFeet, screenHead;
+                            if (WorldToScreen(feetPos, camPos, mv, p, screenFeet, width, height) &&
+                                WorldToScreen(headPos, camPos, mv, p, screenHead, width, height)) {
 
-                            float hp = 20.0f, maxHp = 20.0f;
-                            if (getHealth && getMaxHealth) {
-                                hp = env->CallFloatMethod(player, getHealth);
-                                maxHp = env->CallFloatMethod(player, getMaxHealth);
-                            }
+                                float boxHeight = screenFeet.y - screenHead.y;
+                                float boxWidth = boxHeight / 2.0f;
+                                float boxX = screenHead.x - boxWidth / 2.0f;
+                                float boxY = screenHead.y;
 
-                            double distance = sqrt(pow(camPos.x - feetPos.x, 2) + pow(camPos.y - feetPos.y, 2) + pow(camPos.z - feetPos.z, 2));
-
-                            std::wstring playerName = L"Unknown";
-                            if (getNameMethod && getStringMethod) {
-                                jobject textObj = env->CallObjectMethod(player, getNameMethod);
-                                if (textObj) {
-                                    jstring nameStr = (jstring)env->CallObjectMethod(textObj, getStringMethod);
-                                    if (nameStr) {
-                                        const jchar* rawName = env->GetStringChars(nameStr, nullptr);
-                                        jsize len = env->GetStringLength(nameStr);
-                                        playerName = std::wstring((const wchar_t*)rawName, len);
-                                        env->ReleaseStringChars(nameStr, rawName);
-                                        env->DeleteLocalRef(nameStr);
-                                    }
-                                    env->DeleteLocalRef(textObj);
+                                float hp = 20.0f, maxHp = 20.0f;
+                                if (getHealth && getMaxHealth) {
+                                    hp = env->CallFloatMethod(player, getHealth);
+                                    maxHp = env->CallFloatMethod(player, getMaxHealth);
                                 }
-                            }
 
-                            DrawProfessionalESP(g, boxX, boxY, boxWidth, boxHeight, hp, maxHp, width, height, playerName, distance);
+                                std::wstring playerName = L"Unknown";
+                                if (getNameMethod && getStringMethod) {
+                                    jobject textObj = env->CallObjectMethod(player, getNameMethod);
+                                    if (textObj) {
+                                        jstring nameStr = (jstring)env->CallObjectMethod(textObj, getStringMethod);
+                                        if (nameStr) {
+                                            const jchar* rawName = env->GetStringChars(nameStr, nullptr);
+                                            jsize len = env->GetStringLength(nameStr);
+                                            playerName = std::wstring((const wchar_t*)rawName, len);
+                                            env->ReleaseStringChars(nameStr, rawName);
+                                            env->DeleteLocalRef(nameStr);
+                                        }
+                                        env->DeleteLocalRef(textObj);
+                                    }
+                                }
+
+                                DrawProfessionalESP(g, boxX, boxY, boxWidth, boxHeight, hp, maxHp, width, height, playerName, distance);
+                            }
                         }
                         env->DeleteLocalRef(player);
                     }

@@ -21,6 +21,10 @@ private:
     bool insertPressed = false;
     bool wasClicked = false;
     bool draggingSlider = false;
+    bool draggingAimSlider = false;
+    bool draggingEspRangeSlider = false;
+
+    float espRange = 100.0f;
 
     static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
     void RenderLoop();
