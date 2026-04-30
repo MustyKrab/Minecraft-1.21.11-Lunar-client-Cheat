@@ -19,7 +19,7 @@ static std::mt19937 s_acRng([]() -> uint32_t {
 }());
 
 AutoClicker::AutoClicker() : Module("AutoClicker") {
-    // FIX: init nextClickTime to now so first click fires after a proper random delay, not immediately
+    // init nextClickTime to now so first click fires after a proper random delay, not immediately
     nextClickTime = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()
     ).count() + 500LL; // small startup grace period
@@ -53,6 +53,11 @@ int AutoClicker::GetRandomDelay() {
 
     double mean   = (minDelay + maxDelay) / 2.0;
     double stddev = (maxDelay - minDelay) / 4.0;
+    
+    // FIX: Prevent std::normal_distribution crash when stddev is 0
+    // This happens if minDelay == maxDelay (e.g. due to torn reads or very tight CPS bounds)
+    if (stddev <= 0.001) stddev = 0.001; 
+    
     std::normal_distribution<> distr(mean, stddev);
 
     int delay = (int)std::round(distr(s_acRng));
@@ -123,10 +128,7 @@ void AutoClicker::OnTick() {
     if (currentTime >= nextClickTime) {
         jobject attackKey = env->GetObjectField(options, attackKeyField);
         if (attackKey) {
-            // FIX: Two-tick state machine for clicking.
-            // Minecraft batches input per frame. Firing setPressed(true) and setPressed(false) 
-            // in the same tick means the game never sees the key as pressed during its input poll.
-            // We must hold it true for one tick, then release it on the next.
+            // Two-tick state machine for clicking.
             if (!isClicking) {
                 // Tick 1: Press down
                 env->CallVoidMethod(attackKey, setPressedMethod, JNI_TRUE);
