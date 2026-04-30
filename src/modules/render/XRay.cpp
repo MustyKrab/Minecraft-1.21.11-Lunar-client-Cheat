@@ -8,7 +8,7 @@ static bool xrayMappingsLoaded = false;
 static jclass mcClass, worldClass, blockPosClass, blockStateClass, blockClass, registryClass;
 static jfieldID instanceField, playerField, worldField;
 static jfieldID entX, entY, entZ;
-static jmethodID getBlockStateMethod, getBlockMethod, getTranslationKeyMethod;
+static jmethodID getBlockStateMethod, getBlockMethod, toStringMethod;
 
 XRay::XRay() : Module("XRay") {}
 
@@ -22,7 +22,6 @@ void XRay::OnTick() {
         blockPosClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_2338;", "net/minecraft/util/math/BlockPos");
         blockStateClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_2680;", "net/minecraft/block/BlockState");
         blockClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_2248;", "net/minecraft/block/Block");
-        registryClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_2378;", "net/minecraft/registry/Registry");
 
         if (!mcClass || !worldClass || !blockPosClass || !blockStateClass || !blockClass) return;
 
@@ -37,12 +36,17 @@ void XRay::OnTick() {
 
         getBlockStateMethod = JNIHelper::GetMethodSafe(worldClass, "method_8320", "(Lnet/minecraft/class_2338;)Lnet/minecraft/class_2680;", "getBlockState");
         getBlockMethod = JNIHelper::GetMethodSafe(blockStateClass, "method_26204", "()Lnet/minecraft/class_2248;", "getBlock");
-        getTranslationKeyMethod = JNIHelper::GetMethodSafe(blockClass, "method_9539", "()Ljava/lang/String;", "getTranslationKey");
+        
+        // FOX FIX: Use toString() instead of getTranslationKey(). It's much more reliable across versions.
+        jclass objectClass = env->FindClass("java/lang/Object");
+        if (objectClass) {
+            toStringMethod = env->GetMethodID(objectClass, "toString", "()Ljava/lang/String;");
+        }
 
         xrayMappingsLoaded = true;
     }
 
-    if (!instanceField || !worldField || !getBlockStateMethod || !getBlockMethod || !getTranslationKeyMethod) return;
+    if (!instanceField || !worldField || !getBlockStateMethod || !getBlockMethod || !toStringMethod) return;
 
     // Only scan every 20 ticks (1 second)
     tickCounter++;
@@ -115,7 +119,7 @@ void XRay::OnTick() {
                         }
                         
                         if (blockObj) {
-                            jstring keyStr = (jstring)env->CallObjectMethod(blockObj, getTranslationKeyMethod);
+                            jstring keyStr = (jstring)env->CallObjectMethod(blockObj, toStringMethod);
                             if (env->ExceptionCheck()) {
                                 env->ExceptionClear();
                                 keyStr = nullptr;
@@ -124,7 +128,6 @@ void XRay::OnTick() {
                             if (keyStr) {
                                 const char* rawKey = env->GetStringUTFChars(keyStr, nullptr);
                                 
-                                // FOX FIX: Prevent segfault if GetStringUTFChars fails
                                 if (rawKey) {
                                     if (strstr(rawKey, "diamond_ore")) {
                                         if (showDiamond) newFoundBlocks.push_back({x, y, z, 0, 255, 255}); // Cyan
