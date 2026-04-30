@@ -18,13 +18,16 @@ static jmethodID raycastMethod, hitResultGetTypeMethod, getCameraPosVecMethod, g
 static jmethodID sendPacketMethod;
 static jclass clientPlayerClass;
 static jfieldID clientNetworkHandlerField;
+// FIX: cache getId method for entity identity
+static jmethodID getIdMethod;
 
-// PATCH 4 – target-switch cooldown state
-static void*  s_kaLastTargetId   = nullptr;
-static DWORD  s_kaTargetLostMs   = 0;
+// PATCH 4 — target-switch cooldown state
+// FIX: use jint identity (entity ID) instead of raw pointer cast to void*
+static jint   s_kaLastTargetId    = -1;
+static DWORD  s_kaTargetLostMs    = 0;
 static bool   s_kaTargetWasActive = false;
 
-// PATCH 5 – stochastic tick interval
+// PATCH 5 — stochastic tick interval
 static DWORD  s_kaNextTickMs = 0;
 
 // persistent RNG
@@ -51,30 +54,30 @@ void Killaura::OnTick() {
     if (!env) return;
 
     if (!mappingsLoaded) {
-        mcClass                   = JNIHelper::FindClassSafe("Lnet/minecraft/class_310;",  "net/minecraft/client/MinecraftClient");
-        worldClass                = JNIHelper::FindClassSafe("Lnet/minecraft/class_638;",  "net/minecraft/client/world/ClientWorld");
-        entityClass               = JNIHelper::FindClassSafe("Lnet/minecraft/class_1297;", "net/minecraft/entity/Entity");
-        livingClass               = JNIHelper::FindClassSafe("Lnet/minecraft/class_1309;", "net/minecraft/entity/LivingEntity");
-        playerClass               = JNIHelper::FindClassSafe("Lnet/minecraft/class_1657;", "net/minecraft/entity/player/PlayerEntity");
-        interactionManagerClass   = JNIHelper::FindClassSafe("Lnet/minecraft/class_636;",  "net/minecraft/client/network/ClientPlayerInteractionManager");
-        handClass                 = JNIHelper::FindClassSafe("Lnet/minecraft/class_1268;", "net/minecraft/util/Hand");
-        listClass                 = env->FindClass("java/util/List");
-        clientPlayerClass         = JNIHelper::FindClassSafe("Lnet/minecraft/class_746;",  "net/minecraft/client/network/ClientPlayerEntity");
-        networkHandlerClass       = JNIHelper::FindClassSafe("Lnet/minecraft/class_634;",  "net/minecraft/client/network/ClientPlayNetworkHandler");
+        mcClass                  = JNIHelper::FindClassSafe("Lnet/minecraft/class_310;",  "net/minecraft/client/MinecraftClient");
+        worldClass               = JNIHelper::FindClassSafe("Lnet/minecraft/class_638;",  "net/minecraft/client/world/ClientWorld");
+        entityClass              = JNIHelper::FindClassSafe("Lnet/minecraft/class_1297;", "net/minecraft/entity/Entity");
+        livingClass              = JNIHelper::FindClassSafe("Lnet/minecraft/class_1309;", "net/minecraft/entity/LivingEntity");
+        playerClass              = JNIHelper::FindClassSafe("Lnet/minecraft/class_1657;", "net/minecraft/entity/player/PlayerEntity");
+        interactionManagerClass  = JNIHelper::FindClassSafe("Lnet/minecraft/class_636;",  "net/minecraft/client/network/ClientPlayerInteractionManager");
+        handClass                = JNIHelper::FindClassSafe("Lnet/minecraft/class_1268;", "net/minecraft/util/Hand");
+        listClass                = env->FindClass("java/util/List");
+        clientPlayerClass        = JNIHelper::FindClassSafe("Lnet/minecraft/class_746;",  "net/minecraft/client/network/ClientPlayerEntity");
+        networkHandlerClass      = JNIHelper::FindClassSafe("Lnet/minecraft/class_634;",  "net/minecraft/client/network/ClientPlayNetworkHandler");
 
-        hitResultClass            = JNIHelper::FindClassSafe("Lnet/minecraft/class_239;",  "net/minecraft/util/hit/HitResult");
-        raycastContextClass       = JNIHelper::FindClassSafe("Lnet/minecraft/class_3959;", "net/minecraft/world/RaycastContext");
-        blockHitResultClass       = JNIHelper::FindClassSafe("Lnet/minecraft/class_3965;", "net/minecraft/util/hit/BlockHitResult");
+        hitResultClass           = JNIHelper::FindClassSafe("Lnet/minecraft/class_239;",  "net/minecraft/util/hit/HitResult");
+        raycastContextClass      = JNIHelper::FindClassSafe("Lnet/minecraft/class_3959;", "net/minecraft/world/RaycastContext");
+        blockHitResultClass      = JNIHelper::FindClassSafe("Lnet/minecraft/class_3965;", "net/minecraft/util/hit/BlockHitResult");
 
         if (!mcClass || !worldClass || !entityClass || !livingClass || !playerClass ||
             !interactionManagerClass || !handClass || !clientPlayerClass || !networkHandlerClass) return;
 
-        instanceField              = JNIHelper::GetStaticFieldSafe(mcClass,                "field_1700",  "Lnet/minecraft/class_310;",  "instance");
-        playerField                = JNIHelper::GetFieldSafe(mcClass,                      "field_1724",  "Lnet/minecraft/class_746;",  "player");
-        worldField                 = JNIHelper::GetFieldSafe(mcClass,                      "field_1687",  "Lnet/minecraft/class_638;",  "world");
-        interactionManagerField    = JNIHelper::GetFieldSafe(mcClass,                      "field_1761",  "Lnet/minecraft/class_636;",  "interactionManager");
-        playersField               = JNIHelper::GetFieldSafe(worldClass,                   "field_18226", "Ljava/util/List;",           "players");
-        clientNetworkHandlerField  = JNIHelper::GetFieldSafe(clientPlayerClass,            "field_3944",  "Lnet/minecraft/class_634;",  "networkHandler");
+        instanceField           = JNIHelper::GetStaticFieldSafe(mcClass,                "field_1700",  "Lnet/minecraft/class_310;",  "instance");
+        playerField             = JNIHelper::GetFieldSafe(mcClass,                      "field_1724",  "Lnet/minecraft/class_746;",  "player");
+        worldField              = JNIHelper::GetFieldSafe(mcClass,                      "field_1687",  "Lnet/minecraft/class_638;",  "world");
+        interactionManagerField = JNIHelper::GetFieldSafe(mcClass,                      "field_1761",  "Lnet/minecraft/class_636;",  "interactionManager");
+        playersField            = JNIHelper::GetFieldSafe(worldClass,                   "field_18226", "Ljava/util/List;",           "players");
+        clientNetworkHandlerField = JNIHelper::GetFieldSafe(clientPlayerClass,          "field_3944",  "Lnet/minecraft/class_634;",  "networkHandler");
 
         listSize                   = env->GetMethodID(listClass, "size", "()I");
         listGet                    = env->GetMethodID(listClass, "get",  "(I)Ljava/lang/Object;");
@@ -85,11 +88,14 @@ void Killaura::OnTick() {
         yawField   = JNIHelper::GetFieldSafe(entityClass, "field_5982", "F", "yaw");
         pitchField = JNIHelper::GetFieldSafe(entityClass, "field_5965", "F", "pitch");
 
-        getHealth         = JNIHelper::GetMethodSafe(livingClass,           "method_6032", "()F",  "getHealth");
-        attackMethod      = JNIHelper::GetMethodSafe(interactionManagerClass,"method_2918", "(Lnet/minecraft/class_1657;Lnet/minecraft/class_1297;)V", "attackEntity");
-        swingMethod       = JNIHelper::GetMethodSafe(livingClass,           "method_6104", "(Lnet/minecraft/class_1268;)V", "swingHand");
-        getCooldownMethod = JNIHelper::GetMethodSafe(playerClass,           "method_7261", "(F)F",  "getAttackCooldownProgress");
-        mainHandField     = JNIHelper::GetStaticFieldSafe(handClass,        "field_5808",  "Lnet/minecraft/class_1268;", "MAIN_HAND");
+        getHealth         = JNIHelper::GetMethodSafe(livingClass,             "method_6032", "()F",  "getHealth");
+        attackMethod      = JNIHelper::GetMethodSafe(interactionManagerClass, "method_2918", "(Lnet/minecraft/class_1657;Lnet/minecraft/class_1297;)V", "attackEntity");
+        swingMethod       = JNIHelper::GetMethodSafe(livingClass,             "method_6104", "(Lnet/minecraft/class_1268;)V", "swingHand");
+        getCooldownMethod = JNIHelper::GetMethodSafe(playerClass,             "method_7261", "(F)F",  "getAttackCooldownProgress");
+        mainHandField     = JNIHelper::GetStaticFieldSafe(handClass,          "field_5808",  "Lnet/minecraft/class_1268;", "MAIN_HAND");
+
+        // FIX: cache getId method
+        getIdMethod = env->GetMethodID(entityClass, "getId", "()I");
 
         if (networkHandlerClass)
             sendPacketMethod = JNIHelper::GetMethodSafe(networkHandlerClass, "method_52787", "(Lnet/minecraft/class_2596;)V", "sendPacket");
@@ -97,8 +103,8 @@ void Killaura::OnTick() {
         if (worldClass && raycastContextClass && hitResultClass) {
             raycastMethod            = JNIHelper::GetMethodSafe(worldClass,     "method_17742", "(Lnet/minecraft/class_3959;)Lnet/minecraft/class_3965;", "raycast");
             hitResultGetTypeMethod   = JNIHelper::GetMethodSafe(hitResultClass, "method_17783", "()Lnet/minecraft/class_239$class_240;",                  "getType");
-            getCameraPosVecMethod    = JNIHelper::GetMethodSafe(entityClass,    "method_5865",  "(F)Lnet/minecraft/class_243;",                          "getCameraPosVec");
-            getRotationVecMethod     = JNIHelper::GetMethodSafe(entityClass,    "method_5720",  "(F)Lnet/minecraft/class_243;",                          "getRotationVec");
+            getCameraPosVecMethod    = JNIHelper::GetMethodSafe(entityClass,    "method_5865",  "(F)Lnet/minecraft/class_243;",                           "getCameraPosVec");
+            getRotationVecMethod     = JNIHelper::GetMethodSafe(entityClass,    "method_5720",  "(F)Lnet/minecraft/class_243;",                           "getRotationVec");
         }
 
         mappingsLoaded = true;
@@ -109,7 +115,7 @@ void Killaura::OnTick() {
         !listSize || !listGet || !getHealth || !attackMethod || !swingMethod ||
         !getCooldownMethod || !mainHandField) return;
 
-    // PATCH 5 – stochastic tick interval
+    // PATCH 5 — stochastic tick interval
     {
         DWORD now = (DWORD)GetTickCount64();
         if (now < s_kaNextTickMs) return;
@@ -158,9 +164,9 @@ void Killaura::OnTick() {
 
         jobject bestTarget = nullptr;
         double  bestDist   = reach;
-        void*   bestTargetId = nullptr;
+        jint    bestTargetId = -1; // FIX: use entity ID
 
-        // PATCH 2 – randomised aim-height jitter
+        // PATCH 2 — randomised aim-height jitter
         std::uniform_real_distribution<float> heightJitter(0.6f, 1.4f);
         float aimHeight = heightJitter(s_kaRng);
 
@@ -207,7 +213,9 @@ void Killaura::OnTick() {
                     }
 
                     bestDist = dist;
-                    bestTargetId = (void*)target;
+                    // FIX: get actual entity ID
+                    bestTargetId = getIdMethod ? env->CallIntMethod(target, getIdMethod) : -1;
+                    if (env->ExceptionCheck()) { env->ExceptionClear(); bestTargetId = -1; }
                     if (bestTarget) env->DeleteLocalRef(bestTarget);
                     bestTarget = env->NewLocalRef(target);
                 }
@@ -215,7 +223,7 @@ void Killaura::OnTick() {
             env->DeleteLocalRef(target);
         }
 
-        // PATCH 4 – target-switch cooldown
+        // PATCH 4 — target-switch cooldown
         DWORD nowMs = (DWORD)GetTickCount64();
         if (bestTargetId != s_kaLastTargetId) {
             if (s_kaTargetWasActive) s_kaTargetLostMs = nowMs;
@@ -279,6 +287,7 @@ void Killaura::OnTick() {
                     randomDelay          = 0;
                 }
             }
+            // FIX: delete bestTarget local ref to prevent memory leak
             env->DeleteLocalRef(bestTarget);
         }
 
