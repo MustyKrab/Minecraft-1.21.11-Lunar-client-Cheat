@@ -16,6 +16,17 @@
 #pragma comment(lib, "gdiplus.lib")
 using namespace Gdiplus;
 
+// FOX FIX: Declare and initialize dragging flags for the UI sliders to prevent memory corruption/crashes
+static bool draggingKaReachSlider = false;
+static bool draggingKaAimSlider = false;
+static bool draggingTaReachSlider = false;
+static bool draggingFlChokeSlider = false;
+static bool draggingAimSmoothSlider = false;
+static bool draggingAcMinSlider = false;
+static bool draggingAcMaxSlider = false;
+static bool draggingEspRangeSlider = false;
+static bool draggingReachSlider = false;
+
 ESP::ESP() : Module("ESP") {}
 
 ESP::~ESP() {
@@ -284,8 +295,8 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
                     float intensity = ka->GetAimbotIntensity();
                     bool aimAssist = ka->IsAimAssistMode();
                     
-                    y += DrawSlider(L"Reach", r, 3.0f, 6.0f, draggingSlider, 130, y);
-                    y += DrawSlider(L"Aimbot Intensity", intensity, 0.01f, 1.0f, draggingAimSlider, 130, y);
+                    y += DrawSlider(L"Reach", r, 3.0f, 6.0f, draggingKaReachSlider, 130, y);
+                    y += DrawSlider(L"Aimbot Intensity", intensity, 0.01f, 1.0f, draggingKaAimSlider, 130, y);
                     y += DrawCheckbox(L"Aim Assist Mode", aimAssist, 130, y);
                     
                     ka->SetReach(r);
@@ -296,21 +307,21 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
                 TeleportAura* ta = (TeleportAura*)mod;
                 if (ta) {
                     float r = ta->GetReach();
-                    y += DrawSlider(L"Teleport Reach", r, 5.0f, 100.0f, draggingSlider, 130, y);
+                    y += DrawSlider(L"Teleport Reach", r, 5.0f, 100.0f, draggingTaReachSlider, 130, y);
                     ta->SetReach(r);
                 }
             } else if (mod->GetName() == "FakeLag") {
                 FakeLag* fl = (FakeLag*)mod;
                 if (fl) {
                     float limit = (float)fl->GetChokeLimit();
-                    y += DrawSlider(L"Choke Limit", limit, 1.0f, 20.0f, draggingReachSlider, 130, y); // Reusing a dragging flag for simplicity
+                    y += DrawSlider(L"Choke Limit", limit, 1.0f, 20.0f, draggingFlChokeSlider, 130, y);
                     fl->SetChokeLimit((int)limit);
                 }
             } else if (mod->GetName() == "Aimbot") {
                 Aimbot* aim = (Aimbot*)mod;
                 if (aim) {
                     float s = aim->GetSmoothSpeed();
-                    y += DrawSlider(L"Smooth Speed", s, 0.01f, 0.50f, draggingAimSlider, 130, y);
+                    y += DrawSlider(L"Smooth Speed", s, 0.01f, 0.50f, draggingAimSmoothSlider, 130, y);
                     aim->SetSmoothSpeed(s);
                 }
             } else if (mod->GetName() == "AutoClicker") {
