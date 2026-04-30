@@ -12,13 +12,18 @@ static jfieldID instanceField, playerField, optionsField, attackKeyField;
 static jfieldID yawField, pitchField;
 static jmethodID setPressedMethod;
 
-// PATCH 3 – persistent RNG for bleed randomisation
+// PATCH 3 — persistent RNG for bleed randomisation
 static std::mt19937 s_acRng([]() -> uint32_t {
     std::random_device rd;
     return rd() ^ (uint32_t)(GetTickCount64() * 2654435761ULL);
 }());
 
-AutoClicker::AutoClicker() : Module("AutoClicker") {}
+AutoClicker::AutoClicker() : Module("AutoClicker") {
+    // FIX: init nextClickTime to now so first click fires after a proper random delay, not immediately
+    nextClickTime = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()
+    ).count() + 500LL; // small startup grace period
+}
 
 long long AutoClicker::GetTimeMs() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -76,11 +81,11 @@ void AutoClicker::OnTick() {
 
         if (!mcClass || !playerClass || !optionsClass || !keyBindingClass) return;
 
-        instanceField  = JNIHelper::GetStaticFieldSafe(mcClass,       "field_1700", "Lnet/minecraft/class_310;", "instance");
-        playerField    = JNIHelper::GetFieldSafe(mcClass,             "field_1724", "Lnet/minecraft/class_746;", "player");
-        optionsField   = JNIHelper::GetFieldSafe(mcClass,             "field_1690", "Lnet/minecraft/class_315;", "options");
-        attackKeyField = JNIHelper::GetFieldSafe(optionsClass,        "field_1886", "Lnet/minecraft/class_304;", "attackKey");
-        setPressedMethod = JNIHelper::GetMethodSafe(keyBindingClass,  "method_1430", "(Z)V", "setPressed");
+        instanceField  = JNIHelper::GetStaticFieldSafe(mcClass,        "field_1700", "Lnet/minecraft/class_310;",  "instance");
+        playerField    = JNIHelper::GetFieldSafe(mcClass,              "field_1724", "Lnet/minecraft/class_746;",  "player");
+        optionsField   = JNIHelper::GetFieldSafe(mcClass,              "field_1690", "Lnet/minecraft/class_315;",  "options");
+        attackKeyField = JNIHelper::GetFieldSafe(optionsClass,         "field_1886", "Lnet/minecraft/class_304;",  "attackKey");
+        setPressedMethod = JNIHelper::GetMethodSafe(keyBindingClass,   "method_1430", "(Z)V",                      "setPressed");
 
         jclass entityClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_1297;", "net/minecraft/entity/Entity");
         yawField   = JNIHelper::GetFieldSafe(entityClass, "field_5982", "F", "yaw");
@@ -93,11 +98,9 @@ void AutoClicker::OnTick() {
 
     if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
         isClicking = false;
-        // PATCH 3 – randomised bleed on LMB release (no velocity state here,
-        //           but we randomise the next-click timer gap to avoid fixed cadence)
+        // PATCH 3 — randomised bleed on LMB release
         std::uniform_real_distribution<float> bleedDist(0.5f, 0.7f);
         float bleedFactor = bleedDist(s_acRng);
-        // stretch the next click time proportionally so re-engagement isn't instant
         nextClickTime += (long long)(GetRandomDelay() * bleedFactor);
         return;
     }
@@ -117,31 +120,40 @@ void AutoClicker::OnTick() {
 
     long long currentTime = GetTimeMs();
 
-    // PATCH 5 – stochastic base interval already handled by GetRandomDelay()
-    //           which uses normal distribution; additionally add gaussian jitter
     if (currentTime >= nextClickTime) {
         jobject attackKey = env->GetObjectField(options, attackKeyField);
         if (attackKey) {
-            isClicking = !isClicking;
-            env->CallVoidMethod(attackKey, setPressedMethod, isClicking ? JNI_TRUE : JNI_FALSE);
+            // FIX: proper click pulse — press on this tick, schedule release + next press separately.
+            // Toggling isClicking and passing it directly means the key stays held between ticks.
+            // Instead: always fire a press->release pulse within the same tick boundary.
+            // setPressed(true) then immediately setPressed(false) simulates a discrete click.
+            env->CallVoidMethod(attackKey, setPressedMethod, JNI_TRUE);
+            if (env->ExceptionCheck()) env->ExceptionClear();
+            env->CallVoidMethod(attackKey, setPressedMethod, JNI_FALSE);
+            if (env->ExceptionCheck()) env->ExceptionClear();
 
-            if (isClicking && jitter) {
+            isClicking = true; // flag for external state queries only
+
+            if (jitter && yawField && pitchField) {
                 std::uniform_real_distribution<float> jitterDist(-0.5f, 0.5f);
 
                 float currentYaw   = env->GetFloatField(player, yawField);
                 float currentPitch = env->GetFloatField(player, pitchField);
 
-                env->SetFloatField(player, yawField,   currentYaw   + jitterDist(s_acRng));
-                env->SetFloatField(player, pitchField, currentPitch + (jitterDist(s_acRng) * 0.5f));
+                // FIX: clamp pitch to [-90, 90] after adding jitter to avoid gimbal/invalid state
+                float newPitch = currentPitch + (jitterDist(s_acRng) * 0.5f);
+                if (newPitch >  90.0f) newPitch =  90.0f;
+                if (newPitch < -90.0f) newPitch = -90.0f;
+
+                env->SetFloatField(player, yawField,   currentYaw + jitterDist(s_acRng));
+                env->SetFloatField(player, pitchField, newPitch);
             }
 
             env->DeleteLocalRef(attackKey);
 
-            // PATCH 5 – uniform(35,60) base + gaussian on top of GetRandomDelay
-            std::uniform_int_distribution<int> baseDist(35, 60);
-            int extraBase = baseDist(s_acRng);
-            // blend: use half the normal delay + the stochastic base
-            nextClickTime = currentTime + (GetRandomDelay() / 2) + extraBase;
+            // FIX: delay math — was (GetRandomDelay()/2) + extraBase which produced CPS ~2x configured.
+            // Now just use GetRandomDelay() directly; it already uses normal distribution over [minDelay, maxDelay].
+            nextClickTime = currentTime + GetRandomDelay();
         }
     }
 
