@@ -412,7 +412,6 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
                     y += DrawSlider(L"Min CPS", minCps, 1.0f, 20.0f, draggingAcMinSlider, 130, y);
                     y += DrawSlider(L"Max CPS", maxCps, 1.0f, 20.0f, draggingAcMaxSlider, 130, y);
                     
-                    // FIX: Ensure minCPS never exceeds maxCPS, and maxCPS never goes below minCPS
                     if (minCps > maxCps) {
                         if (draggingAcMinSlider) maxCps = minCps;
                         else if (draggingAcMaxSlider) minCps = maxCps;
@@ -621,6 +620,7 @@ void ESP::UpdateDataLoop() {
                             if (distSq < 2500.0 && getNameMethod && getStringMethod) {
                                 jobject textObj = env->CallObjectMethod(player, getNameMethod);
                                 if (!checkEx(env) && textObj) {
+                                    // FIX: Delete local ref for textObj
                                     jstring nameStr = (jstring)env->CallObjectMethod(textObj, getStringMethod);
                                     if (!checkEx(env) && nameStr) {
                                         const jchar* raw = env->GetStringChars(nameStr, nullptr);
@@ -628,6 +628,7 @@ void ESP::UpdateDataLoop() {
                                         playerName = std::wstring((const wchar_t*)raw, len);
                                         env->ReleaseStringChars(nameStr, raw);
                                     }
+                                    env->DeleteLocalRef(textObj);
                                 }
                             }
                             tempPlayers.push_back({feetPos, hp, maxHp, playerName, distSq});
