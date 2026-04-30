@@ -16,7 +16,6 @@
 #pragma comment(lib, "gdiplus.lib")
 using namespace Gdiplus;
 
-// FOX FIX: Declare and initialize dragging flags for the UI sliders to prevent memory corruption/crashes
 static bool draggingKaReachSlider = false;
 static bool draggingKaAimSlider = false;
 static bool draggingTaReachSlider = false;
@@ -39,23 +38,37 @@ ESP::~ESP() {
                 renderThread.join();
             }
         }
+        if (updateThread.joinable()) {
+            if (std::this_thread::get_id() == updateThread.get_id()) {
+                updateThread.detach();
+            } else {
+                updateThread.join();
+            }
+        }
     }
 }
 
 void ESP::OnEnable() {
     running = true;
     renderThread = std::thread(&ESP::RenderLoop, this);
+    updateThread = std::thread(&ESP::UpdateDataLoop, this); // FOX FIX: Start the JNI update thread
     std::cout << "[MustyClient] ESP Enabled." << std::endl;
 }
 
 void ESP::OnDisable() {
     running = false;
     if (renderThread.joinable()) {
-        // Prevent std::system_error by not joining the thread from itself
         if (std::this_thread::get_id() == renderThread.get_id()) {
             renderThread.detach();
         } else {
             renderThread.join();
+        }
+    }
+    if (updateThread.joinable()) {
+        if (std::this_thread::get_id() == updateThread.get_id()) {
+            updateThread.detach();
+        } else {
+            updateThread.join();
         }
     }
     std::cout << "[MustyClient] ESP Disabled." << std::endl;
@@ -110,8 +123,8 @@ void ESP::Draw3DBox(Graphics& g, Vec3 feet, float w, float h, Vec3 camPos, float
         valid[i] = WorldToScreen(corners[i], camPos, mv, p, s[i], sW, sH);
     }
 
-    Pen blackPen(Color(255, 0, 0, 0), 4.0f); // Thicker outline
-    Pen pen(color, 2.0f); // Thicker line
+    Pen blackPen(Color(255, 0, 0, 0), 4.0f); 
+    Pen pen(color, 2.0f); 
     
     auto drawLineIfValid = [&](int i, int j) {
         if (valid[i] && valid[j]) {
@@ -134,7 +147,6 @@ void ESP::DrawProfessionalESP(Graphics& g, float x, float y, float w, float h, f
     int r = (int)(255.0f * (1.0f - hpPercent));
     int gr = (int)(255.0f * hpPercent);
 
-    // Thicker Health Bar with Black Outline
     float barX = x - 8.0f;
     float barY = y - 1.0f;
     float barW = 6.0f;
@@ -149,8 +161,8 @@ void ESP::DrawProfessionalESP(Graphics& g, float x, float y, float w, float h, f
     g.FillRectangle(&hpBrush, barX + 1.0f, hpFillY, barW - 2.0f, hpFillH);
 
     if (drawTracer) {
-        Pen blackTracerPen(Color(255, 0, 0, 0), 4.0f); // Thicker outline
-        Pen tracerPen(Color(150, 255, 255, 255), 2.0f); // Thicker line
+        Pen blackTracerPen(Color(255, 0, 0, 0), 4.0f); 
+        Pen tracerPen(Color(150, 255, 255, 255), 2.0f); 
         g.DrawLine(&blackTracerPen, (REAL)(screenW / 2), (REAL)screenH, x + w / 2, y + h);
         g.DrawLine(&tracerPen, (REAL)(screenW / 2), (REAL)screenH, x + w / 2, y + h);
     }
@@ -354,33 +366,12 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
     }
 }
 
-void ESP::RenderLoop() {
-    GdiplusStartupInput gdiplusStartupInput;
-    GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
-
-    mcWindow = FindWindowA("GLFW30", NULL);
-    if (!mcWindow) mcWindow = FindWindowA("LWJGL", NULL);
-
-    WNDCLASSEXA wc = { sizeof(WNDCLASSEXA), 0, OverlayProc, 0, 0, GetModuleHandle(NULL), NULL, NULL, NULL, NULL, "MustyOverlay", NULL };
-    RegisterClassExA(&wc);
-
-    RECT rect;
-    GetWindowRect(mcWindow, &rect);
-
-    overlayWindow = CreateWindowExA(
-        WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_TOOLWINDOW,
-        "MustyOverlay", "Musty ESP",
-        WS_POPUP,
-        rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top,
-        NULL, NULL, wc.hInstance, NULL
-    );
-
-    SetLayeredWindowAttributes(overlayWindow, RGB(0, 0, 0), 255, LWA_COLORKEY);
-    ShowWindow(overlayWindow, SW_SHOW);
-
+// FOX FIX: This thread handles all the heavy JNI calls at a lower tick rate (e.g., 10-20 TPS)
+// This prevents the main rendering loop from stuttering due to JNI overhead.
+void ESP::UpdateDataLoop() {
     JNIEnv* env = nullptr;
     if (JNIHelper::vm->AttachCurrentThread((void**)&env, nullptr) != JNI_OK) return;
-    JNIHelper::env = env; // Set thread-local env for this thread
+    JNIHelper::env = env;
 
     jclass mcClass = nullptr, worldClass = nullptr, entityClass = nullptr, livingEntityClass = nullptr;
     jclass rendererClass = nullptr, cameraClass = nullptr, vec3dClass = nullptr, matrixClass = nullptr;
@@ -388,12 +379,6 @@ void ESP::RenderLoop() {
 
     int retries = 0;
     while (retries < 100 && running) {
-        MSG msg;
-        while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
-        }
-
         mcClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_310;", "net/minecraft/client/MinecraftClient");
         worldClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_638;", "net/minecraft/client/world/ClientWorld");
         entityClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_1297;", "net/minecraft/entity/Entity");
@@ -407,13 +392,11 @@ void ESP::RenderLoop() {
         if (mcClass && worldClass && entityClass && rendererClass && cameraClass && vec3dClass && matrixClass) {
             break;
         }
-
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
         retries++;
     }
 
     if (!mcClass || !worldClass || !entityClass || !rendererClass || !cameraClass || !vec3dClass || !matrixClass) {
-        std::cout << "[MustyClient] Failed to resolve obfuscated classes." << std::endl;
         JNIHelper::vm->DetachCurrentThread();
         return;
     }
@@ -464,17 +447,140 @@ void ESP::RenderLoop() {
     for (int i = 0; i < 16; i++) matrixFields[i] = env->GetFieldID(matrixClass, mNames[i], "F");
 
     if (!instanceField || !localPlayerField || !worldField || !rendererField || !playersField || !listSize || !listGet || !entX || !entY || !entZ || !camField || !modelViewField || !projField || !camPosField) {
-        std::cout << "[MustyClient] Failed to resolve field IDs in ESP." << std::endl;
         JNIHelper::vm->DetachCurrentThread();
         return;
     }
 
-    jmethodID stringLengthMethod = nullptr;
-    jmethodID stringCharsMethod = nullptr;
-    jclass stringClass = env->FindClass("java/lang/String");
-    if (stringClass) {
-        stringLengthMethod = env->GetMethodID(stringClass, "length", "()I");
+    while (running) {
+        jobject mcInstance = env->GetStaticObjectField(mcClass, instanceField);
+        if (mcInstance) {
+            jobject localPlayer = env->GetObjectField(mcInstance, localPlayerField);
+            jobject renderer = env->GetObjectField(mcInstance, rendererField);
+            jobject world = env->GetObjectField(mcInstance, worldField);
+
+            if (renderer && world) {
+                jobject camera = env->GetObjectField(renderer, camField);
+                jobject modelViewObj = env->GetObjectField(renderer, modelViewField);
+                jobject projObj = env->GetObjectField(renderer, projField);
+                jobject playersList = env->GetObjectField(world, playersField);
+
+                if (camera && modelViewObj && projObj && playersList) {
+                    jobject camPosObj = env->GetObjectField(camera, camPosField);
+                    
+                    Vec3 tempCamPos = {0, 0, 0};
+                    if (camPosObj) {
+                        tempCamPos = {
+                            env->GetDoubleField(camPosObj, vec3dFields[0]),
+                            env->GetDoubleField(camPosObj, vec3dFields[1]),
+                            env->GetDoubleField(camPosObj, vec3dFields[2])
+                        };
+                        env->DeleteLocalRef(camPosObj);
+                    }
+
+                    float tempMv[16], tempP[16];
+                    for (int i = 0; i < 16; i++) {
+                        tempMv[i] = env->GetFloatField(modelViewObj, matrixFields[i]);
+                        tempP[i] = env->GetFloatField(projObj, matrixFields[i]);
+                    }
+
+                    std::vector<PlayerData> tempPlayers;
+                    jint size = env->CallIntMethod(playersList, listSize);
+                    
+                    for (int i = 0; i < size; i++) {
+                        jobject player = env->CallObjectMethod(playersList, listGet, i);
+                        if (!player) continue;
+
+                        if (localPlayer && env->IsSameObject(player, localPlayer)) {
+                            env->DeleteLocalRef(player);
+                            continue;
+                        }
+
+                        Vec3 feetPos = {
+                            env->GetDoubleField(player, entX),
+                            env->GetDoubleField(player, entY),
+                            env->GetDoubleField(player, entZ)
+                        };
+
+                        double distance = std::sqrt(std::pow(tempCamPos.x - feetPos.x, 2) + std::pow(tempCamPos.y - feetPos.y, 2) + std::pow(tempCamPos.z - feetPos.z, 2));
+
+                        if (distance <= espRange) {
+                            float hp = 20.0f, maxHp = 20.0f;
+                            if (getHealth && getMaxHealth) {
+                                hp = env->CallFloatMethod(player, getHealth);
+                                maxHp = env->CallFloatMethod(player, getMaxHealth);
+                            }
+
+                            std::wstring playerName = L"Player"; 
+                            if (distance < 50.0 && getNameMethod && getStringMethod) {
+                                jobject textObj = env->CallObjectMethod(player, getNameMethod);
+                                if (textObj) {
+                                    jstring nameStr = (jstring)env->CallObjectMethod(textObj, getStringMethod);
+                                    if (nameStr) {
+                                        const jchar* rawName = env->GetStringChars(nameStr, nullptr);
+                                        jsize len = env->GetStringLength(nameStr);
+                                        playerName = std::wstring((const wchar_t*)rawName, len);
+                                        env->ReleaseStringChars(nameStr, rawName);
+                                        env->DeleteLocalRef(nameStr);
+                                    }
+                                    env->DeleteLocalRef(textObj);
+                                }
+                            }
+                            tempPlayers.push_back({feetPos, hp, maxHp, playerName});
+                        }
+                        env->DeleteLocalRef(player);
+                    }
+
+                    // Safely update the shared data
+                    {
+                        std::lock_guard<std::mutex> lock(dataMutex);
+                        cachedPlayers = tempPlayers;
+                        cachedCamPos = tempCamPos;
+                        memcpy(cachedMv, tempMv, sizeof(tempMv));
+                        memcpy(cachedP, tempP, sizeof(tempP));
+                    }
+                }
+                if (camera) env->DeleteLocalRef(camera);
+                if (modelViewObj) env->DeleteLocalRef(modelViewObj);
+                if (projObj) env->DeleteLocalRef(projObj);
+                if (playersList) env->DeleteLocalRef(playersList);
+            }
+            if (renderer) env->DeleteLocalRef(renderer);
+            if (world) env->DeleteLocalRef(world);
+            if (localPlayer) env->DeleteLocalRef(localPlayer);
+            env->DeleteLocalRef(mcInstance);
+        }
+        
+        // Run data gathering at ~20 TPS to save CPU
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
+
+    JNIHelper::vm->DetachCurrentThread();
+}
+
+// FOX FIX: The render loop now only draws using GDI+, no JNI calls here!
+void ESP::RenderLoop() {
+    GdiplusStartupInput gdiplusStartupInput;
+    GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+
+    mcWindow = FindWindowA("GLFW30", NULL);
+    if (!mcWindow) mcWindow = FindWindowA("LWJGL", NULL);
+
+    WNDCLASSEXA wc = { sizeof(WNDCLASSEXA), 0, OverlayProc, 0, 0, GetModuleHandle(NULL), NULL, NULL, NULL, NULL, "MustyOverlay", NULL };
+    RegisterClassExA(&wc);
+
+    RECT rect;
+    GetWindowRect(mcWindow, &rect);
+
+    overlayWindow = CreateWindowExA(
+        WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_TOOLWINDOW,
+        "MustyOverlay", "Musty ESP",
+        WS_POPUP,
+        rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top,
+        NULL, NULL, wc.hInstance, NULL
+    );
+
+    SetLayeredWindowAttributes(overlayWindow, RGB(0, 0, 0), 255, LWA_COLORKEY);
+    ShowWindow(overlayWindow, SW_SHOW);
 
     while (running) {
         MSG msg;
@@ -536,121 +642,52 @@ void ESP::RenderLoop() {
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         g.SetTextRenderingHint(TextRenderingHintAntiAlias);
 
-        jobject mcInstance = env->GetStaticObjectField(mcClass, instanceField);
-        if (mcInstance) {
-            jobject localPlayer = env->GetObjectField(mcInstance, localPlayerField);
-            jobject renderer = env->GetObjectField(mcInstance, rendererField);
-            jobject world = env->GetObjectField(mcInstance, worldField);
+        // Copy data locally to minimize lock time
+        std::vector<PlayerData> playersToRender;
+        Vec3 camPos;
+        float mv[16], p[16];
+        
+        {
+            std::lock_guard<std::mutex> lock(dataMutex);
+            playersToRender = cachedPlayers;
+            camPos = cachedCamPos;
+            memcpy(mv, cachedMv, sizeof(mv));
+            memcpy(p, cachedP, sizeof(p));
+        }
 
-            if (renderer && world) {
-                jobject camera = env->GetObjectField(renderer, camField);
-                jobject modelViewObj = env->GetObjectField(renderer, modelViewField);
-                jobject projObj = env->GetObjectField(renderer, projField);
-                jobject playersList = env->GetObjectField(world, playersField);
+        // Render Players
+        for (const auto& player : playersToRender) {
+            Vec3 headPos = player.feetPos;
+            headPos.y += 2.0;
 
-                if (camera && modelViewObj && projObj && playersList) {
-                    jobject camPosObj = env->GetObjectField(camera, camPosField);
-                    
-                    if (camPosObj) {
-                        Vec3 camPos = {
-                            env->GetDoubleField(camPosObj, vec3dFields[0]),
-                            env->GetDoubleField(camPosObj, vec3dFields[1]),
-                            env->GetDoubleField(camPosObj, vec3dFields[2])
-                        };
-                        env->DeleteLocalRef(camPosObj);
+            Vec2 screenFeet, screenHead;
+            if (WorldToScreen(player.feetPos, camPos, mv, p, screenFeet, width, height) &&
+                WorldToScreen(headPos, camPos, mv, p, screenHead, width, height)) {
 
-                        float mv[16], p[16];
-                        for (int i = 0; i < 16; i++) {
-                            mv[i] = env->GetFloatField(modelViewObj, matrixFields[i]);
-                            p[i] = env->GetFloatField(projObj, matrixFields[i]);
-                        }
+                float boxHeight = screenFeet.y - screenHead.y;
+                float boxWidth = boxHeight / 2.0f;
+                float boxX = screenHead.x - boxWidth / 2.0f;
+                float boxY = screenHead.y;
 
-                        jint size = env->CallIntMethod(playersList, listSize);
-                        
-                        for (int i = 0; i < size; i++) {
-                            jobject player = env->CallObjectMethod(playersList, listGet, i);
-                            if (!player) continue;
-
-                            if (localPlayer && env->IsSameObject(player, localPlayer)) {
-                                env->DeleteLocalRef(player);
-                                continue;
-                            }
-
-                            Vec3 feetPos = {
-                                env->GetDoubleField(player, entX),
-                                env->GetDoubleField(player, entY),
-                                env->GetDoubleField(player, entZ)
-                            };
-
-                            double distance = std::sqrt(std::pow(camPos.x - feetPos.x, 2) + std::pow(camPos.y - feetPos.y, 2) + std::pow(camPos.z - feetPos.z, 2));
-
-                            if (distance <= espRange) {
-                                Vec3 headPos = feetPos;
-                                headPos.y += 2.0;
-
-                                Vec2 screenFeet, screenHead;
-                                if (WorldToScreen(feetPos, camPos, mv, p, screenFeet, width, height) &&
-                                    WorldToScreen(headPos, camPos, mv, p, screenHead, width, height)) {
-
-                                    float boxHeight = screenFeet.y - screenHead.y;
-                                    float boxWidth = boxHeight / 2.0f;
-                                    float boxX = screenHead.x - boxWidth / 2.0f;
-                                    float boxY = screenHead.y;
-
-                                    Draw3DBox(g, feetPos, 0.6f, 1.8f, camPos, mv, p, width, height, Color(255, 46, 204, 113));
-
-                                    float hp = 20.0f, maxHp = 20.0f;
-                                    if (getHealth && getMaxHealth) {
-                                        hp = env->CallFloatMethod(player, getHealth);
-                                        maxHp = env->CallFloatMethod(player, getMaxHealth);
-                                    }
-
-                                    std::wstring playerName = L"Player"; 
-                                    
-                                    if (distance < 50.0 && getNameMethod && getStringMethod) {
-                                        jobject textObj = env->CallObjectMethod(player, getNameMethod);
-                                        if (textObj) {
-                                            jstring nameStr = (jstring)env->CallObjectMethod(textObj, getStringMethod);
-                                            if (nameStr) {
-                                                const jchar* rawName = env->GetStringChars(nameStr, nullptr);
-                                                jsize len = env->GetStringLength(nameStr);
-                                                playerName = std::wstring((const wchar_t*)rawName, len);
-                                                env->ReleaseStringChars(nameStr, rawName);
-                                                env->DeleteLocalRef(nameStr);
-                                            }
-                                            env->DeleteLocalRef(textObj);
-                                        }
-                                    }
-
-                                    DrawProfessionalESP(g, boxX, boxY, boxWidth, boxHeight, hp, maxHp, width, height, playerName, distance, true);
-                                }
-                            }
-                            env->DeleteLocalRef(player);
-                        }
-                        
-                        XRay* xray = (XRay*)ModuleManager::GetModule("XRay");
-                        if (xray && xray->IsEnabled()) {
-                            std::vector<XRayBlock> blocks = xray->GetFoundBlocks();
-                            for (const auto& block : blocks) {
-                                Vec3 blockPos = { (double)block.x + 0.5, (double)block.y + 0.5, (double)block.z + 0.5 };
-                                double distance = std::sqrt(std::pow(camPos.x - blockPos.x, 2) + std::pow(camPos.y - blockPos.y, 2) + std::pow(camPos.z - blockPos.z, 2));
-                                
-                                if (distance <= espRange) {
-                                    Draw3DBox(g, { (double)block.x, (double)block.y, (double)block.z }, 1.0f, 1.0f, camPos, mv, p, width, height, Color(255, block.r, block.g, block.b));
-                                }
-                            }
-                        }
-                    }
-                }
-                if (camera) env->DeleteLocalRef(camera);
-                if (modelViewObj) env->DeleteLocalRef(modelViewObj);
-                if (projObj) env->DeleteLocalRef(projObj);
-                if (playersList) env->DeleteLocalRef(playersList);
+                Draw3DBox(g, player.feetPos, 0.6f, 1.8f, camPos, mv, p, width, height, Color(255, 46, 204, 113));
+                
+                double distance = std::sqrt(std::pow(camPos.x - player.feetPos.x, 2) + std::pow(camPos.y - player.feetPos.y, 2) + std::pow(camPos.z - player.feetPos.z, 2));
+                DrawProfessionalESP(g, boxX, boxY, boxWidth, boxHeight, player.health, player.maxHealth, width, height, player.name, distance, true);
             }
-            if (renderer) env->DeleteLocalRef(renderer);
-            if (world) env->DeleteLocalRef(world);
-            if (localPlayer) env->DeleteLocalRef(localPlayer);
-            env->DeleteLocalRef(mcInstance);
+        }
+
+        // Render XRay Blocks
+        XRay* xray = (XRay*)ModuleManager::GetModule("XRay");
+        if (xray && xray->IsEnabled()) {
+            std::vector<XRayBlock> blocks = xray->GetFoundBlocks();
+            for (const auto& block : blocks) {
+                Vec3 blockPos = { (double)block.x + 0.5, (double)block.y + 0.5, (double)block.z + 0.5 };
+                double distance = std::sqrt(std::pow(camPos.x - blockPos.x, 2) + std::pow(camPos.y - blockPos.y, 2) + std::pow(camPos.z - blockPos.z, 2));
+                
+                if (distance <= espRange) {
+                    Draw3DBox(g, { (double)block.x, (double)block.y, (double)block.z }, 1.0f, 1.0f, camPos, mv, p, width, height, Color(255, block.r, block.g, block.b));
+                }
+            }
         }
 
         if (guiOpen) {
@@ -664,10 +701,10 @@ void ESP::RenderLoop() {
         DeleteDC(memDC);
         ReleaseDC(overlayWindow, hdc);
 
+        // Run render loop at ~60 FPS
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
 
-    JNIHelper::vm->DetachCurrentThread();
     DestroyWindow(overlayWindow);
     GdiplusShutdown(gdiplusToken);
 }
