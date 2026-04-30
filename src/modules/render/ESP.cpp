@@ -18,6 +18,7 @@ using namespace Gdiplus;
 
 static bool draggingKaReachSlider = false;
 static bool draggingKaAimSlider = false;
+static bool draggingKaFovSlider = false; // FOX FIX: Added FOV slider flag
 static bool draggingTaReachSlider = false;
 static bool draggingFlChokeSlider = false;
 static bool draggingAimSmoothSlider = false;
@@ -51,7 +52,7 @@ ESP::~ESP() {
 void ESP::OnEnable() {
     running = true;
     renderThread = std::thread(&ESP::RenderLoop, this);
-    updateThread = std::thread(&ESP::UpdateDataLoop, this); // FOX FIX: Start the JNI update thread
+    updateThread = std::thread(&ESP::UpdateDataLoop, this); 
     std::cout << "[MustyClient] ESP Enabled." << std::endl;
 }
 
@@ -196,7 +197,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
         totalHeight += 35;
         if (mod->IsExpanded()) {
             if (mod->GetName() == "XRay") totalHeight += 9 * 25 + 10;
-            else if (mod->GetName() == "Killaura") totalHeight += 2 * 40 + 1 * 25 + 10; 
+            else if (mod->GetName() == "Killaura") totalHeight += 3 * 40 + 1 * 25 + 10; // FOX FIX: Added height for FOV slider
             else if (mod->GetName() == "TeleportAura") totalHeight += 40 + 10; 
             else if (mod->GetName() == "Aimbot") totalHeight += 40 + 10;
             else if (mod->GetName() == "AutoClicker") totalHeight += 2 * 40 + 25 + 10;
@@ -305,14 +306,17 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
                 if (ka) {
                     float r = ka->GetReach();
                     float intensity = ka->GetAimbotIntensity();
+                    float fov = ka->GetFOV();
                     bool aimAssist = ka->IsAimAssistMode();
                     
                     y += DrawSlider(L"Reach", r, 3.0f, 6.0f, draggingKaReachSlider, 130, y);
                     y += DrawSlider(L"Aimbot Intensity", intensity, 0.01f, 1.0f, draggingKaAimSlider, 130, y);
+                    y += DrawSlider(L"FOV", fov, 10.0f, 360.0f, draggingKaFovSlider, 130, y); // FOX FIX: Added FOV slider
                     y += DrawCheckbox(L"Aim Assist Mode", aimAssist, 130, y);
                     
                     ka->SetReach(r);
                     ka->SetAimbotIntensity(intensity);
+                    ka->SetFOV(fov);
                     ka->SetAimAssistMode(aimAssist);
                 }
             } else if (mod->GetName() == "TeleportAura") {
@@ -366,8 +370,6 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
     }
 }
 
-// FOX FIX: This thread handles all the heavy JNI calls at a lower tick rate (e.g., 10-20 TPS)
-// This prevents the main rendering loop from stuttering due to JNI overhead.
 void ESP::UpdateDataLoop() {
     JNIEnv* env = nullptr;
     if (JNIHelper::vm->AttachCurrentThread((void**)&env, nullptr) != JNI_OK) return;
@@ -530,7 +532,6 @@ void ESP::UpdateDataLoop() {
                         env->DeleteLocalRef(player);
                     }
 
-                    // Safely update the shared data
                     {
                         std::lock_guard<std::mutex> lock(dataMutex);
                         cachedPlayers = tempPlayers;
@@ -550,14 +551,12 @@ void ESP::UpdateDataLoop() {
             env->DeleteLocalRef(mcInstance);
         }
         
-        // Run data gathering at ~20 TPS to save CPU
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 
     JNIHelper::vm->DetachCurrentThread();
 }
 
-// FOX FIX: The render loop now only draws using GDI+, no JNI calls here!
 void ESP::RenderLoop() {
     GdiplusStartupInput gdiplusStartupInput;
     GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
@@ -642,7 +641,6 @@ void ESP::RenderLoop() {
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         g.SetTextRenderingHint(TextRenderingHintAntiAlias);
 
-        // Copy data locally to minimize lock time
         std::vector<PlayerData> playersToRender;
         Vec3 camPos;
         float mv[16], p[16];
@@ -655,7 +653,6 @@ void ESP::RenderLoop() {
             memcpy(p, cachedP, sizeof(p));
         }
 
-        // Render Players
         for (const auto& player : playersToRender) {
             Vec3 headPos = player.feetPos;
             headPos.y += 2.0;
@@ -676,7 +673,6 @@ void ESP::RenderLoop() {
             }
         }
 
-        // Render XRay Blocks
         XRay* xray = (XRay*)ModuleManager::GetModule("XRay");
         if (xray && xray->IsEnabled()) {
             std::vector<XRayBlock> blocks = xray->GetFoundBlocks();
@@ -701,7 +697,6 @@ void ESP::RenderLoop() {
         DeleteDC(memDC);
         ReleaseDC(overlayWindow, hdc);
 
-        // Run render loop at ~60 FPS
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
 
