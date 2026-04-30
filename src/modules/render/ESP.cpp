@@ -257,7 +257,7 @@ void ESP::DrawProfessionalESP(Graphics& g, float x, float y, float w, float h,
                                int screenW, int screenH,
                                const std::wstring& name, double distance, bool drawTracer) {
     if (maxHealth <= 0) maxHealth = 20.0f;
-    float hpPct = std::max(0.0f, std::min(1.0f, health / maxHealth));
+    float hpPct = (std::max)(0.0f, (std::min)(1.0f, health / maxHealth));
 
     float barX = x - 8.0f, barY = y - 1.0f, barW = 6.0f, barH = h + 2.0f;
     g.FillRectangle(s_bgBarBrush, barX, barY, barW, barH);
@@ -316,7 +316,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
 
     auto DrawSlider = [&](const wchar_t* label, float& value, float mn, float mx, bool& dragging, int cx, int cy) {
         int sW = 340, sH = 10;
-        float pct = std::max(0.0f, std::min(1.0f, (value - mn) / (mx - mn)));
+        float pct = (std::max)(0.0f, (std::min)(1.0f, (value - mn) / (mx - mn)));
 
         wchar_t buf[64];
         swprintf_s(buf, L"%ls: %.2f", label, value);
@@ -333,7 +333,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
                 dragging = false;
             } else {
                 float np = (float)(mouseX - cx) / sW;
-                value = mn + std::max(0.0f, std::min(1.0f, np)) * (mx - mn);
+                value = mn + (std::max)(0.0f, (std::min)(1.0f, np)) * (mx - mn);
             }
         }
         return 40;
