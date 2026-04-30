@@ -42,7 +42,7 @@ void XRay::OnTick() {
         xrayMappingsLoaded = true;
     }
 
-    if (!instanceField || !worldField || !getBlockStateMethod) return;
+    if (!instanceField || !worldField || !getBlockStateMethod || !getBlockMethod || !getTranslationKeyMethod) return;
 
     // Only scan every 20 ticks (1 second)
     tickCounter++;
@@ -66,13 +66,12 @@ void XRay::OnTick() {
     int py = (int)env->GetDoubleField(player, entY);
     int pz = (int)env->GetDoubleField(player, entZ);
 
-    // FOX FIX: Only rescan if the player has moved more than 16 blocks from the last scan center
     double distMoved = std::sqrt(std::pow(px - lastScanX, 2) + std::pow(py - lastScanY, 2) + std::pow(pz - lastScanZ, 2));
     if (distMoved < 16.0) {
         env->DeleteLocalRef(world);
         env->DeleteLocalRef(player);
         env->DeleteLocalRef(mc);
-        return; // Skip scan, keep old blocks
+        return; 
     }
 
     lastScanX = px;
@@ -82,6 +81,13 @@ void XRay::OnTick() {
     std::vector<XRayBlock> newFoundBlocks;
 
     jmethodID blockPosInit = env->GetMethodID(blockPosClass, "<init>", "(III)V");
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        env->DeleteLocalRef(world);
+        env->DeleteLocalRef(player);
+        env->DeleteLocalRef(mc);
+        return;
+    }
 
     // Scan a 32x32x32 area around the player
     for (int x = px - scanRadius; x <= px + scanRadius; x++) {
@@ -89,47 +95,64 @@ void XRay::OnTick() {
             if (y < -64 || y > 320) continue; 
             
             for (int z = pz - scanRadius; z <= pz + scanRadius; z++) {
-                // FOX FIX: Push local frame to prevent local reference table overflow (crash)
                 if (env->PushLocalFrame(16) < 0) {
-                    continue; // Out of memory
+                    continue; 
                 }
 
                 jobject posObj = env->NewObject(blockPosClass, blockPosInit, x, y, z);
-                jobject stateObj = env->CallObjectMethod(world, getBlockStateMethod, posObj);
-                
-                if (stateObj) {
-                    jobject blockObj = env->CallObjectMethod(stateObj, getBlockMethod);
-                    if (blockObj) {
-                        jstring keyStr = (jstring)env->CallObjectMethod(blockObj, getTranslationKeyMethod);
-                        if (keyStr) {
-                            const char* rawKey = env->GetStringUTFChars(keyStr, nullptr);
-                            
-                            if (strstr(rawKey, "diamond_ore")) {
-                                if (showDiamond) newFoundBlocks.push_back({x, y, z, 0, 255, 255}); // Cyan
-                            } else if (strstr(rawKey, "gold_ore")) {
-                                if (showGold) newFoundBlocks.push_back({x, y, z, 255, 215, 0}); // Gold
-                            } else if (strstr(rawKey, "iron_ore")) {
-                                if (showIron) newFoundBlocks.push_back({x, y, z, 200, 200, 200}); // Silver
-                            } else if (strstr(rawKey, "emerald_ore")) {
-                                if (showEmerald) newFoundBlocks.push_back({x, y, z, 0, 255, 0}); // Green
-                            } else if (strstr(rawKey, "ancient_debris")) {
-                                if (showNetherite) newFoundBlocks.push_back({x, y, z, 100, 70, 70}); // Dark Brown
-                            } else if (strstr(rawKey, "ender_chest")) {
-                                if (showEnderChests) newFoundBlocks.push_back({x, y, z, 128, 0, 128}); // Purple
-                            } else if (strstr(rawKey, "chest") || strstr(rawKey, "barrel")) {
-                                if (showChests) newFoundBlocks.push_back({x, y, z, 255, 165, 0}); // Orange
-                            } else if (strstr(rawKey, "spawner")) {
-                                if (showSpawners) newFoundBlocks.push_back({x, y, z, 255, 0, 0}); // Red
-                            } else if (strstr(rawKey, "hopper")) {
-                                if (showHoppers) newFoundBlocks.push_back({x, y, z, 100, 100, 100}); // Gray
+                if (posObj) {
+                    jobject stateObj = env->CallObjectMethod(world, getBlockStateMethod, posObj);
+                    if (env->ExceptionCheck()) {
+                        env->ExceptionClear();
+                        stateObj = nullptr;
+                    }
+                    
+                    if (stateObj) {
+                        jobject blockObj = env->CallObjectMethod(stateObj, getBlockMethod);
+                        if (env->ExceptionCheck()) {
+                            env->ExceptionClear();
+                            blockObj = nullptr;
+                        }
+                        
+                        if (blockObj) {
+                            jstring keyStr = (jstring)env->CallObjectMethod(blockObj, getTranslationKeyMethod);
+                            if (env->ExceptionCheck()) {
+                                env->ExceptionClear();
+                                keyStr = nullptr;
                             }
                             
-                            env->ReleaseStringUTFChars(keyStr, rawKey);
+                            if (keyStr) {
+                                const char* rawKey = env->GetStringUTFChars(keyStr, nullptr);
+                                
+                                // FOX FIX: Prevent segfault if GetStringUTFChars fails
+                                if (rawKey) {
+                                    if (strstr(rawKey, "diamond_ore")) {
+                                        if (showDiamond) newFoundBlocks.push_back({x, y, z, 0, 255, 255}); // Cyan
+                                    } else if (strstr(rawKey, "gold_ore")) {
+                                        if (showGold) newFoundBlocks.push_back({x, y, z, 255, 215, 0}); // Gold
+                                    } else if (strstr(rawKey, "iron_ore")) {
+                                        if (showIron) newFoundBlocks.push_back({x, y, z, 200, 200, 200}); // Silver
+                                    } else if (strstr(rawKey, "emerald_ore")) {
+                                        if (showEmerald) newFoundBlocks.push_back({x, y, z, 0, 255, 0}); // Green
+                                    } else if (strstr(rawKey, "ancient_debris")) {
+                                        if (showNetherite) newFoundBlocks.push_back({x, y, z, 100, 70, 70}); // Dark Brown
+                                    } else if (strstr(rawKey, "ender_chest")) {
+                                        if (showEnderChests) newFoundBlocks.push_back({x, y, z, 128, 0, 128}); // Purple
+                                    } else if (strstr(rawKey, "chest") || strstr(rawKey, "barrel")) {
+                                        if (showChests) newFoundBlocks.push_back({x, y, z, 255, 165, 0}); // Orange
+                                    } else if (strstr(rawKey, "spawner")) {
+                                        if (showSpawners) newFoundBlocks.push_back({x, y, z, 255, 0, 0}); // Red
+                                    } else if (strstr(rawKey, "hopper")) {
+                                        if (showHoppers) newFoundBlocks.push_back({x, y, z, 100, 100, 100}); // Gray
+                                    }
+                                    
+                                    env->ReleaseStringUTFChars(keyStr, rawKey);
+                                }
+                            }
                         }
                     }
                 }
                 
-                // FOX FIX: Pop local frame to clean up all local references created in this iteration
                 env->PopLocalFrame(nullptr);
             }
         }
