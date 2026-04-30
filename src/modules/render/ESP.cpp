@@ -17,8 +17,7 @@
 using namespace Gdiplus;
 
 static bool draggingKaReachSlider = false;
-static bool draggingKaAimSlider = false;
-static bool draggingKaFovSlider = false; // FOX FIX: Added FOV slider flag
+static bool draggingKaFovSlider = false; 
 static bool draggingTaReachSlider = false;
 static bool draggingFlChokeSlider = false;
 static bool draggingAimSmoothSlider = false;
@@ -197,7 +196,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
         totalHeight += 35;
         if (mod->IsExpanded()) {
             if (mod->GetName() == "XRay") totalHeight += 9 * 25 + 10;
-            else if (mod->GetName() == "Killaura") totalHeight += 3 * 40 + 1 * 25 + 10; // FOX FIX: Added height for FOV slider
+            else if (mod->GetName() == "Killaura") totalHeight += 2 * 40 + 10; // FOX FIX: Removed aimbot sliders
             else if (mod->GetName() == "TeleportAura") totalHeight += 40 + 10; 
             else if (mod->GetName() == "Aimbot") totalHeight += 40 + 10;
             else if (mod->GetName() == "AutoClicker") totalHeight += 2 * 40 + 25 + 10;
@@ -305,19 +304,13 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
                 Killaura* ka = (Killaura*)mod;
                 if (ka) {
                     float r = ka->GetReach();
-                    float intensity = ka->GetAimbotIntensity();
                     float fov = ka->GetFOV();
-                    bool aimAssist = ka->IsAimAssistMode();
                     
                     y += DrawSlider(L"Reach", r, 3.0f, 6.0f, draggingKaReachSlider, 130, y);
-                    y += DrawSlider(L"Aimbot Intensity", intensity, 0.01f, 1.0f, draggingKaAimSlider, 130, y);
-                    y += DrawSlider(L"FOV", fov, 10.0f, 360.0f, draggingKaFovSlider, 130, y); // FOX FIX: Added FOV slider
-                    y += DrawCheckbox(L"Aim Assist Mode", aimAssist, 130, y);
+                    y += DrawSlider(L"FOV", fov, 10.0f, 360.0f, draggingKaFovSlider, 130, y); 
                     
                     ka->SetReach(r);
-                    ka->SetAimbotIntensity(intensity);
                     ka->SetFOV(fov);
-                    ka->SetAimAssistMode(aimAssist);
                 }
             } else if (mod->GetName() == "TeleportAura") {
                 TeleportAura* ta = (TeleportAura*)mod;
