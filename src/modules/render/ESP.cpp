@@ -49,10 +49,10 @@ ESP::~ESP() {
 }
 
 void ESP::OnEnable() {
+    if (running) return; // FOX FIX: Prevent double initialization
     running = true;
     renderThread = std::thread(&ESP::RenderLoop, this);
     updateThread = std::thread(&ESP::UpdateDataLoop, this); 
-    std::cout << "[MustyClient] ESP Enabled." << std::endl;
 }
 
 void ESP::OnDisable() {
@@ -71,7 +71,6 @@ void ESP::OnDisable() {
             updateThread.join();
         }
     }
-    std::cout << "[MustyClient] ESP Disabled." << std::endl;
 }
 
 LRESULT CALLBACK ESP::OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -196,7 +195,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
         totalHeight += 35;
         if (mod->IsExpanded()) {
             if (mod->GetName() == "XRay") totalHeight += 9 * 25 + 10;
-            else if (mod->GetName() == "Killaura") totalHeight += 2 * 40 + 10; // FOX FIX: Removed aimbot sliders
+            else if (mod->GetName() == "Killaura") totalHeight += 2 * 40 + 10; 
             else if (mod->GetName() == "TeleportAura") totalHeight += 40 + 10; 
             else if (mod->GetName() == "Aimbot") totalHeight += 40 + 10;
             else if (mod->GetName() == "AutoClicker") totalHeight += 2 * 40 + 25 + 10;
@@ -365,8 +364,13 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
 
 void ESP::UpdateDataLoop() {
     JNIEnv* env = nullptr;
-    if (JNIHelper::vm->AttachCurrentThread((void**)&env, nullptr) != JNI_OK) return;
-    JNIHelper::env = env;
+    // FOX FIX: Check if we are already attached to prevent crashes
+    jint getEnvStat = JNIHelper::vm->GetEnv((void**)&env, JNI_VERSION_1_8);
+    if (getEnvStat == JNI_EDETACHED) {
+        if (JNIHelper::vm->AttachCurrentThread((void**)&env, nullptr) != JNI_OK) return;
+    } else if (getEnvStat == JNI_EVERSION) {
+        return;
+    }
 
     jclass mcClass = nullptr, worldClass = nullptr, entityClass = nullptr, livingEntityClass = nullptr;
     jclass rendererClass = nullptr, cameraClass = nullptr, vec3dClass = nullptr, matrixClass = nullptr;
@@ -392,7 +396,7 @@ void ESP::UpdateDataLoop() {
     }
 
     if (!mcClass || !worldClass || !entityClass || !rendererClass || !cameraClass || !vec3dClass || !matrixClass) {
-        JNIHelper::vm->DetachCurrentThread();
+        if (getEnvStat == JNI_EDETACHED) JNIHelper::vm->DetachCurrentThread();
         return;
     }
 
@@ -442,7 +446,7 @@ void ESP::UpdateDataLoop() {
     for (int i = 0; i < 16; i++) matrixFields[i] = env->GetFieldID(matrixClass, mNames[i], "F");
 
     if (!instanceField || !localPlayerField || !worldField || !rendererField || !playersField || !listSize || !listGet || !entX || !entY || !entZ || !camField || !modelViewField || !projField || !camPosField) {
-        JNIHelper::vm->DetachCurrentThread();
+        if (getEnvStat == JNI_EDETACHED) JNIHelper::vm->DetachCurrentThread();
         return;
     }
 
@@ -547,7 +551,7 @@ void ESP::UpdateDataLoop() {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 
-    JNIHelper::vm->DetachCurrentThread();
+    if (getEnvStat == JNI_EDETACHED) JNIHelper::vm->DetachCurrentThread();
 }
 
 void ESP::RenderLoop() {
