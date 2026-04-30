@@ -87,7 +87,11 @@ void Aimbot::OnTick() {
         if (!playersList) goto cleanup;
 
         int size = env->CallIntMethod(playersList, listSize);
-        if (env->ExceptionCheck()) { env->ExceptionClear(); goto cleanupList; }
+        if (env->ExceptionCheck()) { 
+            env->ExceptionClear(); 
+            env->DeleteLocalRef(playersList);
+            goto cleanup; 
+        }
 
         jobject bestTarget = nullptr;
         double bestDist = 6.0; 
@@ -188,7 +192,6 @@ void Aimbot::OnTick() {
             env->DeleteLocalRef(bestTarget);
         }
 
-cleanupList:
         env->DeleteLocalRef(playersList);
     }
 

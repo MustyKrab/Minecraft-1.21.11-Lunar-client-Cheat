@@ -1,5 +1,5 @@
 #include "TeleportAura.h"
-#include "../../core/JNIHelper.h"
+#include "../core/JNIHelper.h"
 #include <iostream>
 #include <cmath>
 
@@ -104,7 +104,11 @@ void TeleportAura::OnTick() {
         if (!playersList) goto cleanup;
 
         int size = env->CallIntMethod(playersList, taListSize);
-        if (env->ExceptionCheck()) { env->ExceptionClear(); goto cleanupList; }
+        if (env->ExceptionCheck()) { 
+            env->ExceptionClear(); 
+            env->DeleteLocalRef(playersList);
+            goto cleanup; 
+        }
 
         jobject bestTarget = nullptr;
         double bestDist = reach;
@@ -197,7 +201,6 @@ void TeleportAura::OnTick() {
             }
             env->DeleteLocalRef(bestTarget);
         }
-cleanupList:
         env->DeleteLocalRef(playersList);
     }
 
