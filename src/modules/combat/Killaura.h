@@ -5,6 +5,8 @@ class Killaura : public Module {
 private:
     float reach;
     float fov;
+    int ticksSinceLastAttack;
+    int randomDelay;
 
 public:
     Killaura();
