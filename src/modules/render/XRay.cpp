@@ -24,17 +24,17 @@ void XRay::OnTick() {
     JNIEnv* env = JNIHelper::env;
     if (!env) return;
 
-    // ── Mapping load (retried every 60 ticks until all IDs resolve) ──────────
+    // ─ Mapping load (retried every 60 ticks until all IDs resolve) ─────────
     if (!xrayMappingsLoaded) {
         retryCounter++;
         if (retryCounter < 60) return;
         retryCounter = 0;
 
-        mcClass        = JNIHelper::FindClassSafe("Lnet/minecraft/class_310;",   "net/minecraft/client/MinecraftClient");
-        worldClass     = JNIHelper::FindClassSafe("Lnet/minecraft/class_638;",   "net/minecraft/client/world/ClientWorld");
-        blockPosClass  = JNIHelper::FindClassSafe("Lnet/minecraft/class_2338;",  "net/minecraft/util/math/BlockPos");
-        blockStateClass= JNIHelper::FindClassSafe("Lnet/minecraft/class_2680;",  "net/minecraft/block/BlockState");
-        blockClass     = JNIHelper::FindClassSafe("Lnet/minecraft/class_2248;",  "net/minecraft/block/Block");
+        mcClass         = JNIHelper::FindClassSafe("Lnet/minecraft/class_310;",   "net/minecraft/client/MinecraftClient");
+        worldClass      = JNIHelper::FindClassSafe("Lnet/minecraft/class_638;",   "net/minecraft/client/world/ClientWorld");
+        blockPosClass   = JNIHelper::FindClassSafe("Lnet/minecraft/class_2338;",  "net/minecraft/util/math/BlockPos");
+        blockStateClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_2680;",  "net/minecraft/block/BlockState");
+        blockClass      = JNIHelper::FindClassSafe("Lnet/minecraft/class_2248;",  "net/minecraft/block/Block");
 
         if (!mcClass || !worldClass || !blockPosClass || !blockStateClass || !blockClass) return;
 
@@ -71,12 +71,12 @@ void XRay::OnTick() {
         !toStringMethod || !blockPosInit)
         return;
 
-    // ── Tick-rate gate (every 40 ticks = 2 s @ 20 TPS) ──────────────────────
+    // ─ Tick-rate gate (every 40 ticks = 2 s @ 20 TPS) ──────────
     tickCounter++;
     if (tickCounter < 40) return;
     tickCounter = 0;
 
-    // ── Fetch MC instance, player, world ─────────────────────────────────────
+    // ─ Fetch MC instance, player, world ────────────────────────
     jobject mc = env->GetStaticObjectField(mcClass, instanceField);
     if (!mc) return;
 
@@ -94,13 +94,29 @@ void XRay::OnTick() {
     int py = (int)env->GetDoubleField(player, entY);
     int pz = (int)env->GetDoubleField(player, entZ);
 
-    // ── Position-delta rescan guard ───────────────────────────────────────────
+    // ─ Position-delta rescan guard ─────────────────────────────
+    // FIX: if we haven't moved much AND we just toggled a setting, we still need to rescan.
+    // We'll track the last settings state to force a rescan if it changed.
+    static bool lastShowDiamond, lastShowGold, lastShowIron, lastShowEmerald, lastShowNetherite;
+    static bool lastShowChests, lastShowEnderChests, lastShowSpawners, lastShowHoppers;
+    static int  lastScanRadius = -1;
+
+    bool settingsChanged = (
+        showDiamond != lastShowDiamond || showGold != lastShowGold ||
+        showIron != lastShowIron || showEmerald != lastShowEmerald ||
+        showNetherite != lastShowNetherite || showChests != lastShowChests ||
+        showEnderChests != lastShowEnderChests || showSpawners != lastShowSpawners ||
+        showHoppers != lastShowHoppers || scanRadius != lastScanRadius
+    );
+
     double distMoved = std::sqrt(
         std::pow(px - lastScanX, 2) +
         std::pow(py - lastScanY, 2) +
         std::pow(pz - lastScanZ, 2)
     );
-    if (distMoved < 8.0) {
+
+    // Only skip if we haven't moved enough AND settings haven't changed
+    if (distMoved < 8.0 && !settingsChanged) {
         env->DeleteLocalRef(world);
         env->DeleteLocalRef(player);
         env->DeleteLocalRef(mc);
@@ -110,11 +126,22 @@ void XRay::OnTick() {
     lastScanX = px;
     lastScanY = py;
     lastScanZ = pz;
+    
+    lastShowDiamond = showDiamond;
+    lastShowGold = showGold;
+    lastShowIron = showIron;
+    lastShowEmerald = showEmerald;
+    lastShowNetherite = showNetherite;
+    lastShowChests = showChests;
+    lastShowEnderChests = showEnderChests;
+    lastShowSpawners = showSpawners;
+    lastShowHoppers = showHoppers;
+    lastScanRadius = scanRadius;
 
     std::vector<XRayBlock> newFoundBlocks;
     newFoundBlocks.reserve(256);
 
-    // ── Scan loop — PushLocalFrame guarantees cleanup on any exit path ────────
+    // ─ Scan loop — PushLocalFrame guarantees cleanup on any exit path ─
     int radius = scanRadius;
 
     for (int x = px - radius; x <= px + radius; x++) {
@@ -142,19 +169,19 @@ void XRay::OnTick() {
                 if (keyStr) {
                     const char* rawKey = env->GetStringUTFChars(keyStr, nullptr);
                     if (rawKey) {
-                        // ── Ores ─────────────────────────────────────────────
+                        // ─ Ores ──────────────────────────────────────────
                         if      (strstr(rawKey, "diamond_ore"))    { if (showDiamond)    newFoundBlocks.push_back({x, y, z,   0, 255, 255}); }
                         else if (strstr(rawKey, "gold_ore"))       { if (showGold)       newFoundBlocks.push_back({x, y, z, 255, 215,   0}); }
                         else if (strstr(rawKey, "iron_ore"))       { if (showIron)       newFoundBlocks.push_back({x, y, z, 200, 200, 200}); }
                         else if (strstr(rawKey, "emerald_ore"))    { if (showEmerald)    newFoundBlocks.push_back({x, y, z,   0, 255,   0}); }
                         else if (strstr(rawKey, "ancient_debris")) { if (showNetherite)  newFoundBlocks.push_back({x, y, z, 100,  70,  70}); }
-                        // ── Containers (order matters: specific before generic) ─
+                        // ─ Containers (order matters: specific before generic) ─
                         else if (strstr(rawKey, "ender_chest"))    { if (showEnderChests) newFoundBlocks.push_back({x, y, z, 128,   0, 128}); }
                         else if (strstr(rawKey, "trapped_chest"))  { if (showChests)      newFoundBlocks.push_back({x, y, z, 255, 100,   0}); }
                         else if (strstr(rawKey, "chest") ||
                                  strstr(rawKey, "barrel") ||
                                  strstr(rawKey, "shulker_box"))    { if (showChests)      newFoundBlocks.push_back({x, y, z, 255, 165,   0}); }
-                        // ── Misc ─────────────────────────────────────────────
+                        // ─ Misc ──────────────────────────────────────────
                         else if (strstr(rawKey, "spawner"))        { if (showSpawners)   newFoundBlocks.push_back({x, y, z, 255,   0,   0}); }
                         else if (strstr(rawKey, "hopper"))         { if (showHoppers)    newFoundBlocks.push_back({x, y, z, 100, 100, 100}); }
 
