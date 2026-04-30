@@ -193,7 +193,8 @@ void Killaura::OnTick() {
                 std::pow(tz - evalPz, 2)
             );
 
-            if (dist <= bestDist) {
+            // FIX: lower bound 0.5 to allow melee hits
+            if (dist <= bestDist && dist > 0.5) {
                 float hp = env->CallFloatMethod(target, getHealth);
                 if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(target); continue; }
                 if (hp > 0.0f) {
