@@ -14,22 +14,29 @@ static jfieldID instanceField, playerField, worldField, playersField, optionsFie
 static jfieldID entX, entY, entZ, yawField, pitchField;
 static jmethodID listSize, listGet, getHealth, getDoubleValue;
 
-// cached for GCD block — set once in mappings load, never again
+// cached for GCD block – set once in mappings load, never again
 static jclass    s_dblClass  = nullptr;
 static jmethodID s_dblValMID = nullptr;
 
 // ── persistent RNG (seeded once, never re-seeded in hot path) ────────────────
 static std::mt19937 s_rng([]() -> uint32_t {
-    // mix two independent entropy sources so the seed itself isn't trivially
-    // guessable from timing alone
     std::random_device rd;
     return rd() ^ (uint32_t)(GetTickCount64() * 2654435761ULL);
 }());
 
 // ── per-tick state for humanised motion ──────────────────────────────────────
-static float  s_yawVel   = 0.0f;   // current angular velocity (degrees/tick)
-static float  s_pitchVel = 0.0f;
-static DWORD  s_nextTickMs = 0;    // earliest ms we are allowed to act again
+static float  s_yawVel    = 0.0f;
+static float  s_pitchVel  = 0.0f;
+static DWORD  s_nextTickMs = 0;   // earliest ms we are allowed to act again
+
+// PATCH 4 – target-switch re-acquisition cooldown state
+static jobject s_lastTarget      = nullptr; // weak identity (pointer value only)
+static DWORD   s_targetLostMs    = 0;
+static bool    s_targetWasActive = false;
+
+// PATCH 1 – per-tick rotation velocity caps (degrees/tick)
+static constexpr float kMaxYawPerTick   = 18.0f;
+static constexpr float kMaxPitchPerTick = 12.0f;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -55,7 +62,7 @@ void Aimbot::OnTick() {
     JNIEnv* env = JNIHelper::env;
     if (!env) return;
 
-    // ── lazy mapping load ─────────────────────────────────────────────────────
+    // ── lazy mapping load ────────────────────────────────────────────────────
     if (!aimbot_mappings_loaded) {
         mcClass          = JNIHelper::FindClassSafe("Lnet/minecraft/class_310;",    "net/minecraft/client/MinecraftClient");
         worldClass       = JNIHelper::FindClassSafe("Lnet/minecraft/class_638;",    "net/minecraft/client/world/ClientWorld");
@@ -89,7 +96,6 @@ void Aimbot::OnTick() {
         sensitivityField = JNIHelper::GetFieldSafe(optionsClass,      "field_1844",  "Lnet/minecraft/class_7172;", "mouseSensitivity");
         getDoubleValue   = JNIHelper::GetMethodSafe(doubleOptionClass,"method_41753","()Ljava/lang/Object;",       "getValue");
 
-        // cache java/lang/Double lookup — used every tick in GCD block
         jclass localDbl  = env->FindClass("java/lang/Double");
         if (localDbl) {
             s_dblClass  = (jclass)env->NewGlobalRef(localDbl);
@@ -107,23 +113,24 @@ void Aimbot::OnTick() {
 
     // ── LMB gate ─────────────────────────────────────────────────────────────
     if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
-        // bleed velocity back to zero so we don't snap when re-engaging
-        s_yawVel   *= 0.6f;
-        s_pitchVel *= 0.6f;
+        // PATCH 3 – randomised velocity bleed multiplier on release
+        std::uniform_real_distribution<float> bleedDist(0.5f, 0.7f);
+        float bleed = bleedDist(s_rng);
+        s_yawVel   *= bleed;
+        s_pitchVel *= bleed;
         return;
     }
 
-    // ── stochastic tick-rate jitter ───────────────────────────────────────────
-    // Humans don't react at a perfectly fixed interval.  Skip ~10-20 % of ticks
-    // at random so the rotation update cadence is irregular.
+    // ── PATCH 5 – stochastic tick-rate jitter ────────────────────────────────
     {
         DWORD now = (DWORD)GetTickCount64();
         if (now < s_nextTickMs) return;
 
-        // next allowed tick: base 45 ms ± gaussian noise (≈ one game tick @ 20 TPS
-        // with natural human jitter layered on top)
-        std::uniform_int_distribution<int> jitterMs(-8, 14);
-        s_nextTickMs = now + 45 + (DWORD)jitterMs(s_rng);
+        // base: uniform(35,60) ms + gaussian jitter
+        std::uniform_int_distribution<int> baseDist(35, 60);
+        int base = baseDist(s_rng);
+        int jitter = (int)gaussian_noise(4.0f);
+        s_nextTickMs = now + (DWORD)(base + jitter);
     }
 
     jobject mc = env->GetStaticObjectField(mcClass, instanceField);
@@ -148,7 +155,6 @@ void Aimbot::OnTick() {
         float  currentYaw   = env->GetFloatField(player, yawField);
         float  currentPitch = env->GetFloatField(player, pitchField);
 
-        // eye positions
         double eyePy = py + 1.62;
 
         jobject playersList = env->GetObjectField(world, playersField);
@@ -158,8 +164,13 @@ void Aimbot::OnTick() {
         if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(playersList); goto cleanup; }
 
         jobject bestTarget   = nullptr;
-        float   bestAngDist  = fov;   // primary sort key: angular distance (yaw+pitch)
-        double  bestDist3D   = 6.0;   // tiebreaker only
+        float   bestAngDist  = fov;
+        double  bestDist3D   = 6.0;
+        void*   bestTargetId = nullptr;
+
+        // PATCH 2 – randomised aim-height jitter per scan
+        std::uniform_real_distribution<float> heightJitter(0.6f, 1.4f);
+        float aimHeight = heightJitter(s_rng);
 
         for (int i = 0; i < size; i++) {
             jobject target = env->CallObjectMethod(playersList, listGet, i);
@@ -172,9 +183,8 @@ void Aimbot::OnTick() {
             double ty = env->GetDoubleField(target, entY);
             double tz = env->GetDoubleField(target, entZ);
 
-            // FIX: use eye-height-corrected geometry in scan loop (same as aim block)
             double diffX  = tx - px;
-            double diffY  = (ty + 1.0) - eyePy;
+            double diffY  = (ty + aimHeight) - eyePy;
             double diffZ  = tz - pz;
             double dist3D = std::sqrt(diffX*diffX + diffY*diffY + diffZ*diffZ);
             double distXZ = std::sqrt(diffX*diffX + diffZ*diffZ);
@@ -183,8 +193,6 @@ void Aimbot::OnTick() {
             if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(target); continue; }
             if (hp <= 0.0f) { env->DeleteLocalRef(target); continue; }
 
-            // FIX: gate on FOV first, then sort by angular distance (primary)
-            // distance is only a tiebreaker when angDist is equal
             float tYaw   = (float)(std::atan2(diffZ, diffX) * 180.0 / 3.14159265) - 90.0f;
             float tPitch = (float)-(std::atan2(diffY, distXZ) * 180.0 / 3.14159265);
             float yDiff  = wrap180(tYaw   - currentYaw);
@@ -195,6 +203,7 @@ void Aimbot::OnTick() {
                 if (angDist < bestAngDist || (angDist == bestAngDist && dist3D < bestDist3D)) {
                     bestAngDist = angDist;
                     bestDist3D  = dist3D;
+                    bestTargetId = (void*)target; // pointer identity for switch detection
                     if (bestTarget) env->DeleteLocalRef(bestTarget);
                     bestTarget = env->NewLocalRef(target);
                 }
@@ -203,13 +212,35 @@ void Aimbot::OnTick() {
             env->DeleteLocalRef(target);
         }
 
+        // PATCH 4 – target-switch cooldown
+        DWORD nowMs = (DWORD)GetTickCount64();
+        if (bestTargetId != s_lastTarget) {
+            // target switched or lost
+            if (s_targetWasActive) {
+                s_targetLostMs = nowMs;
+            }
+            s_lastTarget      = bestTargetId;
+            s_targetWasActive = (bestTarget != nullptr);
+
+            if (bestTarget) {
+                // gate re-acquisition for 150-300ms
+                std::uniform_int_distribution<int> cooldownDist(150, 300);
+                DWORD cooldown = (DWORD)cooldownDist(s_rng);
+                if (nowMs - s_targetLostMs < cooldown) {
+                    env->DeleteLocalRef(bestTarget);
+                    bestTarget = nullptr;
+                }
+            }
+        }
+
         if (bestTarget) {
             double tx = env->GetDoubleField(bestTarget, entX);
             double ty = env->GetDoubleField(bestTarget, entY);
             double tz = env->GetDoubleField(bestTarget, entZ);
 
+            // PATCH 2 – same jitter value for the actual aim computation
             double diffX  = tx - px;
-            double diffY  = (ty + 1.0) - eyePy;
+            double diffY  = (ty + aimHeight) - eyePy;
             double diffZ  = tz - pz;
             double distXZ = std::sqrt(diffX*diffX + diffZ*diffZ);
 
@@ -219,7 +250,7 @@ void Aimbot::OnTick() {
             float yawDiff   = wrap180(targetYaw   - currentYaw);
             float pitchDiff = wrap180(targetPitch - currentPitch);
 
-            // ── GCD compensation BEFORE lerp (correct order) ──────────────────
+            // GCD compensation BEFORE lerp
             float gcd = 1.0f;
             if (sensitivityField && getDoubleValue) {
                 jobject sensObj = env->GetObjectField(options, sensitivityField);
@@ -227,7 +258,6 @@ void Aimbot::OnTick() {
                     jobject sensDoubleObj = env->CallObjectMethod(sensObj, getDoubleValue);
                     if (env->ExceptionCheck()) env->ExceptionClear();
                     if (sensDoubleObj) {
-                        // FIX: use cached s_dblClass / s_dblValMID — no FindClass per tick
                         double sens = env->CallDoubleMethod(sensDoubleObj, s_dblValMID);
                         if (env->ExceptionCheck()) { env->ExceptionClear(); sens = 0.5; }
                         float f = (float)(sens * 0.6 + 0.2);
@@ -238,38 +268,30 @@ void Aimbot::OnTick() {
                 }
             }
 
-            // Snap deltas to GCD grid first, then smooth — prevents sub-GCD
-            // remainder accumulation that looks inhuman on server-side analysis
             yawDiff   -= std::fmod(yawDiff,   gcd);
             pitchDiff -= std::fmod(pitchDiff, gcd);
 
-            // ── spring-damper velocity model ──────────────────────────────────
-            // Accelerate toward target delta, then coast + decelerate.
-            // This produces the characteristic S-curve a real wrist makes.
+            // spring-damper velocity model
             float baseSpeed = smoothSpeed;
-
-            // Vary speed based on angular distance: faster when far, slower on
-            // approach — mimics natural human over/undershoot behaviour
             float angDist   = std::sqrt(yawDiff*yawDiff + pitchDiff*pitchDiff);
-            float distScale = (std::min)(1.0f, angDist / 15.0f); // ramp up over 15 deg
+            float distScale = (std::min)(1.0f, angDist / 15.0f);
             float targetSpeed = baseSpeed * (0.55f + 0.45f * distScale);
-
-            // Add per-tick gaussian noise to the speed itself
             targetSpeed += gaussian_noise(baseSpeed * 0.07f);
             targetSpeed  = (std::max)(0.02f, (std::min)(targetSpeed, 0.95f));
 
-            // Smooth the speed itself (velocity of the velocity = acceleration)
             s_yawVel   += (yawDiff   * targetSpeed - s_yawVel)   * 0.35f;
             s_pitchVel += (pitchDiff * targetSpeed - s_pitchVel) * 0.35f;
 
-            // Small independent noise on each axis (micro-tremor)
             s_yawVel   += gaussian_noise(0.012f);
             s_pitchVel += gaussian_noise(0.008f);
+
+            // PATCH 1 – clamp velocity before writing rotation fields
+            s_yawVel   = (std::max)(-kMaxYawPerTick,   (std::min)(kMaxYawPerTick,   s_yawVel));
+            s_pitchVel = (std::max)(-kMaxPitchPerTick, (std::min)(kMaxPitchPerTick, s_pitchVel));
 
             float newYaw   = currentYaw   + s_yawVel;
             float newPitch = currentPitch + s_pitchVel;
 
-            // Clamp pitch to valid MC range
             newPitch = (std::max)(-90.0f, (std::min)(90.0f, newPitch));
 
             env->SetFloatField(player, yawField,   newYaw);

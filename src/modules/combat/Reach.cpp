@@ -11,6 +11,25 @@ static jfieldID instanceField, playerField, worldField, interactionManagerField,
 static jfieldID entX, entY, entZ, mainHandField;
 static jmethodID listSize, listGet, attackMethod, swingMethod, getHealth;
 
+// PATCH 4 – target-switch cooldown state
+static void*  s_reachLastTargetId   = nullptr;
+static DWORD  s_reachTargetLostMs   = 0;
+static bool   s_reachTargetWasActive = false;
+
+// PATCH 5 – stochastic tick interval
+static DWORD  s_reachNextTickMs = 0;
+
+static std::mt19937 s_reachRng([]() -> uint32_t {
+    std::random_device rd;
+    return rd() ^ (uint32_t)(GetTickCount64() * 2654435761ULL);
+}());
+
+static float gaussian_noise_reach(float stddev) {
+    std::uniform_real_distribution<float> u(1e-6f, 1.0f);
+    float u1 = u(s_reachRng), u2 = u(s_reachRng);
+    return stddev * std::sqrt(-2.0f * std::log(u1)) * std::cos(6.28318530f * u2);
+}
+
 Reach::Reach() : Module("Reach"), reachDistance(3.5f) {}
 
 void Reach::OnTick() {
@@ -18,36 +37,34 @@ void Reach::OnTick() {
     if (!env) return;
 
     if (!reachMappingsLoaded) {
-        mcClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_310;", "net/minecraft/client/MinecraftClient");
-        playerClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_746;", "net/minecraft/client/network/ClientPlayerEntity");
-        worldClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_638;", "net/minecraft/client/world/ClientWorld");
-        interactionManagerClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_636;", "net/minecraft/client/network/ClientPlayerInteractionManager");
-        entityClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_1297;", "net/minecraft/entity/Entity");
-        livingClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_1309;", "net/minecraft/entity/LivingEntity");
-        handClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_1268;", "net/minecraft/util/Hand");
+        mcClass                 = JNIHelper::FindClassSafe("Lnet/minecraft/class_310;",  "net/minecraft/client/MinecraftClient");
+        playerClass             = JNIHelper::FindClassSafe("Lnet/minecraft/class_746;",  "net/minecraft/client/network/ClientPlayerEntity");
+        worldClass              = JNIHelper::FindClassSafe("Lnet/minecraft/class_638;",  "net/minecraft/client/world/ClientWorld");
+        interactionManagerClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_636;",  "net/minecraft/client/network/ClientPlayerInteractionManager");
+        entityClass             = JNIHelper::FindClassSafe("Lnet/minecraft/class_1297;", "net/minecraft/entity/Entity");
+        livingClass             = JNIHelper::FindClassSafe("Lnet/minecraft/class_1309;", "net/minecraft/entity/LivingEntity");
+        handClass               = JNIHelper::FindClassSafe("Lnet/minecraft/class_1268;", "net/minecraft/util/Hand");
 
         if (!mcClass || !playerClass || !worldClass || !interactionManagerClass || !entityClass || !livingClass || !handClass) return;
 
-        instanceField = JNIHelper::GetStaticFieldSafe(mcClass, "field_1700", "Lnet/minecraft/class_310;", "instance");
-        playerField = JNIHelper::GetFieldSafe(mcClass, "field_1724", "Lnet/minecraft/class_746;", "player");
-        worldField = JNIHelper::GetFieldSafe(mcClass, "field_1687", "Lnet/minecraft/class_638;", "world");
-        interactionManagerField = JNIHelper::GetFieldSafe(mcClass, "field_1761", "Lnet/minecraft/class_636;", "interactionManager");
-        
-        playersField = JNIHelper::GetFieldSafe(worldClass, "field_18226", "Ljava/util/List;", "players");
-        
+        instanceField            = JNIHelper::GetStaticFieldSafe(mcClass,                "field_1700",  "Lnet/minecraft/class_310;", "instance");
+        playerField              = JNIHelper::GetFieldSafe(mcClass,                      "field_1724",  "Lnet/minecraft/class_746;", "player");
+        worldField               = JNIHelper::GetFieldSafe(mcClass,                      "field_1687",  "Lnet/minecraft/class_638;", "world");
+        interactionManagerField  = JNIHelper::GetFieldSafe(mcClass,                      "field_1761",  "Lnet/minecraft/class_636;", "interactionManager");
+        playersField             = JNIHelper::GetFieldSafe(worldClass,                   "field_18226", "Ljava/util/List;",          "players");
+
         jclass listClass = env->FindClass("java/util/List");
         listSize = env->GetMethodID(listClass, "size", "()I");
-        listGet = env->GetMethodID(listClass, "get", "(I)Ljava/lang/Object;");
+        listGet  = env->GetMethodID(listClass, "get",  "(I)Ljava/lang/Object;");
 
         entX = JNIHelper::GetFieldSafe(entityClass, "field_6014", "D", "x");
         entY = JNIHelper::GetFieldSafe(entityClass, "field_6036", "D", "y");
         entZ = JNIHelper::GetFieldSafe(entityClass, "field_5969", "D", "z");
 
-        getHealth = JNIHelper::GetMethodSafe(livingClass, "method_6032", "()F", "getHealth");
-        attackMethod = JNIHelper::GetMethodSafe(interactionManagerClass, "method_2918", "(Lnet/minecraft/class_1657;Lnet/minecraft/class_1297;)V", "attackEntity");
-        swingMethod = JNIHelper::GetMethodSafe(livingClass, "method_6104", "(Lnet/minecraft/class_1268;)V", "swingHand");
-        
-        mainHandField = JNIHelper::GetStaticFieldSafe(handClass, "field_5808", "Lnet/minecraft/class_1268;", "MAIN_HAND");
+        getHealth    = JNIHelper::GetMethodSafe(livingClass,           "method_6032", "()F",  "getHealth");
+        attackMethod = JNIHelper::GetMethodSafe(interactionManagerClass,"method_2918", "(Lnet/minecraft/class_1657;Lnet/minecraft/class_1297;)V", "attackEntity");
+        swingMethod  = JNIHelper::GetMethodSafe(livingClass,           "method_6104", "(Lnet/minecraft/class_1268;)V", "swingHand");
+        mainHandField= JNIHelper::GetStaticFieldSafe(handClass,        "field_5808",  "Lnet/minecraft/class_1268;", "MAIN_HAND");
 
         reachMappingsLoaded = true;
     }
@@ -62,16 +79,26 @@ void Reach::OnTick() {
     }
     wasClicked = true;
 
+    // PATCH 5 – stochastic tick interval
+    {
+        DWORD now = (DWORD)GetTickCount64();
+        if (now < s_reachNextTickMs) return;
+        std::uniform_int_distribution<int> baseDist(35, 60);
+        int base = baseDist(s_reachRng);
+        int jitter = (int)gaussian_noise_reach(4.0f);
+        s_reachNextTickMs = now + (DWORD)(base + jitter);
+    }
+
     jobject mc = env->GetStaticObjectField(mcClass, instanceField);
     if (!mc) return;
 
-    jobject player = env->GetObjectField(mc, playerField);
-    jobject world = env->GetObjectField(mc, worldField);
+    jobject player             = env->GetObjectField(mc, playerField);
+    jobject world              = env->GetObjectField(mc, worldField);
     jobject interactionManager = env->GetObjectField(mc, interactionManagerField);
 
     if (!player || !world || !interactionManager) {
-        if (player) env->DeleteLocalRef(player);
-        if (world) env->DeleteLocalRef(world);
+        if (player)             env->DeleteLocalRef(player);
+        if (world)              env->DeleteLocalRef(world);
         if (interactionManager) env->DeleteLocalRef(interactionManager);
         env->DeleteLocalRef(mc);
         return;
@@ -79,19 +106,19 @@ void Reach::OnTick() {
 
     {
         double px = env->GetDoubleField(player, entX);
-        double py = env->GetDoubleField(player, entY) + 1.62; 
+        double py = env->GetDoubleField(player, entY) + 1.62;
         double pz = env->GetDoubleField(player, entZ);
-        
-        jfieldID yawField = JNIHelper::GetFieldSafe(entityClass, "field_5982", "F", "yaw");
+
+        jfieldID yawField   = JNIHelper::GetFieldSafe(entityClass, "field_5982", "F", "yaw");
         jfieldID pitchField = JNIHelper::GetFieldSafe(entityClass, "field_5965", "F", "pitch");
-        
+
         if (!yawField || !pitchField) goto cleanup;
 
-        float yaw = env->GetFloatField(player, yawField);
+        float yaw   = env->GetFloatField(player, yawField);
         float pitch = env->GetFloatField(player, pitchField);
 
-        float f = pitch * 0.017453292F;
-        float g = -yaw * 0.017453292F;
+        float f = pitch * 0.01745329F;
+        float g = -yaw  * 0.01745329F;
         float h = std::cos(g);
         float i = std::sin(g);
         float j = std::cos(f);
@@ -104,20 +131,22 @@ void Reach::OnTick() {
         if (!playersList) goto cleanup;
 
         int size = env->CallIntMethod(playersList, listSize);
-        if (env->ExceptionCheck()) { 
-            env->ExceptionClear(); 
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
             env->DeleteLocalRef(playersList);
-            goto cleanup; 
+            goto cleanup;
         }
 
         jobject bestTarget = nullptr;
-        
-        std::random_device rd;
-        std::mt19937 gen(rd());
+        void*   bestTargetId = nullptr;
+
+        // PATCH 2 – randomised aim-height jitter
+        std::uniform_real_distribution<float> heightJitter(0.6f, 1.4f);
+        float aimHeight = heightJitter(s_reachRng);
+
         std::uniform_real_distribution<float> reachDist(reachDistance - 0.1f, reachDistance + 0.1f);
-        double actualReach = reachDist(gen);
-        
-        double bestDist = actualReach;
+        double actualReach = reachDist(s_reachRng);
+        double bestDist    = actualReach;
 
         for (int idx = 0; idx < size; idx++) {
             jobject target = env->CallObjectMethod(playersList, listGet, idx);
@@ -131,29 +160,42 @@ void Reach::OnTick() {
 
             float hp = env->CallFloatMethod(target, getHealth);
             if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(target); continue; }
-            if (hp <= 0.0f) {
-                env->DeleteLocalRef(target);
-                continue;
-            }
+            if (hp <= 0.0f) { env->DeleteLocalRef(target); continue; }
 
             double tx = env->GetDoubleField(target, entX);
-            double ty = env->GetDoubleField(target, entY) + 1.0; 
+            double ty = env->GetDoubleField(target, entY) + aimHeight;
             double tz = env->GetDoubleField(target, entZ);
 
             double diffX = tx - px;
             double diffY = ty - py;
             double diffZ = tz - pz;
-            double dist = std::sqrt(diffX * diffX + diffY * diffY + diffZ * diffZ);
-            
-            if (dist <= bestDist && dist > 3.0) { 
+            double dist  = std::sqrt(diffX * diffX + diffY * diffY + diffZ * diffZ);
+
+            if (dist <= bestDist && dist > 3.0) {
                 double dot = (diffX * lookX + diffY * lookY + diffZ * lookZ) / dist;
-                if (dot > 0.95) { 
+                if (dot > 0.95) {
                     bestDist = dist;
+                    bestTargetId = (void*)target;
                     if (bestTarget) env->DeleteLocalRef(bestTarget);
                     bestTarget = env->NewLocalRef(target);
                 }
             }
             env->DeleteLocalRef(target);
+        }
+
+        // PATCH 4 – target-switch cooldown
+        DWORD nowMs = (DWORD)GetTickCount64();
+        if (bestTargetId != s_reachLastTargetId) {
+            if (s_reachTargetWasActive) s_reachTargetLostMs = nowMs;
+            s_reachLastTargetId      = bestTargetId;
+            s_reachTargetWasActive   = (bestTarget != nullptr);
+            if (bestTarget) {
+                std::uniform_int_distribution<int> cdDist(150, 300);
+                if (nowMs - s_reachTargetLostMs < (DWORD)cdDist(s_reachRng)) {
+                    env->DeleteLocalRef(bestTarget);
+                    bestTarget = nullptr;
+                }
+            }
         }
 
         if (bestTarget) {
