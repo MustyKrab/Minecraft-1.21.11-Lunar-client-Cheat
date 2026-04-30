@@ -12,7 +12,6 @@ class XRay : public Module {
 private:
     std::vector<XRayBlock> foundBlocks;
     mutable std::mutex blocksMutex;
-    int scanRadius = 32;
     int tickCounter = 0;
     
     // Cache player position to only rescan when moved significantly
@@ -21,6 +20,7 @@ private:
     int lastScanZ = -999999;
 
 public:
+    int scanRadius = 32;
     bool showDiamond = true;
     bool showGold = true;
     bool showIron = true;
