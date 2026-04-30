@@ -24,6 +24,12 @@ void Menu::RenderCombatTab() {
         float fov = ka->GetFOV();
         if (ImGui::SliderFloat("FOV##ka", &fov, 10.0f, 180.0f, "%.0f"))
             ka->SetFOV(fov);
+
+        bool enable360 = ka->Is360Enabled();
+        if (ImGui::Checkbox("360 Mode##ka", &enable360))
+            ka->Set360Enabled(enable360);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Bypass FOV check to hit entities all around you.");
     }
 
     ImGui::EndChild();

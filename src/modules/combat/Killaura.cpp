@@ -12,7 +12,7 @@ static jfieldID entX, entY, entZ, yawField, pitchField, mainHandField;
 static jmethodID listSize, listGet, getHealth, attackMethod, swingMethod, getCooldownMethod;
 static jmethodID raycastMethod, hitResultGetTypeMethod, getCameraPosVecMethod, getRotationVecMethod, raycastContextInitMethod;
 
-Killaura::Killaura() : Module("Killaura"), reach(3.0f), fov(90.0f), ticksSinceLastAttack(0), randomDelay(0) {}
+Killaura::Killaura() : Module("Killaura"), reach(3.0f), fov(90.0f), enable360(false), ticksSinceLastAttack(0), randomDelay(0) {}
 
 void Killaura::OnTick() {
     JNIEnv* env = JNIHelper::env;
@@ -106,7 +106,7 @@ void Killaura::OnTick() {
         double bestDist = reach;
 
         std::random_device rd;
-        std::mt19937 gen(rd());
+        std::mt1937 gen(rd());
         std::uniform_real_distribution<double> randomOffset(-0.3, 0.3); 
 
         for (int i = 0; i < size; i++) {
@@ -129,19 +129,24 @@ void Killaura::OnTick() {
                 float hp = env->CallFloatMethod(target, getHealth);
                 if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(target); continue; }
                 if (hp > 0.0f) {
-                    double diffX = tx - px;
-                    double diffZ = tz - pz;
-                    float targetYaw = (float)(std::atan2(diffZ, diffX) * 180.0 / 3.14159265) - 90.0f;
-                    
-                    float yawDiff = targetYaw - currentYaw;
-                    while (yawDiff <= -180.0f) yawDiff += 360.0f;
-                    while (yawDiff > 180.0f) yawDiff -= 360.0f;
-                    
-                    if (std::abs(yawDiff) <= fov) {
-                        bestDist = dist;
-                        if (bestTarget) env->DeleteLocalRef(bestTarget);
-                        bestTarget = env->NewLocalRef(target);
+                    if (!enable360) {
+                        double diffX = tx - px;
+                        double diffZ = tz - pz;
+                        float targetYaw = (float)(std::atan2(diffZ, diffX) * 180.0 / 3.14159265) - 90.0f;
+                        
+                        float yawDiff = targetYaw - currentYaw;
+                        while (yawDiff <= -180.0f) yawDiff += 360.0f;
+                        while (yawDiff > 180.0f) yawDiff -= 360.0f;
+                        
+                        if (std::abs(yawDiff) > fov) {
+                            env->DeleteLocalRef(target);
+                            continue;
+                        }
                     }
+                    
+                    bestDist = dist;
+                    if (bestTarget) env->DeleteLocalRef(bestTarget);
+                    bestTarget = env->NewLocalRef(target);
                 }
             }
             env->DeleteLocalRef(target);
