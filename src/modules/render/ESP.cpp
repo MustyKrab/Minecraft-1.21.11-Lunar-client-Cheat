@@ -379,46 +379,61 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
                 Killaura* ka = (Killaura*)mod;
                 if (ka) {
                     float r = ka->GetReach(), fov = ka->GetFOV();
+                    float origR = r, origFov = fov;
                     y += DrawSlider(L"Reach", r,   3.0f,   6.0f, draggingKaReachSlider, 130, y);
                     y += DrawSlider(L"FOV",   fov, 10.0f, 360.0f, draggingKaFovSlider,  130, y);
-                    ka->SetReach(r); ka->SetFOV(fov);
+                    
+                    // FIX: Only call setters if values actually changed to prevent torn reads on the cheat thread
+                    if (r != origR) ka->SetReach(r); 
+                    if (fov != origFov) ka->SetFOV(fov);
                 }
             } else if (nameStr == "TeleportAura") {
                 TeleportAura* ta = (TeleportAura*)mod;
                 if (ta) {
                     float r = ta->GetReach();
+                    float origR = r;
                     y += DrawSlider(L"Teleport Reach", r, 5.0f, 100.0f, draggingTaReachSlider, 130, y);
-                    ta->SetReach(r);
+                    if (r != origR) ta->SetReach(r);
                 }
             } else if (nameStr == "FakeLag") {
                 FakeLag* fl = (FakeLag*)mod;
                 if (fl) {
                     float limit = (float)fl->GetChokeLimit();
+                    float origLimit = limit;
                     y += DrawSlider(L"Choke Limit", limit, 1.0f, 20.0f, draggingFlChokeSlider, 130, y);
-                    fl->SetChokeLimit((int)limit);
+                    if (limit != origLimit) fl->SetChokeLimit((int)limit);
                 }
             } else if (nameStr == "Aimbot") {
                 Aimbot* aim = (Aimbot*)mod;
                 if (aim) {
                     float s = aim->GetSmoothSpeed();
+                    float origS = s;
                     y += DrawSlider(L"Smooth Speed", s, 0.01f, 0.50f, draggingAimSmoothSlider, 130, y);
-                    aim->SetSmoothSpeed(s);
+                    if (s != origS) aim->SetSmoothSpeed(s);
                 }
             } else if (nameStr == "AutoClicker") {
                 AutoClicker* ac = (AutoClicker*)mod;
                 if (ac) {
                     float minCps = ac->GetMinCps(), maxCps = ac->GetMaxCps();
+                    float origMin = minCps, origMax = maxCps;
                     bool  jitter = ac->IsJitterEnabled();
+                    bool  origJitter = jitter;
+                    
                     y += DrawSlider(L"Min CPS", minCps, 1.0f, 20.0f, draggingAcMinSlider, 130, y);
                     y += DrawSlider(L"Max CPS", maxCps, 1.0f, 20.0f, draggingAcMaxSlider, 130, y);
                     
                     if (minCps > maxCps) {
                         if (draggingAcMinSlider) maxCps = minCps;
                         else if (draggingAcMaxSlider) minCps = maxCps;
+                        else maxCps = minCps; // fallback
                     }
                     
                     y += DrawCheckbox(L"Jitter", jitter, 130, y);
-                    ac->SetMinCps(minCps); ac->SetMaxCps(maxCps); ac->SetJitter(jitter);
+                    
+                    // FIX: Only call setters if values actually changed to prevent torn reads on the cheat thread
+                    if (minCps != origMin) ac->SetMinCps(minCps); 
+                    if (maxCps != origMax) ac->SetMaxCps(maxCps); 
+                    if (jitter != origJitter) ac->SetJitter(jitter);
                 }
             } else if (nameStr == "ESP") {
                 y += DrawSlider(L"ESP Range", espRange, 10.0f, 200.0f, draggingEspRangeSlider, 130, y);
@@ -426,8 +441,9 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
                 Reach* rm = (Reach*)mod;
                 if (rm) {
                     float r = rm->GetReach();
+                    float origR = r;
                     y += DrawSlider(L"Reach Distance", r, 3.0f, 6.0f, draggingReachSlider, 130, y);
-                    rm->SetReach(r);
+                    if (r != origR) rm->SetReach(r);
                 }
             }
             y += 10;
@@ -620,7 +636,6 @@ void ESP::UpdateDataLoop() {
                             if (distSq < 2500.0 && getNameMethod && getStringMethod) {
                                 jobject textObj = env->CallObjectMethod(player, getNameMethod);
                                 if (!checkEx(env) && textObj) {
-                                    // FIX: Delete local ref for textObj
                                     jstring nameStr = (jstring)env->CallObjectMethod(textObj, getStringMethod);
                                     if (!checkEx(env) && nameStr) {
                                         const jchar* raw = env->GetStringChars(nameStr, nullptr);
