@@ -24,6 +24,8 @@ add_library(MustyClient SHARED
     src/modules/combat/AutoClicker.h
     src/modules/TeleportAura.cpp
     src/modules/TeleportAura.h
+    src/modules/FakeLag.cpp
+    src/modules/FakeLag.h
     src/modules/render/ESP.cpp
     src/modules/render/ESP.h
     src/modules/render/XRay.cpp

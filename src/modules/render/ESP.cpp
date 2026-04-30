@@ -6,6 +6,7 @@
 #include "../combat/Reach.h"
 #include "../combat/AutoClicker.h"
 #include "../TeleportAura.h"
+#include "../FakeLag.h"
 #include "../render/XRay.h"
 #include <iostream>
 #include <fstream>
@@ -172,13 +173,13 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
         totalHeight += 35;
         if (mod->IsExpanded()) {
             if (mod->GetName() == "XRay") totalHeight += 9 * 25 + 10;
-            else if (mod->GetName() == "Killaura") totalHeight += 2 * 40 + 1 * 25 + 10; // Removed TeleportAura
-            else if (mod->GetName() == "TeleportAura") totalHeight += 40 + 10; // Added TeleportAura
+            else if (mod->GetName() == "Killaura") totalHeight += 2 * 40 + 1 * 25 + 10; 
+            else if (mod->GetName() == "TeleportAura") totalHeight += 40 + 10; 
             else if (mod->GetName() == "Aimbot") totalHeight += 40 + 10;
             else if (mod->GetName() == "AutoClicker") totalHeight += 2 * 40 + 25 + 10;
             else if (mod->GetName() == "ESP") totalHeight += 40 + 10;
             else if (mod->GetName() == "Reach") totalHeight += 40 + 10;
-            // FOX FIX: Add height for new module
+            else if (mod->GetName() == "FakeLag") totalHeight += 40 + 10;
             else totalHeight += 40 + 10; 
         }
     }
@@ -297,6 +298,13 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
                     float r = ta->GetReach();
                     y += DrawSlider(L"Teleport Reach", r, 5.0f, 100.0f, draggingSlider, 130, y);
                     ta->SetReach(r);
+                }
+            } else if (mod->GetName() == "FakeLag") {
+                FakeLag* fl = (FakeLag*)mod;
+                if (fl) {
+                    float limit = (float)fl->GetChokeLimit();
+                    y += DrawSlider(L"Choke Limit", limit, 1.0f, 20.0f, draggingReachSlider, 130, y); // Reusing a dragging flag for simplicity
+                    fl->SetChokeLimit((int)limit);
                 }
             } else if (mod->GetName() == "Aimbot") {
                 Aimbot* aim = (Aimbot*)mod;
@@ -450,13 +458,11 @@ void ESP::RenderLoop() {
         return;
     }
 
-    // FOX FIX: Cache method and field IDs to avoid repeated JNI lookups in the render loop
     jmethodID stringLengthMethod = nullptr;
     jmethodID stringCharsMethod = nullptr;
     jclass stringClass = env->FindClass("java/lang/String");
     if (stringClass) {
         stringLengthMethod = env->GetMethodID(stringClass, "length", "()I");
-        // We can't easily cache GetStringChars as it's a JNI function, not a Java method
     }
 
     while (running) {
@@ -550,7 +556,6 @@ void ESP::RenderLoop() {
 
                         jint size = env->CallIntMethod(playersList, listSize);
                         
-                        // FOX FIX: Batch JNI calls and avoid excessive string conversions
                         for (int i = 0; i < size; i++) {
                             jobject player = env->CallObjectMethod(playersList, listGet, i);
                             if (!player) continue;
@@ -589,9 +594,8 @@ void ESP::RenderLoop() {
                                         maxHp = env->CallFloatMethod(player, getMaxHealth);
                                     }
 
-                                    std::wstring playerName = L"Player"; // Default to "Player" to save JNI calls
+                                    std::wstring playerName = L"Player"; 
                                     
-                                    // Only fetch name if they are close enough to read it, saves massive CPU
                                     if (distance < 50.0 && getNameMethod && getStringMethod) {
                                         jobject textObj = env->CallObjectMethod(player, getNameMethod);
                                         if (textObj) {

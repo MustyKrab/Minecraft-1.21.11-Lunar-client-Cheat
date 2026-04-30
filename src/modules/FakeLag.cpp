@@ -1,55 +1,58 @@
 #include "FakeLag.h"
-#include "../utils/Math.h"
-#include <windows.h>
+#include "../core/JNIHelper.h"
+#include <iostream>
 
-// FakeLag & Desync - CreateMove Hook
-bool __stdcall hkCreateMove(float flInputSampleTime, CUserCmd* cmd) {
-    // Call original to populate cmd
-    bool result = oCreateMove(flInputSampleTime, cmd);
+static bool flMappingsLoaded = false;
+static jclass flMcClass, flPlayerClass, flNetworkHandlerClass;
+static jfieldID flInstanceField, flPlayerField, flNetworkHandlerField;
+static jmethodID flSendPacketMethod;
 
-    if (!cmd || !cmd->command_number)
-        return result;
+FakeLag::FakeLag() : Module("FakeLag"), chokeLimit(10), chokedPackets(0) {}
 
-    // Rip bSendPacket from the stack frame
-    // Note: Offset depends on the game build. 0x1B is common for CS:GO, but this is Minecraft!
-    // FOX FIX: This entire hook approach is for Source Engine (CS:GO/TF2), not Minecraft JNI.
-    // We need to hook or intercept Minecraft's packet sending, not CUserCmd.
-    // For now, we will just disable this broken Source Engine code to stop crashes.
+void FakeLag::OnTick() {
+    JNIEnv* env = JNIHelper::env;
+    if (!env) return;
+
+    if (!flMappingsLoaded) {
+        flMcClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_310;", "net/minecraft/client/MinecraftClient");
+        flPlayerClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_746;", "net/minecraft/client/network/ClientPlayerEntity");
+        flNetworkHandlerClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_634;", "net/minecraft/client/network/ClientPlayNetworkHandler");
+
+        if (!flMcClass || !flPlayerClass || !flNetworkHandlerClass) return;
+
+        flInstanceField = JNIHelper::GetStaticFieldSafe(flMcClass, "field_1700", "Lnet/minecraft/class_310;", "instance");
+        flPlayerField = JNIHelper::GetFieldSafe(flMcClass, "field_1724", "Lnet/minecraft/class_746;", "player");
+        flNetworkHandlerField = JNIHelper::GetFieldSafe(flPlayerClass, "field_3944", "Lnet/minecraft/class_634;", "networkHandler");
+        
+        flSendPacketMethod = JNIHelper::GetMethodSafe(flNetworkHandlerClass, "method_52787", "(Lnet/minecraft/class_2596;)V", "sendPacket");
+
+        flMappingsLoaded = true;
+    }
+
+    if (!flInstanceField || !flPlayerField || !flNetworkHandlerField || !flSendPacketMethod) return;
+
+    jobject mc = env->GetStaticObjectField(flMcClass, flInstanceField);
+    if (!mc) return;
+
+    jobject player = env->GetObjectField(mc, flPlayerField);
+    if (!player) {
+        env->DeleteLocalRef(mc);
+        return;
+    }
+
+    // FOX FIX: True FakeLag in Minecraft requires hooking the sendPacket method and queueing packets.
+    // Since we are running externally/JNI without a bytecode hook, we can't easily intercept all packets.
+    // A simple JNI-only approach is to freeze the player's movement on the client side momentarily,
+    // but that's not true FakeLag. 
+    // For now, this module is a placeholder for the UI. To implement real FakeLag, you need to hook 
+    // ClientPlayNetworkHandler.sendPacket via MinHook or a Java agent.
     
-    /*
-    uintptr_t* ebp;
-    __asm mov ebp, ebp;
-    bool* bSendPacket = (bool*)(*ebp - 0x1B);
-
-    static int choked_packets = 0;
-    const int MAX_CHOKE = 14; // Server forces update at 15
-
-    // 1. Fake Lag Logic
-    if (choked_packets < MAX_CHOKE) {
-        *bSendPacket = false;
-        choked_packets++;
-    } else {
-        *bSendPacket = true;
-        choked_packets = 0;
+    // Placeholder logic for UI demonstration
+    chokedPackets++;
+    if (chokedPackets >= chokeLimit) {
+        chokedPackets = 0;
     }
 
-    // 2. Desync Logic (Anti-Aim)
-    // We manipulate cmd->viewangles based on whether we are sending or choking
-    if (*bSendPacket) {
-        // Real angle: What the server uses for our actual hitbox
-        // Keep it aimed at the enemy or our actual view
-        cmd->viewangles.y += 0.0f; 
-    } else {
-        // Fake angle: What the server interpolates during choked ticks
-        // Break LBY (Lower Body Yaw) by forcing a massive delta
-        cmd->viewangles.y += 120.0f; 
-    }
-
-    // Clamp and normalize to prevent Untrusted bans
-    Math::NormalizeAngles(cmd->viewangles);
-    Math::ClampAngles(cmd->viewangles);
-    */
-
-    // Return false so the engine doesn't override our modified angles with SetViewAngles
-    return false;
+    env->DeleteLocalRef(player);
+    env->DeleteLocalRef(mc);
 }
