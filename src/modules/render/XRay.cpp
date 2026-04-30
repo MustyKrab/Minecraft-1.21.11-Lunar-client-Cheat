@@ -5,34 +5,42 @@
 #include <cmath>
 
 static bool xrayMappingsLoaded = false;
-static int retryCounter = 0;
-static jclass mcClass, worldClass, blockPosClass, blockStateClass, blockClass;
-static jfieldID instanceField, playerField, worldField;
-static jfieldID entX, entY, entZ;
-static jmethodID getBlockStateMethod, getBlockMethod, toStringMethod;
+static int  retryCounter       = 0;
 
-XRay::XRay() : Module("XRay") {}
+static jclass     mcClass, worldClass, blockPosClass, blockStateClass, blockClass;
+static jfieldID   instanceField, playerField, worldField;
+static jfieldID   entX, entY, entZ;
+static jmethodID  getBlockStateMethod, getBlockMethod, toStringMethod;
+// Moved out of scan loop — resolved once during mapping load
+static jmethodID  blockPosInit;
+
+XRay::XRay() : Module("XRay") {
+    // Clamp stored radius to sane default; callers may still set it higher
+    // but 16 keeps the per-scan JNI call count under ~35k
+    scanRadius = 16;
+}
 
 void XRay::OnTick() {
     JNIEnv* env = JNIHelper::env;
     if (!env) return;
 
+    // ── Mapping load (retried every 60 ticks until all IDs resolve) ──────────
     if (!xrayMappingsLoaded) {
         retryCounter++;
         if (retryCounter < 60) return;
         retryCounter = 0;
 
-        mcClass         = JNIHelper::FindClassSafe("Lnet/minecraft/class_310;",  "net/minecraft/client/MinecraftClient");
-        worldClass      = JNIHelper::FindClassSafe("Lnet/minecraft/class_638;",  "net/minecraft/client/world/ClientWorld");
-        blockPosClass   = JNIHelper::FindClassSafe("Lnet/minecraft/class_2338;", "net/minecraft/util/math/BlockPos");
-        blockStateClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_2680;", "net/minecraft/block/BlockState");
-        blockClass      = JNIHelper::FindClassSafe("Lnet/minecraft/class_2248;", "net/minecraft/block/Block");
+        mcClass        = JNIHelper::FindClassSafe("Lnet/minecraft/class_310;",   "net/minecraft/client/MinecraftClient");
+        worldClass     = JNIHelper::FindClassSafe("Lnet/minecraft/class_638;",   "net/minecraft/client/world/ClientWorld");
+        blockPosClass  = JNIHelper::FindClassSafe("Lnet/minecraft/class_2338;",  "net/minecraft/util/math/BlockPos");
+        blockStateClass= JNIHelper::FindClassSafe("Lnet/minecraft/class_2680;",  "net/minecraft/block/BlockState");
+        blockClass     = JNIHelper::FindClassSafe("Lnet/minecraft/class_2248;",  "net/minecraft/block/Block");
 
         if (!mcClass || !worldClass || !blockPosClass || !blockStateClass || !blockClass) return;
 
         instanceField = JNIHelper::GetStaticFieldSafe(mcClass, "field_1700", "Lnet/minecraft/class_310;", "instance");
-        playerField   = JNIHelper::GetFieldSafe(mcClass, "field_1724", "Lnet/minecraft/class_746;", "player");
-        worldField    = JNIHelper::GetFieldSafe(mcClass, "field_1687", "Lnet/minecraft/class_638;", "world");
+        playerField   = JNIHelper::GetFieldSafe(mcClass,       "field_1724", "Lnet/minecraft/class_746;", "player");
+        worldField    = JNIHelper::GetFieldSafe(mcClass,       "field_1687", "Lnet/minecraft/class_638;", "world");
 
         jclass entityClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_1297;", "net/minecraft/entity/Entity");
         entX = JNIHelper::GetFieldSafe(entityClass, "field_6014", "D", "x");
@@ -42,24 +50,33 @@ void XRay::OnTick() {
         getBlockStateMethod = JNIHelper::GetMethodSafe(worldClass,      "method_8320",  "(Lnet/minecraft/class_2338;)Lnet/minecraft/class_2680;", "getBlockState");
         getBlockMethod      = JNIHelper::GetMethodSafe(blockStateClass, "method_26204", "()Lnet/minecraft/class_2248;",                           "getBlock");
 
+        // BlockPos constructor — resolved here, reused every scan
+        blockPosInit = env->GetMethodID(blockPosClass, "<init>", "(III)V");
+        if (env->ExceptionCheck()) { env->ExceptionClear(); return; }
+
         jclass objectClass = env->FindClass("java/lang/Object");
         if (objectClass) {
             toStringMethod = env->GetMethodID(objectClass, "toString", "()Ljava/lang/String;");
             env->DeleteLocalRef(objectClass);
         }
 
-        // Only mark loaded when ALL critical fields resolved
-        if (!instanceField || !worldField || !getBlockStateMethod || !getBlockMethod || !toStringMethod) return;
+        if (!instanceField || !worldField || !getBlockStateMethod || !getBlockMethod ||
+            !toStringMethod || !blockPosInit)
+            return;
 
         xrayMappingsLoaded = true;
     }
 
-    if (!instanceField || !worldField || !getBlockStateMethod || !getBlockMethod || !toStringMethod) return;
+    if (!instanceField || !worldField || !getBlockStateMethod || !getBlockMethod ||
+        !toStringMethod || !blockPosInit)
+        return;
 
+    // ── Tick-rate gate (every 40 ticks = 2 s @ 20 TPS) ──────────────────────
     tickCounter++;
     if (tickCounter < 40) return;
     tickCounter = 0;
 
+    // ── Fetch MC instance, player, world ─────────────────────────────────────
     jobject mc = env->GetStaticObjectField(mcClass, instanceField);
     if (!mc) return;
 
@@ -77,7 +94,12 @@ void XRay::OnTick() {
     int py = (int)env->GetDoubleField(player, entY);
     int pz = (int)env->GetDoubleField(player, entZ);
 
-    double distMoved = std::sqrt(std::pow(px - lastScanX, 2) + std::pow(py - lastScanY, 2) + std::pow(pz - lastScanZ, 2));
+    // ── Position-delta rescan guard ───────────────────────────────────────────
+    double distMoved = std::sqrt(
+        std::pow(px - lastScanX, 2) +
+        std::pow(py - lastScanY, 2) +
+        std::pow(pz - lastScanZ, 2)
+    );
     if (distMoved < 8.0) {
         env->DeleteLocalRef(world);
         env->DeleteLocalRef(player);
@@ -90,58 +112,58 @@ void XRay::OnTick() {
     lastScanZ = pz;
 
     std::vector<XRayBlock> newFoundBlocks;
+    newFoundBlocks.reserve(256);
 
-    jmethodID blockPosInit = env->GetMethodID(blockPosClass, "<init>", "(III)V");
-    if (env->ExceptionCheck()) {
-        env->ExceptionClear();
-        env->DeleteLocalRef(world);
-        env->DeleteLocalRef(player);
-        env->DeleteLocalRef(mc);
-        return;
-    }
-
-    // Use the member scanRadius instead of hardcoded 10
+    // ── Scan loop — PushLocalFrame guarantees cleanup on any exit path ────────
     int radius = scanRadius;
+
     for (int x = px - radius; x <= px + radius; x++) {
         for (int y = py - radius; y <= py + radius; y++) {
             if (y < -64 || y > 320) continue;
             for (int z = pz - radius; z <= pz + radius; z++) {
+
+                // Each inner iteration gets its own local frame (4 refs: pos, state, block, str)
+                if (env->PushLocalFrame(8) < 0) continue;
+
                 jobject posObj = env->NewObject(blockPosClass, blockPosInit, x, y, z);
-                if (!posObj) continue;
+                if (!posObj) { env->PopLocalFrame(nullptr); continue; }
 
                 jobject stateObj = env->CallObjectMethod(world, getBlockStateMethod, posObj);
-                if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(posObj); continue; }
+                if (env->ExceptionCheck()) { env->ExceptionClear(); env->PopLocalFrame(nullptr); continue; }
+                if (!stateObj)             { env->PopLocalFrame(nullptr); continue; }
 
-                if (stateObj) {
-                    jobject blockObj = env->CallObjectMethod(stateObj, getBlockMethod);
-                    if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(stateObj); env->DeleteLocalRef(posObj); continue; }
+                jobject blockObj = env->CallObjectMethod(stateObj, getBlockMethod);
+                if (env->ExceptionCheck()) { env->ExceptionClear(); env->PopLocalFrame(nullptr); continue; }
+                if (!blockObj)             { env->PopLocalFrame(nullptr); continue; }
 
-                    if (blockObj) {
-                        jstring keyStr = (jstring)env->CallObjectMethod(blockObj, toStringMethod);
-                        if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(blockObj); env->DeleteLocalRef(stateObj); env->DeleteLocalRef(posObj); continue; }
+                jstring keyStr = (jstring)env->CallObjectMethod(blockObj, toStringMethod);
+                if (env->ExceptionCheck()) { env->ExceptionClear(); env->PopLocalFrame(nullptr); continue; }
 
-                        if (keyStr) {
-                            const char* rawKey = env->GetStringUTFChars(keyStr, nullptr);
-                            if (rawKey) {
-                                if      (strstr(rawKey, "diamond_ore"))   { if (showDiamond)      newFoundBlocks.push_back({x, y, z,   0, 255, 255}); }
-                                else if (strstr(rawKey, "gold_ore"))      { if (showGold)         newFoundBlocks.push_back({x, y, z, 255, 215,   0}); }
-                                else if (strstr(rawKey, "iron_ore"))      { if (showIron)         newFoundBlocks.push_back({x, y, z, 200, 200, 200}); }
-                                else if (strstr(rawKey, "emerald_ore"))   { if (showEmerald)      newFoundBlocks.push_back({x, y, z,   0, 255,   0}); }
-                                else if (strstr(rawKey, "ancient_debris")){ if (showNetherite)    newFoundBlocks.push_back({x, y, z, 100,  70,  70}); }
-                                else if (strstr(rawKey, "ender_chest"))   { if (showEnderChests)  newFoundBlocks.push_back({x, y, z, 128,   0, 128}); }
-                                else if (strstr(rawKey, "chest") ||
-                                         strstr(rawKey, "barrel"))        { if (showChests)       newFoundBlocks.push_back({x, y, z, 255, 165,   0}); }
-                                else if (strstr(rawKey, "spawner"))       { if (showSpawners)     newFoundBlocks.push_back({x, y, z, 255,   0,   0}); }
-                                else if (strstr(rawKey, "hopper"))        { if (showHoppers)      newFoundBlocks.push_back({x, y, z, 100, 100, 100}); }
-                                env->ReleaseStringUTFChars(keyStr, rawKey);
-                            }
-                            env->DeleteLocalRef(keyStr);
-                        }
-                        env->DeleteLocalRef(blockObj);
+                if (keyStr) {
+                    const char* rawKey = env->GetStringUTFChars(keyStr, nullptr);
+                    if (rawKey) {
+                        // ── Ores ─────────────────────────────────────────────
+                        if      (strstr(rawKey, "diamond_ore"))    { if (showDiamond)    newFoundBlocks.push_back({x, y, z,   0, 255, 255}); }
+                        else if (strstr(rawKey, "gold_ore"))       { if (showGold)       newFoundBlocks.push_back({x, y, z, 255, 215,   0}); }
+                        else if (strstr(rawKey, "iron_ore"))       { if (showIron)       newFoundBlocks.push_back({x, y, z, 200, 200, 200}); }
+                        else if (strstr(rawKey, "emerald_ore"))    { if (showEmerald)    newFoundBlocks.push_back({x, y, z,   0, 255,   0}); }
+                        else if (strstr(rawKey, "ancient_debris")) { if (showNetherite)  newFoundBlocks.push_back({x, y, z, 100,  70,  70}); }
+                        // ── Containers (order matters: specific before generic) ─
+                        else if (strstr(rawKey, "ender_chest"))    { if (showEnderChests) newFoundBlocks.push_back({x, y, z, 128,   0, 128}); }
+                        else if (strstr(rawKey, "trapped_chest"))  { if (showChests)      newFoundBlocks.push_back({x, y, z, 255, 100,   0}); }
+                        else if (strstr(rawKey, "chest") ||
+                                 strstr(rawKey, "barrel") ||
+                                 strstr(rawKey, "shulker_box"))    { if (showChests)      newFoundBlocks.push_back({x, y, z, 255, 165,   0}); }
+                        // ── Misc ─────────────────────────────────────────────
+                        else if (strstr(rawKey, "spawner"))        { if (showSpawners)   newFoundBlocks.push_back({x, y, z, 255,   0,   0}); }
+                        else if (strstr(rawKey, "hopper"))         { if (showHoppers)    newFoundBlocks.push_back({x, y, z, 100, 100, 100}); }
+
+                        env->ReleaseStringUTFChars(keyStr, rawKey);
                     }
-                    env->DeleteLocalRef(stateObj);
                 }
-                env->DeleteLocalRef(posObj);
+
+                // PopLocalFrame releases posObj, stateObj, blockObj, keyStr in one shot
+                env->PopLocalFrame(nullptr);
             }
         }
     }
