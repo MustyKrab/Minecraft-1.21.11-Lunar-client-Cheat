@@ -7,7 +7,7 @@
 #include <random>
 #include <algorithm>
 
-// ── static mappings ────────────────────────────────────────────────────────
+// ─ static mappings ──────────────────────────────────────────────────────────
 static bool aimbot_mappings_loaded = false;
 static jclass mcClass, worldClass, entityClass, livingClass, playerClass, optionsClass, doubleOptionClass;
 static jfieldID instanceField, playerField, worldField, playersField, optionsField, sensitivityField;
@@ -17,6 +17,8 @@ static jmethodID listSize, listGet, getHealth, getDoubleValue;
 // cached for GCD block – set once in mappings load, never again
 static jclass    s_dblClass  = nullptr;
 static jmethodID s_dblValMID = nullptr;
+// FIX: cache getId method for entity identity
+static jmethodID getIdMethod;
 
 // ── persistent RNG (seeded once, never re-seeded in hot path) ──────────────
 static std::mt19937 s_rng([]() -> uint32_t {
@@ -24,18 +26,18 @@ static std::mt19937 s_rng([]() -> uint32_t {
     return rd() ^ (uint32_t)(GetTickCount64() * 2654435761ULL);
 }());
 
-// ── per-tick state for humanised motion ───────────────────────────────────
+// ── per-tick state for humanised motion ────────────────────────────────────
 static float  s_yawVel    = 0.0f;
 static float  s_pitchVel  = 0.0f;
 static DWORD  s_nextTickMs = 0;   // earliest ms we are allowed to act again
 
-// PATCH 4 – target-switch re-acquisition cooldown state
-// uintptr_t: pointer-identity only, never dereferenced as a JNI object
-static uintptr_t s_lastTarget      = 0;
-static DWORD     s_targetLostMs    = 0;
-static bool      s_targetWasActive = false;
+// PATCH 4 — target-switch re-acquisition cooldown state
+// FIX: use jint identity (entity ID) instead of raw pointer cast to void*
+static jint   s_lastTargetId    = -1;
+static DWORD  s_targetLostMs    = 0;
+static bool   s_targetWasActive = false;
 
-// PATCH 1 – per-tick rotation velocity caps (degrees/tick)
+// PATCH 1 — per-tick rotation velocity caps (degrees/tick)
 static constexpr float kMaxYawPerTick   = 18.0f;
 static constexpr float kMaxPitchPerTick = 12.0f;
 
@@ -63,15 +65,15 @@ void Aimbot::OnTick() {
     JNIEnv* env = JNIHelper::env;
     if (!env) return;
 
-    // ── lazy mapping load ──────────────────────────────────────────────────
+    // ─ lazy mapping load ───────────────────────────────────────────────────
     if (!aimbot_mappings_loaded) {
         mcClass          = JNIHelper::FindClassSafe("Lnet/minecraft/class_310;",    "net/minecraft/client/MinecraftClient");
-        worldClass       = JNIHelper::FindClassSafe("Lnet/minecraft/class_638;",   "net/minecraft/client/world/ClientWorld");
-        entityClass      = JNIHelper::FindClassSafe("Lnet/minecraft/class_1297;",  "net/minecraft/entity/Entity");
-        livingClass      = JNIHelper::FindClassSafe("Lnet/minecraft/class_1309;",  "net/minecraft/entity/LivingEntity");
-        playerClass      = JNIHelper::FindClassSafe("Lnet/minecraft/class_1657;",  "net/minecraft/entity/player/PlayerEntity");
-        optionsClass     = JNIHelper::FindClassSafe("Lnet/minecraft/class_315;",   "net/minecraft/client/option/GameOptions");
-        doubleOptionClass= JNIHelper::FindClassSafe("Lnet/minecraft/class_7172;",  "net/minecraft/client/option/SimpleOption");
+        worldClass       = JNIHelper::FindClassSafe("Lnet/minecraft/class_638;",    "net/minecraft/client/world/ClientWorld");
+        entityClass      = JNIHelper::FindClassSafe("Lnet/minecraft/class_1297;",   "net/minecraft/entity/Entity");
+        livingClass      = JNIHelper::FindClassSafe("Lnet/minecraft/class_1309;",   "net/minecraft/entity/LivingEntity");
+        playerClass      = JNIHelper::FindClassSafe("Lnet/minecraft/class_1657;",   "net/minecraft/entity/player/PlayerEntity");
+        optionsClass     = JNIHelper::FindClassSafe("Lnet/minecraft/class_315;",    "net/minecraft/client/option/GameOptions");
+        doubleOptionClass= JNIHelper::FindClassSafe("Lnet/minecraft/class_7172;",   "net/minecraft/client/option/SimpleOption");
 
         jclass listClass = env->FindClass("java/util/List");
 
@@ -93,7 +95,7 @@ void Aimbot::OnTick() {
         yawField         = JNIHelper::GetFieldSafe(entityClass, "field_5982", "F", "yaw");
         pitchField       = JNIHelper::GetFieldSafe(entityClass, "field_5965", "F", "pitch");
 
-        getHealth        = JNIHelper::GetMethodSafe(livingClass,      "method_6032", "()F", "getHealth");
+        getHealth        = JNIHelper::GetMethodSafe(livingClass,      "method_6032", "()F",  "getHealth");
         sensitivityField = JNIHelper::GetFieldSafe(optionsClass,      "field_1844",  "Lnet/minecraft/class_7172;", "mouseSensitivity");
         getDoubleValue   = JNIHelper::GetMethodSafe(doubleOptionClass,"method_41753","()Ljava/lang/Object;",       "getValue");
 
@@ -104,6 +106,9 @@ void Aimbot::OnTick() {
             env->DeleteLocalRef(localDbl);
         }
 
+        // FIX: cache getId method
+        getIdMethod = env->GetMethodID(entityClass, "getId", "()I");
+
         aimbot_mappings_loaded = true;
     }
 
@@ -112,9 +117,9 @@ void Aimbot::OnTick() {
         !yawField       || !pitchField || !listSize   || !listGet      || !getHealth)
         return;
 
-    // ── LMB gate ───────────────────────────────────────────────────────────
+    // ─ LMB gate ───────────────────────────────────────────────────────────
     if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
-        // PATCH 3 – randomised velocity bleed multiplier on release
+        // PATCH 3 — randomised velocity bleed multiplier on release
         std::uniform_real_distribution<float> bleedDist(0.5f, 0.7f);
         float bleed = bleedDist(s_rng);
         s_yawVel   *= bleed;
@@ -122,7 +127,7 @@ void Aimbot::OnTick() {
         return;
     }
 
-    // ── PATCH 5 – stochastic tick-rate jitter ──────────────────────────────
+    // ─ PATCH 5 — stochastic tick-rate jitter ──────────────────────────────
     {
         DWORD now = (DWORD)GetTickCount64();
         if (now < s_nextTickMs) return;
@@ -164,12 +169,12 @@ void Aimbot::OnTick() {
         int size = env->CallIntMethod(playersList, listSize);
         if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(playersList); goto cleanup; }
 
-        jobject   bestTarget   = nullptr;
-        float     bestAngDist  = fov;
-        double    bestDist3D   = 6.0;
-        uintptr_t bestTargetId = 0;   // pointer identity for switch detection
+        jobject  bestTarget   = nullptr;
+        float    bestAngDist  = fov;
+        double   bestDist3D   = 6.0;
+        jint     bestTargetId = -1;   // FIX: use entity ID
 
-        // PATCH 2 – randomised aim-height jitter per scan
+        // PATCH 2 — randomised aim-height jitter per scan
         std::uniform_real_distribution<float> heightJitter(0.6f, 1.4f);
         float aimHeight = heightJitter(s_rng);
 
@@ -196,6 +201,7 @@ void Aimbot::OnTick() {
 
             float tYaw   = (float)(std::atan2(diffZ, diffX) * 180.0 / 3.14159265) - 90.0f;
             float tPitch = (float)-(std::atan2(diffY, distXZ) * 180.0 / 3.14159265);
+
             float yDiff  = wrap180(tYaw   - currentYaw);
             float pDiff  = wrap180(tPitch - currentPitch);
             float angDist = std::sqrt(yDiff*yDiff + pDiff*pDiff);
@@ -204,7 +210,9 @@ void Aimbot::OnTick() {
                 if (angDist < bestAngDist || (angDist == bestAngDist && dist3D < bestDist3D)) {
                     bestAngDist  = angDist;
                     bestDist3D   = dist3D;
-                    bestTargetId = (uintptr_t)target;
+                    // FIX: get actual entity ID
+                    bestTargetId = getIdMethod ? env->CallIntMethod(target, getIdMethod) : -1;
+                    if (env->ExceptionCheck()) { env->ExceptionClear(); bestTargetId = -1; }
                     if (bestTarget) env->DeleteLocalRef(bestTarget);
                     bestTarget = env->NewLocalRef(target);
                 }
@@ -213,14 +221,14 @@ void Aimbot::OnTick() {
             env->DeleteLocalRef(target);
         }
 
-        // PATCH 4 – target-switch cooldown
+        // PATCH 4 — target-switch cooldown
         DWORD nowMs = (DWORD)GetTickCount64();
-        if (bestTargetId != s_lastTarget) {
+        if (bestTargetId != s_lastTargetId) {
             // target switched or lost
             if (s_targetWasActive) {
                 s_targetLostMs = nowMs;
             }
-            s_lastTarget      = bestTargetId;
+            s_lastTargetId    = bestTargetId;
             s_targetWasActive = (bestTarget != nullptr);
 
             if (bestTarget) {
@@ -239,7 +247,7 @@ void Aimbot::OnTick() {
             double ty = env->GetDoubleField(bestTarget, entY);
             double tz = env->GetDoubleField(bestTarget, entZ);
 
-            // PATCH 2 – same jitter value for the actual aim computation
+            // PATCH 2 — same jitter value for the actual aim computation
             double diffX  = tx - px;
             double diffY  = (ty + aimHeight) - eyePy;
             double diffZ  = tz - pz;
@@ -286,7 +294,7 @@ void Aimbot::OnTick() {
             s_yawVel   += gaussian_noise(0.012f);
             s_pitchVel += gaussian_noise(0.008f);
 
-            // PATCH 1 – clamp velocity before writing rotation fields
+            // PATCH 1 — clamp velocity before writing rotation fields
             s_yawVel   = (std::max)(-kMaxYawPerTick,   (std::min)(kMaxYawPerTick,   s_yawVel));
             s_pitchVel = (std::max)(-kMaxPitchPerTick, (std::min)(kMaxPitchPerTick, s_pitchVel));
 
