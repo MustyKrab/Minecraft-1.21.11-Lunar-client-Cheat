@@ -2,8 +2,10 @@
 #include "../../core/JNIHelper.h"
 #include <iostream>
 #include <cmath>
+#define NOMINMAX
 #include <windows.h>
 #include <random>
+#include <algorithm>
 
 // ── static mappings ──────────────────────────────────────────────────────────
 static bool aimbot_mappings_loaded = false;
@@ -25,7 +27,7 @@ static float  s_yawVel   = 0.0f;   // current angular velocity (degrees/tick)
 static float  s_pitchVel = 0.0f;
 static DWORD  s_nextTickMs = 0;    // earliest ms we are allowed to act again
 
-// ── helpers ───────────────────────────────────────────────────────────────────
+// ── helpers ──────────────────────────────────────────────────────────────────
 
 // Gaussian-ish noise via Box-Muller (cheap, no trig branch predictor issues)
 static float gaussian_noise(float stddev) {
@@ -99,7 +101,7 @@ void Aimbot::OnTick() {
         return;
     }
 
-    // ── stochastic tick-rate jitter ───────────────────────────────────────────
+    // ── stochastic tick-rate jitter ──────────────────────────────────────────
     // Humans don't react at a perfectly fixed interval.  Skip ~10-20 % of ticks
     // at random so the rotation update cadence is irregular.
     {
