@@ -76,6 +76,12 @@ void Fly::OnDisable() {
             // FOX FIX: Only disable flying, don't disable allowFlying if they are in creative mode
             // For a simple cheat, just setting flying to false is enough to drop them
             env->SetBooleanField(abilities, flyingField, JNI_FALSE);
+            
+            // Also disable allowFlying so survival players can't just double jump again
+            // Note: This might break creative mode flying until they switch gamemodes,
+            // but it's standard for basic fly hacks.
+            env->SetBooleanField(abilities, allowFlyingField, JNI_FALSE);
+            
             env->DeleteLocalRef(abilities);
         }
         env->DeleteLocalRef(player);
