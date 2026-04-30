@@ -627,10 +627,18 @@ void ESP::UpdateDataLoop() {
                                     }
                                 }
                             }
-                            tempPlayers.push_back({feetPos, hp, maxHp, playerName});
+                            tempPlayers.push_back({feetPos, hp, maxHp, playerName, distSq}); // FOX FIX: Added distSq
                         }
                         env->DeleteLocalRef(player);
                     }
+                }
+
+                // FOX FIX: Sort players by distance and limit to 50 to prevent lag in crowded areas
+                std::sort(tempPlayers.begin(), tempPlayers.end(), [](const PlayerData& a, const PlayerData& b) {
+                    return a.distSq < b.distSq;
+                });
+                if (tempPlayers.size() > 50) {
+                    tempPlayers.resize(50);
                 }
 
                 {
