@@ -27,14 +27,14 @@ static bool draggingAcMaxSlider      = false;
 static bool draggingEspRangeSlider   = false;
 static bool draggingReachSlider      = false;
 
-// ── cached GDI+ objects (created once, reused every frame) ──────────────────
+// ── cached GDI+ objects (created once, reused every frame) ───────────────────
 // Pens
-static Pen*        s_blackPen4      = nullptr;   // 4px black outline
-static Pen*        s_espPen2        = nullptr;   // 2px green ESP
+static Pen*        s_blackPen4      = nullptr;
+static Pen*        s_espPen2        = nullptr;
 static Pen*        s_tracerBlack4   = nullptr;
 static Pen*        s_tracerWhite2   = nullptr;
 // Brushes
-static SolidBrush* s_bgBarBrush     = nullptr;   // health bar background
+static SolidBrush* s_bgBarBrush     = nullptr;
 static SolidBrush* s_shadowBrush    = nullptr;
 static SolidBrush* s_textBrush      = nullptr;
 static SolidBrush* s_guiBg          = nullptr;
@@ -43,12 +43,16 @@ static SolidBrush* s_cbBg           = nullptr;
 static SolidBrush* s_cbFill         = nullptr;
 static SolidBrush* s_sliderBg       = nullptr;
 static SolidBrush* s_sliderFill     = nullptr;
+// Per-player reusable brushes/pens – mutated in place, no heap alloc per frame
+static SolidBrush* s_hpBrush        = nullptr;   // health bar fill (colour updated each player)
+static SolidBrush* s_modBgBrush     = nullptr;   // GUI module row bg (colour updated each module)
+static Pen*        s_colorPen       = nullptr;   // 3D box colour pen (colour updated each box)
 // Fonts
 static FontFamily* s_consolasFam    = nullptr;
-static Font*       s_espFont        = nullptr;   // Consolas 12 Bold
+static Font*       s_espFont        = nullptr;
 static FontFamily* s_verdanaFam     = nullptr;
-static Font*       s_titleFont      = nullptr;   // Verdana 16 Bold
-static Font*       s_modFont        = nullptr;   // Verdana 14 Regular
+static Font*       s_titleFont      = nullptr;
+static Font*       s_modFont        = nullptr;
 // String format
 static StringFormat* s_centerFmt   = nullptr;
 
@@ -72,7 +76,12 @@ static void InitGdipObjects() {
     s_sliderBg     = new SolidBrush(Color(255, 45, 45, 45));
     s_sliderFill   = new SolidBrush(Color(255, 46, 204, 113));
 
-    s_consolasFam  = new FontFamily(L"Consolas");
+    // Reusable mutable objects – initial colour doesn't matter, set before use
+    s_hpBrush      = new SolidBrush(Color(255, 0, 255, 0));
+    s_modBgBrush   = new SolidBrush(Color(255, 45, 45, 45));
+    s_colorPen     = new Pen(Color(255, 46, 204, 113), 2.0f);
+
+    s_consolasFam  = new FontFamily(L"Consolaes");
     s_espFont      = new Font(s_consolasFam, 12, FontStyleBold,    UnitPixel);
     s_verdanaFam   = new FontFamily(L"Verdana");
     s_titleFont    = new Font(s_verdanaFam,  16, FontStyleBold,    UnitPixel);
@@ -98,6 +107,9 @@ static void FreeGdipObjects() {
     delete s_cbFill;       s_cbFill       = nullptr;
     delete s_sliderBg;     s_sliderBg     = nullptr;
     delete s_sliderFill;   s_sliderFill   = nullptr;
+    delete s_hpBrush;      s_hpBrush      = nullptr;
+    delete s_modBgBrush;   s_modBgBrush   = nullptr;
+    delete s_colorPen;     s_colorPen     = nullptr;
     delete s_espFont;      s_espFont      = nullptr;
     delete s_consolasFam;  s_consolasFam  = nullptr;
     delete s_titleFont;    s_titleFont    = nullptr;
@@ -123,7 +135,19 @@ static void EnsureBackBuffer(HDC hdc, int w, int h) {
     s_bufW = w; s_bufH = h;
 }
 
-// ── ctor / dtor ──────────────────────────────────────────────────────────────
+// ── cached window DC (avoid GetDC/ReleaseDC every frame) ─────────────────────
+static HDC  s_windowDC      = nullptr;
+static HWND s_windowDCOwner = nullptr;
+
+static HDC GetCachedWindowDC(HWND hwnd) {
+    if (s_windowDC && s_windowDCOwner == hwnd) return s_windowDC;
+    if (s_windowDC) ReleaseDC(s_windowDCOwner, s_windowDC);
+    s_windowDC      = GetDC(hwnd);
+    s_windowDCOwner = hwnd;
+    return s_windowDC;
+}
+
+// ── ctor / dtor ───────────────────────────────────────────────────────────────
 ESP::ESP() : Module("ESP") {}
 
 ESP::~ESP() {
@@ -197,7 +221,7 @@ bool ESP::WorldToScreen(Vec3 pos, Vec3 camPos, float* mv, float* p, Vec2& screen
 }
 
 // ── Draw3DBox ─────────────────────────────────────────────────────────────────
-// Per-call colour pen is the only allocation here; everything else is cached.
+// s_colorPen is mutated in-place — zero heap alloc per call.
 void ESP::Draw3DBox(Graphics& g, Vec3 feet, float w, float h, Vec3 camPos, float* mv, float* p, int sW, int sH, Color color) {
     float hw = w / 2.0f;
     Vec3 corners[8] = {
@@ -211,13 +235,13 @@ void ESP::Draw3DBox(Graphics& g, Vec3 feet, float w, float h, Vec3 camPos, float
     for (int i = 0; i < 8; i++)
         valid[i] = WorldToScreen(corners[i], camPos, mv, p, s[i], sW, sH);
 
-    // Only allocate the colour pen — outline pen is cached
-    Pen colorPen(color, 2.0f);
+    // Mutate cached pen colour — no allocation
+    s_colorPen->SetColor(color);
 
     auto line = [&](int i, int j) {
         if (!valid[i] || !valid[j]) return;
         g.DrawLine(s_blackPen4, s[i].x, s[i].y, s[j].x, s[j].y);
-        g.DrawLine(&colorPen,   s[i].x, s[i].y, s[j].x, s[j].y);
+        g.DrawLine(s_colorPen,  s[i].x, s[i].y, s[j].x, s[j].y);
     };
 
     line(0,1); line(1,2); line(2,3); line(3,0);
@@ -226,6 +250,7 @@ void ESP::Draw3DBox(Graphics& g, Vec3 feet, float w, float h, Vec3 camPos, float
 }
 
 // ── DrawProfessionalESP ───────────────────────────────────────────────────────
+// s_hpBrush mutated in-place — no heap alloc per player.
 void ESP::DrawProfessionalESP(Graphics& g, float x, float y, float w, float h,
                                float health, float maxHealth,
                                int screenW, int screenH,
@@ -233,15 +258,14 @@ void ESP::DrawProfessionalESP(Graphics& g, float x, float y, float w, float h,
     if (maxHealth <= 0) maxHealth = 20.0f;
     float hpPct = std::max(0.0f, std::min(1.0f, health / maxHealth));
 
-    // Health bar — only the fill brush needs a per-call colour
     float barX = x - 8.0f, barY = y - 1.0f, barW = 6.0f, barH = h + 2.0f;
     g.FillRectangle(s_bgBarBrush, barX, barY, barW, barH);
 
-    int r = (int)(255.0f * (1.0f - hpPct));
-    int gr= (int)(255.0f * hpPct);
-    SolidBrush hpBrush(Color(255, r, gr, 0));
+    int r  = (int)(255.0f * (1.0f - hpPct));
+    int gr = (int)(255.0f * hpPct);
+    s_hpBrush->SetColor(Color(255, r, gr, 0));   // mutate, no new
     float fillH = h * hpPct;
-    g.FillRectangle(&hpBrush, barX + 1.0f, y + (h - fillH), barW - 2.0f, fillH);
+    g.FillRectangle(s_hpBrush, barX + 1.0f, y + (h - fillH), barW - 2.0f, fillH);
 
     if (drawTracer) {
         g.DrawLine(s_tracerBlack4, (REAL)(screenW/2), (REAL)screenH, x + w/2, y + h);
@@ -264,15 +288,15 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
         totalHeight += 35;
         if (mod->IsExpanded()) {
             const std::string& n = mod->GetName();
-            if      (n == "XRay")          totalHeight += 9*25 + 10;
-            else if (n == "Killaura")       totalHeight += 2*40 + 10;
-            else if (n == "TeleportAura")   totalHeight += 40  + 10;
-            else if (n == "Aimbot")         totalHeight += 40  + 10;
-            else if (n == "AutoClicker")    totalHeight += 2*40 + 25 + 10;
-            else if (n == "ESP")            totalHeight += 40  + 10;
-            else if (n == "Reach")          totalHeight += 40  + 10;
-            else if (n == "FakeLag")        totalHeight += 40  + 10;
-            else                            totalHeight += 40  + 10;
+            if      (n == "XRay")         totalHeight += 9*25 + 10;
+            else if (n == "Killaura")      totalHeight += 2*40 + 10;
+            else if (n == "TeleportAura") totalHeight += 40  + 10;
+            else if (n == "Aimbot")        totalHeight += 40  + 10;
+            else if (n == "AutoClicker")   totalHeight += 2*40 + 25 + 10;
+            else if (n == "ESP")           totalHeight += 40  + 10;
+            else if (n == "Reach")         totalHeight += 40  + 10;
+            else if (n == "FakeLag")       totalHeight += 40  + 10;
+            else                           totalHeight += 40  + 10;
         }
     }
 
@@ -280,9 +304,8 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
     g.FillRectangle(s_guiHeader, 100, 100, 400, 40);
     g.DrawString(L"Musty Client", -1, s_titleFont, PointF(115, 110), nullptr, s_textBrush);
 
-    // ── lambdas use cached brushes ────────────────────────────────────────────
     auto DrawCheckbox = [&](const wchar_t* label, bool& value, int cx, int cy) {
-        g.FillRectangle(s_cbBg, cx, cy, 15, 15);
+        g.FillRectangle(s_cbBg,   cx, cy, 15, 15);
         if (value) g.FillRectangle(s_cbFill, cx+2, cy+2, 11, 11);
         g.DrawString(label, -1, s_modFont, PointF((float)(cx+25), (float)cy), nullptr, s_textBrush);
         if (clickAction && mouseX >= cx && mouseX <= cx+200 && mouseY >= cy && mouseY <= cy+15)
@@ -320,17 +343,24 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
         if (!mod) continue;
         bool enabled = mod->IsEnabled();
 
-        SolidBrush modBg(enabled ? Color(255, 46, 204, 113) : Color(255, 45, 45, 45));
-        g.FillRectangle(&modBg, 120, y, 360, 30);
+        // Mutate cached brush colour — no heap alloc per module row
+        s_modBgBrush->SetColor(enabled ? Color(255, 46, 204, 113) : Color(255, 45, 45, 45));
+        g.FillRectangle(s_modBgBrush, 120, y, 360, 30);
 
-        std::string nameStr = mod->GetName();
-        std::wstring wName(nameStr.begin(), nameStr.end());
-        g.DrawString(wName.c_str(), -1, s_modFont, PointF(135, (float)(y+6)), nullptr, s_textBrush);
+        const std::string& nameStr = mod->GetName();
+        // Stack-allocate wchar buffer to avoid wstring construction + heap alloc
+        wchar_t wNameBuf[128];
+        int len = (int)nameStr.size();
+        if (len > 127) len = 127;
+        for (int i = 0; i < len; i++) wNameBuf[i] = (wchar_t)(unsigned char)nameStr[i];
+        wNameBuf[len] = L'\0';
+
+        g.DrawString(wNameBuf, -1, s_modFont, PointF(135, (float)(y+6)), nullptr, s_textBrush);
         g.DrawString(mod->IsExpanded() ? L"v" : L">", -1, s_modFont, PointF(460, (float)(y+6)), nullptr, s_textBrush);
 
         bool hovered = (mouseX >= 120 && mouseX <= 480 && mouseY >= y && mouseY <= y+30);
-        if (clickAction      && hovered) mod->Toggle();
-        if (rightClickAction && hovered) mod->SetExpanded(!mod->IsExpanded());
+        if (clickAction       && hovered) mod->Toggle();
+        if (rightClickAction  && hovered) mod->SetExpanded(!mod->IsExpanded());
 
         y += 35;
 
@@ -447,11 +477,11 @@ void ESP::UpdateDataLoop() {
     }
 
     // ── field / method IDs ────────────────────────────────────────────────────
-    jfieldID instanceField     = JNIHelper::GetStaticFieldSafe(mcClass,       "field_1700",  "Lnet/minecraft/class_310;",  "instance");
-    jfieldID localPlayerField  = JNIHelper::GetFieldSafe(mcClass,             "field_1724",  "Lnet/minecraft/class_746;",  "player");
-    jfieldID worldField        = JNIHelper::GetFieldSafe(mcClass,             "field_1687",  "Lnet/minecraft/class_638;",  "world");
-    jfieldID rendererField     = JNIHelper::GetFieldSafe(mcClass,             "field_1773",  "Lnet/minecraft/class_757;",  "gameRenderer");
-    jfieldID playersField      = JNIHelper::GetFieldSafe(worldClass,          "field_18226", "Ljava/util/List;",           "players");
+    jfieldID instanceField    = JNIHelper::GetStaticFieldSafe(mcClass,        "field_1700",  "Lnet/minecraft/class_310;",  "instance");
+    jfieldID localPlayerField = JNIHelper::GetFieldSafe(mcClass,              "field_1724",  "Lnet/minecraft/class_746;",  "player");
+    jfieldID worldField       = JNIHelper::GetFieldSafe(mcClass,              "field_1687",  "Lnet/minecraft/class_638;",  "world");
+    jfieldID rendererField    = JNIHelper::GetFieldSafe(mcClass,              "field_1773",  "Lnet/minecraft/class_757;",  "gameRenderer");
+    jfieldID playersField     = JNIHelper::GetFieldSafe(worldClass,           "field_18226", "Ljava/util/List;",           "players");
 
     jclass    listClass = env->FindClass("java/util/List");
     jmethodID listSize  = env->GetMethodID(listClass, "size", "()I");
@@ -461,8 +491,8 @@ void ESP::UpdateDataLoop() {
     jfieldID entY = JNIHelper::GetFieldSafe(entityClass, "field_6036", "D", "y");
     jfieldID entZ = JNIHelper::GetFieldSafe(entityClass, "field_5969", "D", "z");
 
-    jmethodID getNameMethod   = JNIHelper::GetMethodSafe(entityClass,       "method_5477",  "()Lnet/minecraft/class_2561;", "getName");
-    jmethodID getStringMethod = textClass ? JNIHelper::GetMethodSafe(textClass, "method_10851", "()Ljava/lang/String;",      "getString") : nullptr;
+    jmethodID getNameMethod   = JNIHelper::GetMethodSafe(entityClass,      "method_5477",  "()Lnet/minecraft/class_2561;", "getName");
+    jmethodID getStringMethod = textClass ? JNIHelper::GetMethodSafe(textClass, "method_10851", "()Ljava/lang/String;",         "getString") : nullptr;
 
     jmethodID getHealth = nullptr, getMaxHealth = nullptr;
     if (livingEntityClass) {
@@ -470,10 +500,10 @@ void ESP::UpdateDataLoop() {
         getMaxHealth = JNIHelper::GetMethodSafe(livingEntityClass, "method_6063", "()F", "getMaxHealth");
     }
 
-    jfieldID camField       = JNIHelper::GetFieldSafe(rendererClass, "lunar$savedCamera",                      "Lnet/minecraft/class_4184;", "camera");
-    jfieldID modelViewField = JNIHelper::GetFieldSafe(rendererClass, "lunar$savedModelView$v1_19_3",            "Lorg/joml/Matrix4f;",        "modelView");
-    jfieldID projField      = JNIHelper::GetFieldSafe(rendererClass, "lunar$savedProjection$v1_19_3",           "Lorg/joml/Matrix4f;",        "projection");
-    jfieldID camPosField    = JNIHelper::GetFieldSafe(cameraClass,   "field_18712",                             "Lnet/minecraft/class_243;",  "pos");
+    jfieldID camField        = JNIHelper::GetFieldSafe(rendererClass, "lunar$savedCamera",              "Lnet/minecraft/class_4184;", "camera");
+    jfieldID modelViewField  = JNIHelper::GetFieldSafe(rendererClass, "lunar$savedModelView$v1_19_3",   "Lorg/joml/Matrix4f;",        "modelView");
+    jfieldID projField       = JNIHelper::GetFieldSafe(rendererClass, "lunar$savedProjection$v1_19_3",  "Lorg/joml/Matrix4f;",        "projection");
+    jfieldID camPosField     = JNIHelper::GetFieldSafe(cameraClass,   "field_18712",                   "Lnet/minecraft/class_243;",  "pos");
 
     // Vec3d double fields via JVMTI
     jfieldID vec3dFields[3]; int vecIdx = 0;
@@ -501,9 +531,9 @@ void ESP::UpdateDataLoop() {
     }
 
     if (!instanceField || !localPlayerField || !worldField || !rendererField ||
-        !playersField   || !listSize        || !listGet    || !entX          ||
-        !entY           || !entZ            || !camField   || !modelViewField ||
-        !projField      || !camPosField     || !matrixValid) {
+        !playersField   || !listSize         || !listGet   || !entX          ||
+        !entY           || !entZ             || !camField  || !modelViewField ||
+        !projField      || !camPosField      || !matrixValid) {
         if (getEnvStat == JNI_EDETACHED) JNIHelper::vm->DetachCurrentThread();
         return;
     }
@@ -530,7 +560,7 @@ void ESP::UpdateDataLoop() {
             jobject camera       = env->GetObjectField(renderer, camField);        checkEx(env);
             jobject modelViewObj = env->GetObjectField(renderer, modelViewField);  checkEx(env);
             jobject projObj      = env->GetObjectField(renderer, projField);       checkEx(env);
-            jobject playersList  = env->GetObjectField(world, playersField);       checkEx(env);
+            jobject playersList  = env->GetObjectField(world,    playersField);    checkEx(env);
 
             if (camera && modelViewObj && projObj && playersList) {
                 jobject camPosObj = env->GetObjectField(camera, camPosField); checkEx(env);
@@ -573,9 +603,10 @@ void ESP::UpdateDataLoop() {
                         double dx = tempCamPos.x - feetPos.x;
                         double dy = tempCamPos.y - feetPos.y;
                         double dz = tempCamPos.z - feetPos.z;
-                        double distance = std::sqrt(dx*dx + dy*dy + dz*dz);
+                        double distSq = dx*dx + dy*dy + dz*dz;
+                        double rangeSq = (double)espRange * (double)espRange;
 
-                        if (distance <= espRange) {
+                        if (distSq <= rangeSq) {
                             float hp = 20.0f, maxHp = 20.0f;
                             if (getHealth && getMaxHealth) {
                                 hp    = env->CallFloatMethod(player, getHealth);    checkEx(env);
@@ -583,7 +614,7 @@ void ESP::UpdateDataLoop() {
                             }
 
                             std::wstring playerName = L"Player";
-                            if (distance < 50.0 && getNameMethod && getStringMethod) {
+                            if (distSq < 2500.0 && getNameMethod && getStringMethod) {
                                 jobject textObj = env->CallObjectMethod(player, getNameMethod);
                                 if (!checkEx(env) && textObj) {
                                     jstring nameStr = (jstring)env->CallObjectMethod(textObj, getStringMethod);
@@ -646,8 +677,11 @@ void ESP::RenderLoop() {
     SetLayeredWindowAttributes(overlayWindow, RGB(0, 0, 0), 255, LWA_COLORKEY);
     ShowWindow(overlayWindow, SW_SHOW);
 
-    // Black background brush — created once
     HBRUSH bgBrush = CreateSolidBrush(RGB(0, 0, 0));
+
+    // Track last known window rect to skip redundant MoveWindow calls
+    int lastX = rect.left, lastY = rect.top;
+    int lastW = rect.right - rect.left, lastH = rect.bottom - rect.top;
 
     while (running) {
         MSG msg;
@@ -665,7 +699,12 @@ void ESP::RenderLoop() {
             continue;
         }
 
-        MoveWindow(overlayWindow, rect.left, rect.top, width, height, false); // false = no repaint flicker
+        // Only call MoveWindow when the game window actually moved/resized
+        if (rect.left != lastX || rect.top != lastY || width != lastW || height != lastH) {
+            MoveWindow(overlayWindow, rect.left, rect.top, width, height, false);
+            lastX = rect.left; lastY = rect.top;
+            lastW = width;     lastH = height;
+        }
 
         // ── GUI toggle ────────────────────────────────────────────────────────
         if (GetAsyncKeyState(VK_OEM_4) & 0x8000) {
@@ -688,16 +727,16 @@ void ESP::RenderLoop() {
         GetCursorPos(&cursorPos);
         ScreenToClient(overlayWindow, &cursorPos);
 
-        bool isClicked       = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
-        bool clickAction     = isClicked && !wasClicked;
-        wasClicked           = isClicked;
+        bool isClicked        = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+        bool clickAction      = isClicked && !wasClicked;
+        wasClicked            = isClicked;
 
-        bool isRightClicked  = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
-        bool rightClickAction= isRightClicked && !wasRightClicked;
-        wasRightClicked      = isRightClicked;
+        bool isRightClicked   = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+        bool rightClickAction = isRightClicked && !wasRightClicked;
+        wasRightClicked       = isRightClicked;
 
         // ── back-buffer (persistent, only reallocated on resize) ──────────────
-        HDC hdc = GetDC(overlayWindow);
+        HDC hdc = GetCachedWindowDC(overlayWindow);
         EnsureBackBuffer(hdc, width, height);
 
         RECT clientRect = { 0, 0, width, height };
@@ -749,13 +788,14 @@ void ESP::RenderLoop() {
             // ── XRay blocks ───────────────────────────────────────────────────
             XRay* xray = (XRay*)ModuleManager::GetModule("XRay");
             if (xray && xray->IsEnabled()) {
+                double rangeSq = (double)espRange * (double)espRange;
                 std::vector<XRayBlock> blocks = xray->GetFoundBlocks();
                 for (const auto& block : blocks) {
                     Vec3 blockPos = { (double)block.x + 0.5, (double)block.y + 0.5, (double)block.z + 0.5 };
                     double dx = camPos.x - blockPos.x;
                     double dy = camPos.y - blockPos.y;
                     double dz = camPos.z - blockPos.z;
-                    if (std::sqrt(dx*dx + dy*dy + dz*dz) <= espRange)
+                    if (dx*dx + dy*dy + dz*dz <= rangeSq)   // squared — no sqrt
                         Draw3DBox(g, {(double)block.x, (double)block.y, (double)block.z},
                                   1.0f, 1.0f, camPos, mv, p, width, height,
                                   Color(255, block.r, block.g, block.b));
@@ -767,15 +807,21 @@ void ESP::RenderLoop() {
         }
 
         BitBlt(hdc, 0, 0, width, height, s_memDC, 0, 0, SRCCOPY);
-        ReleaseDC(overlayWindow, hdc);
+        // No ReleaseDC — DC is cached for the lifetime of the overlay window
 
         std::this_thread::sleep_for(std::chrono::milliseconds(8)); // ~120 fps cap
+    }
+
+    // Release cached window DC on shutdown
+    if (s_windowDC) {
+        ReleaseDC(s_windowDCOwner, s_windowDC);
+        s_windowDC      = nullptr;
+        s_windowDCOwner = nullptr;
     }
 
     DeleteObject(bgBrush);
     FreeGdipObjects();
 
-    // Free persistent back-buffer
     if (s_memBitmap) { DeleteObject(s_memBitmap); s_memBitmap = nullptr; }
     if (s_memDC)     { DeleteDC(s_memDC);         s_memDC     = nullptr; }
     s_bufW = s_bufH = 0;
