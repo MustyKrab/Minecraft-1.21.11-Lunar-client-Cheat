@@ -14,6 +14,10 @@ static jfieldID instanceField, playerField, worldField, playersField, optionsFie
 static jfieldID entX, entY, entZ, yawField, pitchField;
 static jmethodID listSize, listGet, getHealth, getDoubleValue;
 
+// cached for GCD block — set once in mappings load, never again
+static jclass    s_dblClass  = nullptr;
+static jmethodID s_dblValMID = nullptr;
+
 // ── persistent RNG (seeded once, never re-seeded in hot path) ────────────────
 static std::mt19937 s_rng([]() -> uint32_t {
     // mix two independent entropy sources so the seed itself isn't trivially
@@ -51,7 +55,7 @@ void Aimbot::OnTick() {
     JNIEnv* env = JNIHelper::env;
     if (!env) return;
 
-    // ── lazy mapping load ────────────────────────────────────────────────────
+    // ── lazy mapping load ─────────────────────────────────────────────────────
     if (!aimbot_mappings_loaded) {
         mcClass          = JNIHelper::FindClassSafe("Lnet/minecraft/class_310;",    "net/minecraft/client/MinecraftClient");
         worldClass       = JNIHelper::FindClassSafe("Lnet/minecraft/class_638;",    "net/minecraft/client/world/ClientWorld");
@@ -85,6 +89,14 @@ void Aimbot::OnTick() {
         sensitivityField = JNIHelper::GetFieldSafe(optionsClass,      "field_1844",  "Lnet/minecraft/class_7172;", "mouseSensitivity");
         getDoubleValue   = JNIHelper::GetMethodSafe(doubleOptionClass,"method_41753","()Ljava/lang/Object;",       "getValue");
 
+        // cache java/lang/Double lookup — used every tick in GCD block
+        jclass localDbl  = env->FindClass("java/lang/Double");
+        if (localDbl) {
+            s_dblClass  = (jclass)env->NewGlobalRef(localDbl);
+            s_dblValMID = env->GetMethodID(s_dblClass, "doubleValue", "()D");
+            env->DeleteLocalRef(localDbl);
+        }
+
         aimbot_mappings_loaded = true;
     }
 
@@ -101,7 +113,7 @@ void Aimbot::OnTick() {
         return;
     }
 
-    // ── stochastic tick-rate jitter ──────────────────────────────────────────
+    // ── stochastic tick-rate jitter ───────────────────────────────────────────
     // Humans don't react at a perfectly fixed interval.  Skip ~10-20 % of ticks
     // at random so the rotation update cadence is irregular.
     {
@@ -136,6 +148,9 @@ void Aimbot::OnTick() {
         float  currentYaw   = env->GetFloatField(player, yawField);
         float  currentPitch = env->GetFloatField(player, pitchField);
 
+        // eye positions
+        double eyePy = py + 1.62;
+
         jobject playersList = env->GetObjectField(world, playersField);
         if (!playersList) goto cleanup;
 
@@ -143,8 +158,8 @@ void Aimbot::OnTick() {
         if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(playersList); goto cleanup; }
 
         jobject bestTarget   = nullptr;
-        double  bestDist     = 6.0;
-        float   bestYawDiff  = fov;
+        float   bestAngDist  = fov;   // primary sort key: angular distance (yaw+pitch)
+        double  bestDist3D   = 6.0;   // tiebreaker only
 
         for (int i = 0; i < size; i++) {
             jobject target = env->CallObjectMethod(playersList, listGet, i);
@@ -157,21 +172,34 @@ void Aimbot::OnTick() {
             double ty = env->GetDoubleField(target, entY);
             double tz = env->GetDoubleField(target, entZ);
 
-            double dist = std::sqrt(std::pow(tx-px,2) + std::pow(ty-py,2) + std::pow(tz-pz,2));
+            // FIX: use eye-height-corrected geometry in scan loop (same as aim block)
+            double diffX  = tx - px;
+            double diffY  = (ty + 1.0) - eyePy;
+            double diffZ  = tz - pz;
+            double dist3D = std::sqrt(diffX*diffX + diffY*diffY + diffZ*diffZ);
+            double distXZ = std::sqrt(diffX*diffX + diffZ*diffZ);
 
-            if (dist <= bestDist) {
-                float hp = env->CallFloatMethod(target, getHealth);
-                if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(target); continue; }
-                if (hp > 0.0f) {
-                    float targetYaw = (float)(std::atan2(tz-pz, tx-px) * 180.0 / 3.14159265) - 90.0f;
-                    float yawDiff   = wrap180(targetYaw - currentYaw);
-                    if (std::abs(yawDiff) < bestYawDiff) {
-                        bestYawDiff = std::abs(yawDiff);
-                        if (bestTarget) env->DeleteLocalRef(bestTarget);
-                        bestTarget = env->NewLocalRef(target);
-                    }
+            float hp = env->CallFloatMethod(target, getHealth);
+            if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(target); continue; }
+            if (hp <= 0.0f) { env->DeleteLocalRef(target); continue; }
+
+            // FIX: gate on FOV first, then sort by angular distance (primary)
+            // distance is only a tiebreaker when angDist is equal
+            float tYaw   = (float)(std::atan2(diffZ, diffX) * 180.0 / 3.14159265) - 90.0f;
+            float tPitch = (float)-(std::atan2(diffY, distXZ) * 180.0 / 3.14159265);
+            float yDiff  = wrap180(tYaw   - currentYaw);
+            float pDiff  = wrap180(tPitch - currentPitch);
+            float angDist = std::sqrt(yDiff*yDiff + pDiff*pDiff);
+
+            if (angDist < fov) {
+                if (angDist < bestAngDist || (angDist == bestAngDist && dist3D < bestDist3D)) {
+                    bestAngDist = angDist;
+                    bestDist3D  = dist3D;
+                    if (bestTarget) env->DeleteLocalRef(bestTarget);
+                    bestTarget = env->NewLocalRef(target);
                 }
             }
+
             env->DeleteLocalRef(target);
         }
 
@@ -181,7 +209,7 @@ void Aimbot::OnTick() {
             double tz = env->GetDoubleField(bestTarget, entZ);
 
             double diffX  = tx - px;
-            double diffY  = (ty + 1.0) - (py + 1.62);
+            double diffY  = (ty + 1.0) - eyePy;
             double diffZ  = tz - pz;
             double distXZ = std::sqrt(diffX*diffX + diffZ*diffZ);
 
@@ -191,7 +219,7 @@ void Aimbot::OnTick() {
             float yawDiff   = wrap180(targetYaw   - currentYaw);
             float pitchDiff = wrap180(targetPitch - currentPitch);
 
-            // ── GCD compensation BEFORE lerp (correct order) ─────────────────
+            // ── GCD compensation BEFORE lerp (correct order) ──────────────────
             float gcd = 1.0f;
             if (sensitivityField && getDoubleValue) {
                 jobject sensObj = env->GetObjectField(options, sensitivityField);
@@ -199,13 +227,11 @@ void Aimbot::OnTick() {
                     jobject sensDoubleObj = env->CallObjectMethod(sensObj, getDoubleValue);
                     if (env->ExceptionCheck()) env->ExceptionClear();
                     if (sensDoubleObj) {
-                        jclass    dblClass  = env->FindClass("java/lang/Double");
-                        jmethodID dblValMID = env->GetMethodID(dblClass, "doubleValue", "()D");
-                        double sens = env->CallDoubleMethod(sensDoubleObj, dblValMID);
+                        // FIX: use cached s_dblClass / s_dblValMID — no FindClass per tick
+                        double sens = env->CallDoubleMethod(sensDoubleObj, s_dblValMID);
                         if (env->ExceptionCheck()) { env->ExceptionClear(); sens = 0.5; }
                         float f = (float)(sens * 0.6 + 0.2);
                         gcd = f * f * f * 1.2f;
-                        env->DeleteLocalRef(dblClass);
                         env->DeleteLocalRef(sensDoubleObj);
                     }
                     env->DeleteLocalRef(sensObj);
@@ -217,14 +243,14 @@ void Aimbot::OnTick() {
             yawDiff   -= std::fmod(yawDiff,   gcd);
             pitchDiff -= std::fmod(pitchDiff, gcd);
 
-            // ── spring-damper velocity model ─────────────────────────────────
+            // ── spring-damper velocity model ──────────────────────────────────
             // Accelerate toward target delta, then coast + decelerate.
             // This produces the characteristic S-curve a real wrist makes.
             float baseSpeed = smoothSpeed;
 
             // Vary speed based on angular distance: faster when far, slower on
             // approach — mimics natural human over/undershoot behaviour
-            float angDist = std::sqrt(yawDiff*yawDiff + pitchDiff*pitchDiff);
+            float angDist   = std::sqrt(yawDiff*yawDiff + pitchDiff*pitchDiff);
             float distScale = (std::min)(1.0f, angDist / 15.0f); // ramp up over 15 deg
             float targetSpeed = baseSpeed * (0.55f + 0.45f * distScale);
 

@@ -1,5 +1,6 @@
 #include "Menu.h"
 #include "../modules/combat/Killaura.h"
+#include "../modules/combat/Aimbot.h"
 #include "../modules/TeleportAura.h"
 #include "../modules/render/XRay.h"
 #include "../modules/ModuleManager.h"
@@ -37,6 +38,29 @@ void Menu::RenderCombatTab() {
             ImGui::SetTooltip("Attack packet sent before movement packet. Server evaluates reach at last-tick position.");
     }
 
+    ImGui::Separator();
+
+    Aimbot* ab = static_cast<Aimbot*>(ModuleManager::GetModule("Aimbot"));
+    if (ab) {
+        bool abEnabled = ab->IsEnabled();
+        if (ImGui::Checkbox("Aimbot", &abEnabled))
+            ab->SetEnabled(abEnabled);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Smooth humanised aim assist. Activates on LMB hold.");
+
+        float abFov = ab->GetFOV();
+        if (ImGui::SliderFloat("FOV##ab", &abFov, 10.0f, 180.0f, "%.0f"))
+            ab->SetFOV(abFov);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Angular radius (degrees) to scan for targets. Lower = tighter lock.");
+
+        float abSpeed = ab->GetSmoothSpeed();
+        if (ImGui::SliderFloat("Smooth Speed##ab", &abSpeed, 0.01f, 1.0f, "%.2f"))
+            ab->SetSmoothSpeed(abSpeed);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Base lerp factor. 0.01 = very slow/human, 1.0 = near-instant.");
+    }
+
     ImGui::EndChild();
 }
 
@@ -71,15 +95,15 @@ void Menu::RenderVisualsTab() {
             ImGui::SetTooltip("Scans nearby blocks and highlights ores/chests.");
 
         ImGui::Indent();
-        ImGui::Checkbox("Diamond",      &xray->showDiamond);
-        ImGui::Checkbox("Gold",         &xray->showGold);
-        ImGui::Checkbox("Iron",         &xray->showIron);
-        ImGui::Checkbox("Emerald",      &xray->showEmerald);
-        ImGui::Checkbox("Netherite",    &xray->showNetherite);
-        ImGui::Checkbox("Chests",       &xray->showChests);
-        ImGui::Checkbox("Ender Chests", &xray->showEnderChests);
-        ImGui::Checkbox("Spawners",     &xray->showSpawners);
-        ImGui::Checkbox("Hoppers",      &xray->showHoppers);
+        ImGui::Checkbox("Diamond",     &xray->showDiamond);
+        ImGui::Checkbox("Gold",        &xray->showGold);
+        ImGui::Checkbox("Iron",        &xray->showIron);
+        ImGui::Checkbox("Emerald",     &xray->showEmerald);
+        ImGui::Checkbox("Netherite",   &xray->showNetherite);
+        ImGui::Checkbox("Chests",      &xray->showChests);
+        ImGui::Checkbox("Ender Chests",&xray->showEnderChests);
+        ImGui::Checkbox("Spawners",    &xray->showSpawners);
+        ImGui::Checkbox("Hoppers",     &xray->showHoppers);
         ImGui::Unindent();
     }
 
