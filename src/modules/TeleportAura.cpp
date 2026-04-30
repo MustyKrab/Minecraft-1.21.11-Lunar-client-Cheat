@@ -6,7 +6,7 @@
 #include <windows.h>
 #include <random>
 
-static bool taMapppingsLoaded = false;
+static bool taMappingsLoaded = false;
 static jclass taMcClass, taWorldClass, taEntityClass, taLivingClass, taPlayerClass,
               taInteractionManagerClass, taHandClass, taListClass;
 static jclass taNetworkHandlerClass, taPositionAndOnGroundClass, taFullPacketClass;
@@ -15,15 +15,18 @@ static jfieldID taInstanceField, taPlayerField, taWorldField, taInteractionManag
 static jfieldID taEntX, taEntY, taEntZ, taYaw, taPitch, taMainHandField;
 static jmethodID taListSize, taListGet, taGetHealth, taAttackMethod, taSwingMethod,
                  taGetCooldownMethod, taSendPacketMethod, taPacketInitMethod, taFullPacketInitMethod;
+// FIX: cache getId method
+static jmethodID taGetIdMethod;
 
 // rotation velocity caps
 static constexpr float kTAMaxYawPerTick   = 18.0f;
 static constexpr float kTAMaxPitchPerTick = 12.0f;
 
-// target-switch cooldown — uintptr_t, never dereferenced as JNI object
-static uintptr_t s_taLastTargetId     = 0;
-static DWORD     s_taTargetLostMs     = 0;
-static bool      s_taTargetWasActive  = false;
+// target-switch cooldown
+// FIX: use jint identity (entity ID) instead of raw pointer cast to void*
+static jint   s_taLastTargetId     = -1;
+static DWORD  s_taTargetLostMs     = 0;
+static bool   s_taTargetWasActive  = false;
 
 // stochastic tick interval
 static DWORD s_taNextTickMs = 0;
@@ -51,7 +54,7 @@ void TeleportAura::OnTick() {
     JNIEnv* env = JNIHelper::env;
     if (!env) return;
 
-    if (!taMapppingsLoaded) {
+    if (!taMappingsLoaded) {
         taMcClass                  = JNIHelper::FindClassSafe("Lnet/minecraft/class_310;",    "net/minecraft/client/MinecraftClient");
         taWorldClass               = JNIHelper::FindClassSafe("Lnet/minecraft/class_638;",    "net/minecraft/client/world/ClientWorld");
         taEntityClass              = JNIHelper::FindClassSafe("Lnet/minecraft/class_1297;",   "net/minecraft/entity/Entity");
@@ -62,9 +65,9 @@ void TeleportAura::OnTick() {
         taListClass                = env->FindClass("java/util/List");
         taNetworkHandlerClass      = JNIHelper::FindClassSafe("Lnet/minecraft/class_634;",    "net/minecraft/client/network/ClientPlayNetworkHandler");
         taPositionAndOnGroundClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_2828$class_2829;",
-                                        "net/minecraft/network/packet/c2s/play/PlayerMoveC2SPacket$PositionAndOnGround");
+                                                              "net/minecraft/network/packet/c2s/play/PlayerMoveC2SPacket$PositionAndOnGround");
         taFullPacketClass          = JNIHelper::FindClassSafe("Lnet/minecraft/class_2828$class_2830;",
-                                        "net/minecraft/network/packet/c2s/play/PlayerMoveC2SPacket$Full");
+                                                              "net/minecraft/network/packet/c2s/play/PlayerMoveC2SPacket$Full");
 
         if (!taMcClass || !taWorldClass || !taEntityClass || !taLivingClass || !taPlayerClass ||
             !taInteractionManagerClass || !taHandClass || !taNetworkHandlerClass ||
@@ -88,7 +91,7 @@ void TeleportAura::OnTick() {
         taYaw   = JNIHelper::GetFieldSafe(taEntityClass, "field_5982", "F", "yaw");
         taPitch = JNIHelper::GetFieldSafe(taEntityClass, "field_5965", "F", "pitch");
 
-        taGetHealth          = JNIHelper::GetMethodSafe(taLivingClass,             "method_6032",  "()F",                                                                    "getHealth");
+        taGetHealth          = JNIHelper::GetMethodSafe(taLivingClass,             "method_6032",  "()F",                                        "getHealth");
         taAttackMethod       = JNIHelper::GetMethodSafe(taInteractionManagerClass, "method_2918",  "(Lnet/minecraft/class_1657;Lnet/minecraft/class_1297;)V",                "attackEntity");
         taSwingMethod        = JNIHelper::GetMethodSafe(taLivingClass,             "method_6104",  "(Lnet/minecraft/class_1268;)V",                                          "swingHand");
         taGetCooldownMethod  = JNIHelper::GetMethodSafe(taPlayerClass,             "method_7261",  "(F)F",                                                                   "getAttackCooldownProgress");
@@ -102,6 +105,9 @@ void TeleportAura::OnTick() {
 
         taMainHandField = JNIHelper::GetStaticFieldSafe(taHandClass, "field_5808", "Lnet/minecraft/class_1268;", "MAIN_HAND");
 
+        // FIX: cache getId method
+        taGetIdMethod = env->GetMethodID(taEntityClass, "getId", "()I");
+
         if (!taInstanceField || !taPlayerField || !taWorldField || !taInteractionManagerField ||
             !taPlayersField || !taEntX || !taEntY || !taEntZ || !taListSize || !taListGet ||
             !taGetHealth || !taAttackMethod || !taSwingMethod || !taGetCooldownMethod ||
@@ -109,7 +115,7 @@ void TeleportAura::OnTick() {
 
         if (!taPacketInitMethod && !taFullPacketInitMethod) return;
 
-        taMapppingsLoaded = true;
+        taMappingsLoaded = true;
     }
 
     if (!taInstanceField || !taPlayerField || !taWorldField || !taInteractionManagerField ||
@@ -168,7 +174,7 @@ void TeleportAura::OnTick() {
             jobject   bestTarget   = nullptr;
             // FIX: init to reach so anything within range wins on first hit
             double    bestDist     = (double)reach;
-            uintptr_t bestTargetId = 0;
+            jint      bestTargetId = -1;
 
             // aim-height jitter — sampled once per scan
             std::uniform_real_distribution<float> heightJitter(0.6f, 1.4f);
@@ -193,7 +199,9 @@ void TeleportAura::OnTick() {
                     if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(target); continue; }
                     if (hp > 0.0f) {
                         bestDist     = dist;
-                        bestTargetId = (uintptr_t)target;
+                        // FIX: use entity ID
+                        bestTargetId = taGetIdMethod ? env->CallIntMethod(target, taGetIdMethod) : -1;
+                        if (env->ExceptionCheck()) { env->ExceptionClear(); bestTargetId = -1; }
                         if (bestTarget) env->DeleteLocalRef(bestTarget);
                         bestTarget = env->NewLocalRef(target);
                     }
@@ -276,7 +284,7 @@ void TeleportAura::OnTick() {
 
                             jobject mainHand = env->GetStaticObjectField(taHandClass, taMainHandField);
                             if (mainHand) {
-                                // jitter swing timing: 0-2 ticks after attack
+                                // jitter swing timing: 0-40 ms after attack
                                 std::uniform_int_distribution<int> swingDelay(0, 40);
                                 DWORD swingAt = nowMs + (DWORD)swingDelay(s_taRng);
                                 if (nowMs >= swingAt) {
@@ -300,12 +308,13 @@ void TeleportAura::OnTick() {
                         env->DeleteLocalRef(networkHandler);
                     }
                 }
+                // FIX: delete bestTarget local ref to prevent memory leak
                 env->DeleteLocalRef(bestTarget);
             }
             env->DeleteLocalRef(playersList);
         }
 
-    cleanup_inner:
+cleanup_inner:
         env->DeleteLocalRef(interactionManager);
         env->DeleteLocalRef(world);
         env->DeleteLocalRef(player);
@@ -329,11 +338,11 @@ service_back:
                 jobject packetBack = nullptr;
                 if (taFullPacketInitMethod) {
                     packetBack = env->NewObject(taFullPacketClass, taFullPacketInitMethod,
-                                               s_taPendingPx, s_taPendingPy, s_taPendingPz,
-                                               s_taPendingYaw, s_taPendingPitch, JNI_TRUE);
+                                                s_taPendingPx, s_taPendingPy, s_taPendingPz,
+                                                s_taPendingYaw, s_taPendingPitch, JNI_TRUE);
                 } else if (taPacketInitMethod) {
                     packetBack = env->NewObject(taPositionAndOnGroundClass, taPacketInitMethod,
-                                               s_taPendingPx, s_taPendingPy, s_taPendingPz, JNI_TRUE);
+                                                s_taPendingPx, s_taPendingPy, s_taPendingPz, JNI_TRUE);
                 }
                 if (env->ExceptionCheck()) { env->ExceptionClear(); packetBack = nullptr; }
                 if (packetBack) {
