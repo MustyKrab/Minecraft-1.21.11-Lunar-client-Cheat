@@ -123,37 +123,47 @@ void AutoClicker::OnTick() {
     if (currentTime >= nextClickTime) {
         jobject attackKey = env->GetObjectField(options, attackKeyField);
         if (attackKey) {
-            // FIX: proper click pulse — press on this tick, schedule release + next press separately.
-            // Toggling isClicking and passing it directly means the key stays held between ticks.
-            // Instead: always fire a press->release pulse within the same tick boundary.
-            // setPressed(true) then immediately setPressed(false) simulates a discrete click.
-            env->CallVoidMethod(attackKey, setPressedMethod, JNI_TRUE);
-            if (env->ExceptionCheck()) env->ExceptionClear();
-            env->CallVoidMethod(attackKey, setPressedMethod, JNI_FALSE);
-            if (env->ExceptionCheck()) env->ExceptionClear();
+            // FIX: Two-tick state machine for clicking.
+            // Minecraft batches input per frame. Firing setPressed(true) and setPressed(false) 
+            // in the same tick means the game never sees the key as pressed during its input poll.
+            // We must hold it true for one tick, then release it on the next.
+            if (!isClicking) {
+                // Tick 1: Press down
+                env->CallVoidMethod(attackKey, setPressedMethod, JNI_TRUE);
+                if (env->ExceptionCheck()) env->ExceptionClear();
+                isClicking = true;
+                
+                // Only apply jitter on the down-press
+                if (jitter && yawField && pitchField) {
+                    std::uniform_real_distribution<float> jitterDist(-0.5f, 0.5f);
 
-            isClicking = true; // flag for external state queries only
+                    float currentYaw   = env->GetFloatField(player, yawField);
+                    float currentPitch = env->GetFloatField(player, pitchField);
 
-            if (jitter && yawField && pitchField) {
-                std::uniform_real_distribution<float> jitterDist(-0.5f, 0.5f);
+                    float newPitch = currentPitch + (jitterDist(s_acRng) * 0.5f);
+                    if (newPitch >  90.0f) newPitch =  90.0f;
+                    if (newPitch < -90.0f) newPitch = -90.0f;
 
-                float currentYaw   = env->GetFloatField(player, yawField);
-                float currentPitch = env->GetFloatField(player, pitchField);
-
-                // FIX: clamp pitch to [-90, 90] after adding jitter to avoid gimbal/invalid state
-                float newPitch = currentPitch + (jitterDist(s_acRng) * 0.5f);
-                if (newPitch >  90.0f) newPitch =  90.0f;
-                if (newPitch < -90.0f) newPitch = -90.0f;
-
-                env->SetFloatField(player, yawField,   currentYaw + jitterDist(s_acRng));
-                env->SetFloatField(player, pitchField, newPitch);
+                    env->SetFloatField(player, yawField,   currentYaw + jitterDist(s_acRng));
+                    env->SetFloatField(player, pitchField, newPitch);
+                }
+                
+                // Schedule the release for the very next tick (or ~10ms later)
+                nextClickTime = currentTime + 10;
+            } else {
+                // Tick 2: Release
+                env->CallVoidMethod(attackKey, setPressedMethod, JNI_FALSE);
+                if (env->ExceptionCheck()) env->ExceptionClear();
+                isClicking = false;
+                
+                // Schedule the next down-press based on CPS delay
+                // Subtract the 10ms we spent holding it down
+                int delay = GetRandomDelay() - 10;
+                if (delay < 1) delay = 1;
+                nextClickTime = currentTime + delay;
             }
 
             env->DeleteLocalRef(attackKey);
-
-            // FIX: delay math — was (GetRandomDelay()/2) + extraBase which produced CPS ~2x configured.
-            // Now just use GetRandomDelay() directly; it already uses normal distribution over [minDelay, maxDelay].
-            nextClickTime = currentTime + GetRandomDelay();
         }
     }
 
