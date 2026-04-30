@@ -7,7 +7,7 @@
 #include <random>
 #include <algorithm>
 
-// ── static mappings ──────────────────────────────────────────────────────────
+// ── static mappings ────────────────────────────────────────────────────────
 static bool aimbot_mappings_loaded = false;
 static jclass mcClass, worldClass, entityClass, livingClass, playerClass, optionsClass, doubleOptionClass;
 static jfieldID instanceField, playerField, worldField, playersField, optionsField, sensitivityField;
@@ -18,27 +18,28 @@ static jmethodID listSize, listGet, getHealth, getDoubleValue;
 static jclass    s_dblClass  = nullptr;
 static jmethodID s_dblValMID = nullptr;
 
-// ── persistent RNG (seeded once, never re-seeded in hot path) ────────────────
+// ── persistent RNG (seeded once, never re-seeded in hot path) ──────────────
 static std::mt19937 s_rng([]() -> uint32_t {
     std::random_device rd;
     return rd() ^ (uint32_t)(GetTickCount64() * 2654435761ULL);
 }());
 
-// ── per-tick state for humanised motion ──────────────────────────────────────
+// ── per-tick state for humanised motion ───────────────────────────────────
 static float  s_yawVel    = 0.0f;
 static float  s_pitchVel  = 0.0f;
 static DWORD  s_nextTickMs = 0;   // earliest ms we are allowed to act again
 
 // PATCH 4 – target-switch re-acquisition cooldown state
-static jobject s_lastTarget      = nullptr; // weak identity (pointer value only)
-static DWORD   s_targetLostMs    = 0;
-static bool    s_targetWasActive = false;
+// uintptr_t: pointer-identity only, never dereferenced as a JNI object
+static uintptr_t s_lastTarget      = 0;
+static DWORD     s_targetLostMs    = 0;
+static bool      s_targetWasActive = false;
 
 // PATCH 1 – per-tick rotation velocity caps (degrees/tick)
 static constexpr float kMaxYawPerTick   = 18.0f;
 static constexpr float kMaxPitchPerTick = 12.0f;
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── helpers ────────────────────────────────────────────────────────────────
 
 // Gaussian-ish noise via Box-Muller (cheap, no trig branch predictor issues)
 static float gaussian_noise(float stddev) {
@@ -54,23 +55,23 @@ static inline float wrap180(float a) {
     return a;
 }
 
-// ── ctor ─────────────────────────────────────────────────────────────────────
+// ── ctor ───────────────────────────────────────────────────────────────────
 Aimbot::Aimbot() : Module("Aimbot"), fov(90.0f), smoothSpeed(0.15f) {}
 
-// ── OnTick ───────────────────────────────────────────────────────────────────
+// ── OnTick ─────────────────────────────────────────────────────────────────
 void Aimbot::OnTick() {
     JNIEnv* env = JNIHelper::env;
     if (!env) return;
 
-    // ── lazy mapping load ────────────────────────────────────────────────────
+    // ── lazy mapping load ──────────────────────────────────────────────────
     if (!aimbot_mappings_loaded) {
         mcClass          = JNIHelper::FindClassSafe("Lnet/minecraft/class_310;",    "net/minecraft/client/MinecraftClient");
-        worldClass       = JNIHelper::FindClassSafe("Lnet/minecraft/class_638;",    "net/minecraft/client/world/ClientWorld");
-        entityClass      = JNIHelper::FindClassSafe("Lnet/minecraft/class_1297;",   "net/minecraft/entity/Entity");
-        livingClass      = JNIHelper::FindClassSafe("Lnet/minecraft/class_1309;",   "net/minecraft/entity/LivingEntity");
-        playerClass      = JNIHelper::FindClassSafe("Lnet/minecraft/class_1657;",   "net/minecraft/entity/player/PlayerEntity");
-        optionsClass     = JNIHelper::FindClassSafe("Lnet/minecraft/class_315;",    "net/minecraft/client/option/GameOptions");
-        doubleOptionClass= JNIHelper::FindClassSafe("Lnet/minecraft/class_7172;",   "net/minecraft/client/option/SimpleOption");
+        worldClass       = JNIHelper::FindClassSafe("Lnet/minecraft/class_638;",   "net/minecraft/client/world/ClientWorld");
+        entityClass      = JNIHelper::FindClassSafe("Lnet/minecraft/class_1297;",  "net/minecraft/entity/Entity");
+        livingClass      = JNIHelper::FindClassSafe("Lnet/minecraft/class_1309;",  "net/minecraft/entity/LivingEntity");
+        playerClass      = JNIHelper::FindClassSafe("Lnet/minecraft/class_1657;",  "net/minecraft/entity/player/PlayerEntity");
+        optionsClass     = JNIHelper::FindClassSafe("Lnet/minecraft/class_315;",   "net/minecraft/client/option/GameOptions");
+        doubleOptionClass= JNIHelper::FindClassSafe("Lnet/minecraft/class_7172;",  "net/minecraft/client/option/SimpleOption");
 
         jclass listClass = env->FindClass("java/util/List");
 
@@ -111,7 +112,7 @@ void Aimbot::OnTick() {
         !yawField       || !pitchField || !listSize   || !listGet      || !getHealth)
         return;
 
-    // ── LMB gate ─────────────────────────────────────────────────────────────
+    // ── LMB gate ───────────────────────────────────────────────────────────
     if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
         // PATCH 3 – randomised velocity bleed multiplier on release
         std::uniform_real_distribution<float> bleedDist(0.5f, 0.7f);
@@ -121,14 +122,14 @@ void Aimbot::OnTick() {
         return;
     }
 
-    // ── PATCH 5 – stochastic tick-rate jitter ────────────────────────────────
+    // ── PATCH 5 – stochastic tick-rate jitter ──────────────────────────────
     {
         DWORD now = (DWORD)GetTickCount64();
         if (now < s_nextTickMs) return;
 
         // base: uniform(35,60) ms + gaussian jitter
         std::uniform_int_distribution<int> baseDist(35, 60);
-        int base = baseDist(s_rng);
+        int base   = baseDist(s_rng);
         int jitter = (int)gaussian_noise(4.0f);
         s_nextTickMs = now + (DWORD)(base + jitter);
     }
@@ -163,10 +164,10 @@ void Aimbot::OnTick() {
         int size = env->CallIntMethod(playersList, listSize);
         if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(playersList); goto cleanup; }
 
-        jobject bestTarget   = nullptr;
-        float   bestAngDist  = fov;
-        double  bestDist3D   = 6.0;
-        void*   bestTargetId = nullptr;
+        jobject   bestTarget   = nullptr;
+        float     bestAngDist  = fov;
+        double    bestDist3D   = 6.0;
+        uintptr_t bestTargetId = 0;   // pointer identity for switch detection
 
         // PATCH 2 – randomised aim-height jitter per scan
         std::uniform_real_distribution<float> heightJitter(0.6f, 1.4f);
@@ -201,9 +202,9 @@ void Aimbot::OnTick() {
 
             if (angDist < fov) {
                 if (angDist < bestAngDist || (angDist == bestAngDist && dist3D < bestDist3D)) {
-                    bestAngDist = angDist;
-                    bestDist3D  = dist3D;
-                    bestTargetId = (void*)target; // pointer identity for switch detection
+                    bestAngDist  = angDist;
+                    bestDist3D   = dist3D;
+                    bestTargetId = (uintptr_t)target;
                     if (bestTarget) env->DeleteLocalRef(bestTarget);
                     bestTarget = env->NewLocalRef(target);
                 }
