@@ -99,64 +99,51 @@ void XRay::OnTick() {
             if (y < -64 || y > 320) continue; 
             
             for (int z = pz - scanRadius; z <= pz + scanRadius; z++) {
-                if (env->PushLocalFrame(16) < 0) {
-                    continue; 
-                }
-
                 jobject posObj = env->NewObject(blockPosClass, blockPosInit, x, y, z);
-                if (posObj) {
-                    jobject stateObj = env->CallObjectMethod(world, getBlockStateMethod, posObj);
-                    if (env->ExceptionCheck()) {
-                        env->ExceptionClear();
-                        stateObj = nullptr;
-                    }
-                    
-                    if (stateObj) {
-                        jobject blockObj = env->CallObjectMethod(stateObj, getBlockMethod);
-                        if (env->ExceptionCheck()) {
-                            env->ExceptionClear();
-                            blockObj = nullptr;
-                        }
-                        
-                        if (blockObj) {
-                            jstring keyStr = (jstring)env->CallObjectMethod(blockObj, toStringMethod);
-                            if (env->ExceptionCheck()) {
-                                env->ExceptionClear();
-                                keyStr = nullptr;
-                            }
-                            
-                            if (keyStr) {
-                                const char* rawKey = env->GetStringUTFChars(keyStr, nullptr);
-                                
-                                if (rawKey) {
-                                    if (strstr(rawKey, "diamond_ore")) {
-                                        if (showDiamond) newFoundBlocks.push_back({x, y, z, 0, 255, 255}); // Cyan
-                                    } else if (strstr(rawKey, "gold_ore")) {
-                                        if (showGold) newFoundBlocks.push_back({x, y, z, 255, 215, 0}); // Gold
-                                    } else if (strstr(rawKey, "iron_ore")) {
-                                        if (showIron) newFoundBlocks.push_back({x, y, z, 200, 200, 200}); // Silver
-                                    } else if (strstr(rawKey, "emerald_ore")) {
-                                        if (showEmerald) newFoundBlocks.push_back({x, y, z, 0, 255, 0}); // Green
-                                    } else if (strstr(rawKey, "ancient_debris")) {
-                                        if (showNetherite) newFoundBlocks.push_back({x, y, z, 100, 70, 70}); // Dark Brown
-                                    } else if (strstr(rawKey, "ender_chest")) {
-                                        if (showEnderChests) newFoundBlocks.push_back({x, y, z, 128, 0, 128}); // Purple
-                                    } else if (strstr(rawKey, "chest") || strstr(rawKey, "barrel")) {
-                                        if (showChests) newFoundBlocks.push_back({x, y, z, 255, 165, 0}); // Orange
-                                    } else if (strstr(rawKey, "spawner")) {
-                                        if (showSpawners) newFoundBlocks.push_back({x, y, z, 255, 0, 0}); // Red
-                                    } else if (strstr(rawKey, "hopper")) {
-                                        if (showHoppers) newFoundBlocks.push_back({x, y, z, 100, 100, 100}); // Gray
-                                    }
-                                    
-                                    env->ReleaseStringUTFChars(keyStr, rawKey);
-                                }
-                            }
-                        }
-                    }
-                }
+                if (!posObj) continue;
                 
-                env->PopLocalFrame(nullptr);
+                jobject stateObj = env->CallObjectMethod(world, getBlockStateMethod, posObj);
+                if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(posObj); continue; }
+                
+                if (stateObj) {
+                    jobject blockObj = env->CallObjectMethod(stateObj, getBlockMethod);
+                    if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(stateObj); env->DeleteLocalRef(posObj); continue; }
+                    
+                    if (blockObj) {
+                        jstring keyStr = (jstring)env->CallObjectMethod(blockObj, toStringMethod);
+                        if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(blockObj); env->DeleteLocalRef(stateObj); env->DeleteLocalRef(posObj); continue; }
+                        
+                        if (keyStr) {
+                            const char* rawKey = env->GetStringUTFChars(keyStr, nullptr);
+                            if (rawKey) {
+                                if (strstr(rawKey, "diamond_ore")) {
+                                    if (showDiamond) newFoundBlocks.push_back({x, y, z, 0, 255, 255}); // Cyan
+                                } else if (strstr(rawKey, "gold_ore")) {
+                                    if (showGold) newFoundBlocks.push_back({x, y, z, 255, 215, 0}); // Gold
+                                } else if (strstr(rawKey, "iron_ore")) {
+                                    if (showIron) newFoundBlocks.push_back({x, y, z, 200, 200, 200}); // Silver
+                                } else if (strstr(rawKey, "emerald_ore")) {
+                                    if (showEmerald) newFoundBlocks.push_back({x, y, z, 0, 255, 0}); // Green
+                                } else if (strstr(rawKey, "ancient_debris")) {
+                                    if (showNetherite) newFoundBlocks.push_back({x, y, z, 100, 70, 70}); // Dark Brown
+                                } else if (strstr(rawKey, "ender_chest")) {
+                                    if (showEnderChests) newFoundBlocks.push_back({x, y, z, 128, 0, 128}); // Purple
+                                } else if (strstr(rawKey, "chest") || strstr(rawKey, "barrel")) {
+                                    if (showChests) newFoundBlocks.push_back({x, y, z, 255, 165, 0}); // Orange
+                                } else if (strstr(rawKey, "spawner")) {
+                                    if (showSpawners) newFoundBlocks.push_back({x, y, z, 255, 0, 0}); // Red
+                                } else if (strstr(rawKey, "hopper")) {
+                                    if (showHoppers) newFoundBlocks.push_back({x, y, z, 100, 100, 100}); // Gray
+                                }
+                                env->ReleaseStringUTFChars(keyStr, rawKey);
+                            }
+                            env->DeleteLocalRef(keyStr);
+                        }
+                        env->DeleteLocalRef(blockObj);
+                    }
+                    env->DeleteLocalRef(stateObj);
+                }
+                env->DeleteLocalRef(posObj);
             }
         }
     }

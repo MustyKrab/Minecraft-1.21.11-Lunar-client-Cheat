@@ -364,13 +364,20 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
 
 void ESP::UpdateDataLoop() {
     JNIEnv* env = nullptr;
-    // FOX FIX: Check if we are already attached to prevent crashes
     jint getEnvStat = JNIHelper::vm->GetEnv((void**)&env, JNI_VERSION_1_8);
     if (getEnvStat == JNI_EDETACHED) {
         if (JNIHelper::vm->AttachCurrentThread((void**)&env, nullptr) != JNI_OK) return;
     } else if (getEnvStat == JNI_EVERSION) {
         return;
     }
+
+    auto checkEx = [&](JNIEnv* e) {
+        if (e->ExceptionCheck()) {
+            e->ExceptionClear();
+            return true;
+        }
+        return false;
+    };
 
     jclass mcClass = nullptr, worldClass = nullptr, entityClass = nullptr, livingEntityClass = nullptr;
     jclass rendererClass = nullptr, cameraClass = nullptr, vec3dClass = nullptr, matrixClass = nullptr;
@@ -388,9 +395,7 @@ void ESP::UpdateDataLoop() {
         matrixClass = JNIHelper::FindClassSafe("Lorg/joml/Matrix4f;", "org/joml/Matrix4f");
         textClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_2561;", "net/minecraft/text/Text");
 
-        if (mcClass && worldClass && entityClass && rendererClass && cameraClass && vec3dClass && matrixClass) {
-            break;
-        }
+        if (mcClass && worldClass && entityClass && rendererClass && cameraClass && vec3dClass && matrixClass) break;
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
         retries++;
     }
@@ -415,8 +420,7 @@ void ESP::UpdateDataLoop() {
     jfieldID entZ = JNIHelper::GetFieldSafe(entityClass, "field_5969", "D", "z");
 
     jmethodID getNameMethod = JNIHelper::GetMethodSafe(entityClass, "method_5477", "()Lnet/minecraft/class_2561;", "getName");
-    jmethodID getStringMethod = nullptr;
-    if (textClass) getStringMethod = JNIHelper::GetMethodSafe(textClass, "method_10851", "()Ljava/lang/String;", "getString");
+    jmethodID getStringMethod = textClass ? JNIHelper::GetMethodSafe(textClass, "method_10851", "()Ljava/lang/String;", "getString") : nullptr;
 
     jmethodID getHealth = nullptr, getMaxHealth = nullptr;
     if (livingEntityClass) {
@@ -441,53 +445,81 @@ void ESP::UpdateDataLoop() {
     }
     JNIHelper::jvmti->Deallocate((unsigned char*)fds);
 
+    if (vecIdx < 3) {
+        if (getEnvStat == JNI_EDETACHED) JNIHelper::vm->DetachCurrentThread();
+        return;
+    }
+
     const char* mNames[] = { "m00","m01","m02","m03", "m10","m11","m12","m13", "m20","m21","m22","m23", "m30","m31","m32","m33" };
     jfieldID matrixFields[16];
-    for (int i = 0; i < 16; i++) matrixFields[i] = env->GetFieldID(matrixClass, mNames[i], "F");
+    bool matrixValid = true;
+    for (int i = 0; i < 16; i++) {
+        matrixFields[i] = env->GetFieldID(matrixClass, mNames[i], "F");
+        if (checkEx(env) || !matrixFields[i]) matrixValid = false;
+    }
 
-    if (!instanceField || !localPlayerField || !worldField || !rendererField || !playersField || !listSize || !listGet || !entX || !entY || !entZ || !camField || !modelViewField || !projField || !camPosField) {
+    if (!instanceField || !localPlayerField || !worldField || !rendererField || !playersField || !listSize || !listGet || !entX || !entY || !entZ || !camField || !modelViewField || !projField || !camPosField || !matrixValid) {
         if (getEnvStat == JNI_EDETACHED) JNIHelper::vm->DetachCurrentThread();
         return;
     }
 
     while (running) {
+        if (env->PushLocalFrame(128) < 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            continue;
+        }
+
         jobject mcInstance = env->GetStaticObjectField(mcClass, instanceField);
-        if (mcInstance) {
-            jobject localPlayer = env->GetObjectField(mcInstance, localPlayerField);
-            jobject renderer = env->GetObjectField(mcInstance, rendererField);
-            jobject world = env->GetObjectField(mcInstance, worldField);
+        if (checkEx(env) || !mcInstance) {
+            env->PopLocalFrame(nullptr);
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            continue;
+        }
 
-            if (renderer && world) {
-                jobject camera = env->GetObjectField(renderer, camField);
-                jobject modelViewObj = env->GetObjectField(renderer, modelViewField);
-                jobject projObj = env->GetObjectField(renderer, projField);
-                jobject playersList = env->GetObjectField(world, playersField);
+        jobject localPlayer = env->GetObjectField(mcInstance, localPlayerField);
+        checkEx(env);
+        jobject renderer = env->GetObjectField(mcInstance, rendererField);
+        checkEx(env);
+        jobject world = env->GetObjectField(mcInstance, worldField);
+        checkEx(env);
 
-                if (camera && modelViewObj && projObj && playersList) {
-                    jobject camPosObj = env->GetObjectField(camera, camPosField);
-                    
-                    Vec3 tempCamPos = {0, 0, 0};
-                    if (camPosObj) {
-                        tempCamPos = {
-                            env->GetDoubleField(camPosObj, vec3dFields[0]),
-                            env->GetDoubleField(camPosObj, vec3dFields[1]),
-                            env->GetDoubleField(camPosObj, vec3dFields[2])
-                        };
-                        env->DeleteLocalRef(camPosObj);
-                    }
+        if (renderer && world) {
+            jobject camera = env->GetObjectField(renderer, camField);
+            checkEx(env);
+            jobject modelViewObj = env->GetObjectField(renderer, modelViewField);
+            checkEx(env);
+            jobject projObj = env->GetObjectField(renderer, projField);
+            checkEx(env);
+            jobject playersList = env->GetObjectField(world, playersField);
+            checkEx(env);
 
-                    float tempMv[16], tempP[16];
-                    for (int i = 0; i < 16; i++) {
-                        tempMv[i] = env->GetFloatField(modelViewObj, matrixFields[i]);
-                        tempP[i] = env->GetFloatField(projObj, matrixFields[i]);
-                    }
+            if (camera && modelViewObj && projObj && playersList) {
+                jobject camPosObj = env->GetObjectField(camera, camPosField);
+                checkEx(env);
 
-                    std::vector<PlayerData> tempPlayers;
-                    jint size = env->CallIntMethod(playersList, listSize);
-                    
+                Vec3 tempCamPos = {0, 0, 0};
+                if (camPosObj) {
+                    tempCamPos = {
+                        env->GetDoubleField(camPosObj, vec3dFields[0]),
+                        env->GetDoubleField(camPosObj, vec3dFields[1]),
+                        env->GetDoubleField(camPosObj, vec3dFields[2])
+                    };
+                    checkEx(env);
+                }
+
+                float tempMv[16], tempP[16];
+                for (int i = 0; i < 16; i++) {
+                    tempMv[i] = env->GetFloatField(modelViewObj, matrixFields[i]);
+                    tempP[i] = env->GetFloatField(projObj, matrixFields[i]);
+                }
+                checkEx(env);
+
+                std::vector<PlayerData> tempPlayers;
+                jint size = env->CallIntMethod(playersList, listSize);
+                if (!checkEx(env)) {
                     for (int i = 0; i < size; i++) {
                         jobject player = env->CallObjectMethod(playersList, listGet, i);
-                        if (!player) continue;
+                        if (checkEx(env) || !player) continue;
 
                         if (localPlayer && env->IsSameObject(player, localPlayer)) {
                             env->DeleteLocalRef(player);
@@ -499,6 +531,7 @@ void ESP::UpdateDataLoop() {
                             env->GetDoubleField(player, entY),
                             env->GetDoubleField(player, entZ)
                         };
+                        checkEx(env);
 
                         double distance = std::sqrt(std::pow(tempCamPos.x - feetPos.x, 2) + std::pow(tempCamPos.y - feetPos.y, 2) + std::pow(tempCamPos.z - feetPos.z, 2));
 
@@ -506,48 +539,41 @@ void ESP::UpdateDataLoop() {
                             float hp = 20.0f, maxHp = 20.0f;
                             if (getHealth && getMaxHealth) {
                                 hp = env->CallFloatMethod(player, getHealth);
+                                checkEx(env);
                                 maxHp = env->CallFloatMethod(player, getMaxHealth);
+                                checkEx(env);
                             }
 
-                            std::wstring playerName = L"Player"; 
+                            std::wstring playerName = L"Player";
                             if (distance < 50.0 && getNameMethod && getStringMethod) {
                                 jobject textObj = env->CallObjectMethod(player, getNameMethod);
-                                if (textObj) {
+                                if (!checkEx(env) && textObj) {
                                     jstring nameStr = (jstring)env->CallObjectMethod(textObj, getStringMethod);
-                                    if (nameStr) {
+                                    if (!checkEx(env) && nameStr) {
                                         const jchar* rawName = env->GetStringChars(nameStr, nullptr);
                                         jsize len = env->GetStringLength(nameStr);
                                         playerName = std::wstring((const wchar_t*)rawName, len);
                                         env->ReleaseStringChars(nameStr, rawName);
-                                        env->DeleteLocalRef(nameStr);
                                     }
-                                    env->DeleteLocalRef(textObj);
                                 }
                             }
                             tempPlayers.push_back({feetPos, hp, maxHp, playerName});
                         }
                         env->DeleteLocalRef(player);
                     }
-
-                    {
-                        std::lock_guard<std::mutex> lock(dataMutex);
-                        cachedPlayers = tempPlayers;
-                        cachedCamPos = tempCamPos;
-                        memcpy(cachedMv, tempMv, sizeof(tempMv));
-                        memcpy(cachedP, tempP, sizeof(tempP));
-                    }
                 }
-                if (camera) env->DeleteLocalRef(camera);
-                if (modelViewObj) env->DeleteLocalRef(modelViewObj);
-                if (projObj) env->DeleteLocalRef(projObj);
-                if (playersList) env->DeleteLocalRef(playersList);
+
+                {
+                    std::lock_guard<std::mutex> lock(dataMutex);
+                    cachedPlayers = tempPlayers;
+                    cachedCamPos = tempCamPos;
+                    memcpy(cachedMv, tempMv, sizeof(tempMv));
+                    memcpy(cachedP, tempP, sizeof(tempP));
+                }
             }
-            if (renderer) env->DeleteLocalRef(renderer);
-            if (world) env->DeleteLocalRef(world);
-            if (localPlayer) env->DeleteLocalRef(localPlayer);
-            env->DeleteLocalRef(mcInstance);
         }
-        
+
+        env->PopLocalFrame(nullptr);
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 
