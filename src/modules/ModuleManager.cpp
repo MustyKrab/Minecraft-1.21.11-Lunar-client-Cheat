@@ -28,6 +28,16 @@ void ModuleManager::Initialize() {
     GetModule("ESP")->Toggle();
 }
 
+void ModuleManager::Cleanup() {
+    for (Module* mod : modules) {
+        if (mod->IsEnabled()) {
+            mod->OnDisable();
+        }
+        delete mod;
+    }
+    modules.clear();
+}
+
 void ModuleManager::OnTick() {
     for (Module* mod : modules) {
         if (mod->IsEnabled()) {
