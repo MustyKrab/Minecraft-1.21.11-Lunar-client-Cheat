@@ -76,18 +76,21 @@ void UnlinkPEB(HINSTANCE hModule) {
     }
 }
 
-DWORD WINAPI CheatThread(LPVOID lpParam) {
+DWORD WINAPI CheatThread(LPVOID lParam) {
     if (JNIHelper::Initialize()) {
         ModuleManager::Initialize();
         
-        while (true) {
+        // FIX: Added a way to cleanly exit the cheat thread (e.g. pressing END key)
+        while (!(GetAsyncKeyState(VK_END) & 0x8000)) {
             ModuleManager::OnTick();
             std::this_thread::sleep_for(std::chrono::milliseconds(16)); // ~60 TPS
         }
     }
     
+    // Clean up allocated memory before exiting
+    ModuleManager::Cleanup();
     JNIHelper::Cleanup();
-    FreeLibraryAndExitThread((HMODULE)lpParam, 0);
+    FreeLibraryAndExitThread((HMODULE)lParam, 0);
     return 0;
 }
 
@@ -97,9 +100,6 @@ BOOL APIENTRY DllMain(HINSTANCE hModule, DWORD ul_reason_for_call, LPVOID lpRese
         UnlinkPEB(hModule);
         ErasePEHeaders(hModule);
         
-        // FOX FIX: Removed dangerous 14-byte inline hook on wglSwapBuffers.
-        // It was cutting instructions in half and crashing the game instantly.
-        // Using a dedicated thread is much safer and cleaner for JNI.
         HANDLE hThread = CreateThread(nullptr, 0, CheatThread, hModule, 0, nullptr);
         if (hThread) CloseHandle(hThread);
     }
