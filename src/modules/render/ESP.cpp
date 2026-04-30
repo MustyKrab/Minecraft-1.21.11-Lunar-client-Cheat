@@ -12,6 +12,7 @@
 #include <fstream>
 #include <cmath>
 #include <string>
+#include <algorithm>
 
 #pragma comment(lib, "gdiplus.lib")
 using namespace Gdiplus;
