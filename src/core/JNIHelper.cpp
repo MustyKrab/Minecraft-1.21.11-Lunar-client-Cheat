@@ -60,7 +60,9 @@ jclass JNIHelper::FindClassBySignature(const char* targetSig) {
             }
             jvmti->Deallocate((unsigned char*)sig);
         }
-        env->DeleteLocalRef(classes[i]); // Prevent local ref table overflow!
+        // FIX: DeleteLocalRef on classes[i] to prevent local ref table overflow
+        // GetLoadedClasses returns an array of JNI local references.
+        env->DeleteLocalRef(classes[i]); 
     }
 
     jvmti->Deallocate((unsigned char*)classes);
