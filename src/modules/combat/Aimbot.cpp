@@ -225,12 +225,12 @@ void Aimbot::OnTick() {
             // Vary speed based on angular distance: faster when far, slower on
             // approach — mimics natural human over/undershoot behaviour
             float angDist = std::sqrt(yawDiff*yawDiff + pitchDiff*pitchDiff);
-            float distScale = std::min(1.0f, angDist / 15.0f); // ramp up over 15 deg
+            float distScale = (std::min)(1.0f, angDist / 15.0f); // ramp up over 15 deg
             float targetSpeed = baseSpeed * (0.55f + 0.45f * distScale);
 
             // Add per-tick gaussian noise to the speed itself
             targetSpeed += gaussian_noise(baseSpeed * 0.07f);
-            targetSpeed  = std::max(0.02f, std::min(targetSpeed, 0.95f));
+            targetSpeed  = (std::max)(0.02f, (std::min)(targetSpeed, 0.95f));
 
             // Smooth the speed itself (velocity of the velocity = acceleration)
             s_yawVel   += (yawDiff   * targetSpeed - s_yawVel)   * 0.35f;
@@ -244,7 +244,7 @@ void Aimbot::OnTick() {
             float newPitch = currentPitch + s_pitchVel;
 
             // Clamp pitch to valid MC range
-            newPitch = std::max(-90.0f, std::min(90.0f, newPitch));
+            newPitch = (std::max)(-90.0f, (std::min)(90.0f, newPitch));
 
             env->SetFloatField(player, yawField,   newYaw);
             env->SetFloatField(player, pitchField, newPitch);
