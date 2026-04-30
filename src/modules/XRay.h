@@ -1,13 +1,5 @@
 #pragma once
-#include <jni.h>
-
-namespace Modules {
-    class XRay {
-    public:
-        static bool bEnabled;
-        static bool bNeedsUpdate;
-
-        static void Toggle();
-        static void ProcessSafeUpdate(JNIEnv* env);
-    };
-}
+// Redirect to the real XRay header.
+// Previous version declared a conflicting Modules::XRay namespace with static bEnabled
+// that clashed with the proper XRay class in render/XRay.h used by ModuleManager.
+#include "render/XRay.h"

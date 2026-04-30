@@ -23,8 +23,10 @@ void FakeLag::OnTick() {
         flInstanceField = JNIHelper::GetStaticFieldSafe(flMcClass, "field_1700", "Lnet/minecraft/class_310;", "instance");
         flPlayerField = JNIHelper::GetFieldSafe(flMcClass, "field_1724", "Lnet/minecraft/class_746;", "player");
         flNetworkHandlerField = JNIHelper::GetFieldSafe(flPlayerClass, "field_3944", "Lnet/minecraft/class_634;", "networkHandler");
-        
         flSendPacketMethod = JNIHelper::GetMethodSafe(flNetworkHandlerClass, "method_52787", "(Lnet/minecraft/class_2596;)V", "sendPacket");
+
+        // Only mark loaded when ALL fields resolved
+        if (!flInstanceField || !flPlayerField || !flNetworkHandlerField || !flSendPacketMethod) return;
 
         flMappingsLoaded = true;
     }
@@ -40,14 +42,9 @@ void FakeLag::OnTick() {
         return;
     }
 
-    // FOX FIX: True FakeLag in Minecraft requires hooking the sendPacket method and queueing packets.
-    // Since we are running externally/JNI without a bytecode hook, we can't easily intercept all packets.
-    // A simple JNI-only approach is to freeze the player's movement on the client side momentarily,
-    // but that's not true FakeLag. 
-    // For now, this module is a placeholder for the UI. To implement real FakeLag, you need to hook 
-    // ClientPlayNetworkHandler.sendPacket via MinHook or a Java agent.
-    
-    // Placeholder logic for UI demonstration
+    // Real FakeLag requires hooking sendPacket via MinHook or a Java agent to queue packets.
+    // JNI-only approach can't intercept outgoing packets without bytecode instrumentation.
+    // This counter tracks choke state for UI display purposes.
     chokedPackets++;
     if (chokedPackets >= chokeLimit) {
         chokedPackets = 0;
