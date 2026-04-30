@@ -542,14 +542,14 @@ void ESP::UpdateDataLoop() {
     // ── data loop ─────────────────────────────────────────────────────────────
     while (running) {
         if (env->PushLocalFrame(128) < 0) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            std::this_thread::sleep_for(std::chrono::milliseconds(5)); // FOX FIX: reduced sleep for faster updates
             continue;
         }
 
         jobject mcInstance = env->GetStaticObjectField(mcClass, instanceField);
         if (checkEx(env) || !mcInstance) {
             env->PopLocalFrame(nullptr);
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            std::this_thread::sleep_for(std::chrono::milliseconds(5)); // FOX FIX: reduced sleep
             continue;
         }
 
@@ -644,7 +644,7 @@ void ESP::UpdateDataLoop() {
         }
 
         env->PopLocalFrame(nullptr);
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        std::this_thread::sleep_for(std::chrono::milliseconds(5)); // FOX FIX: reduced sleep to 5ms (200hz) to eliminate stutter
     }
 
     if (getEnvStat == JNI_EDETACHED) JNIHelper::vm->DetachCurrentThread();
@@ -696,7 +696,7 @@ void ESP::RenderLoop() {
         int height = rect.bottom - rect.top;
 
         if (width <= 0 || height <= 0) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(16));
+            std::this_thread::sleep_for(std::chrono::milliseconds(8)); // FOX FIX: 8ms for 120fps sync
             continue;
         }
 
