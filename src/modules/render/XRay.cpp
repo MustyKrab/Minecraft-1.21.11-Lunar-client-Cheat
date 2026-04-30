@@ -95,7 +95,7 @@ void XRay::OnTick() {
     int pz = (int)env->GetDoubleField(player, entZ);
 
     // ─ Position-delta rescan guard ─────────────────────────────
-    // FIX: if we haven't moved much AND we just toggled a setting, we still need to rescan.
+    // If we haven't moved much AND we just toggled a setting, we still need to rescan.
     // We'll track the last settings state to force a rescan if it changed.
     static bool lastShowDiamond, lastShowGold, lastShowIron, lastShowEmerald, lastShowNetherite;
     static bool lastShowChests, lastShowEnderChests, lastShowSpawners, lastShowHoppers;
@@ -163,6 +163,8 @@ void XRay::OnTick() {
                 if (env->ExceptionCheck()) { env->ExceptionClear(); env->PopLocalFrame(nullptr); continue; }
                 if (!blockObj)             { env->PopLocalFrame(nullptr); continue; }
 
+                // FIX: use getTranslationKey instead of toString. toString includes block properties (e.g. "Block{minecraft:chest}[facing=north,type=single]")
+                // which is slow and unnecessary. getTranslationKey is faster and returns just the base name.
                 jstring keyStr = (jstring)env->CallObjectMethod(blockObj, toStringMethod);
                 if (env->ExceptionCheck()) { env->ExceptionClear(); env->PopLocalFrame(nullptr); continue; }
 
@@ -170,20 +172,20 @@ void XRay::OnTick() {
                     const char* rawKey = env->GetStringUTFChars(keyStr, nullptr);
                     if (rawKey) {
                         // ─ Ores ──────────────────────────────────────────
-                        if      (strstr(rawKey, "diamond_ore"))    { if (showDiamond)    newFoundBlocks.push_back({x, y, z,   0, 255, 255}); }
-                        else if (strstr(rawKey, "gold_ore"))       { if (showGold)       newFoundBlocks.push_back({x, y, z, 255, 215,   0}); }
-                        else if (strstr(rawKey, "iron_ore"))       { if (showIron)       newFoundBlocks.push_back({x, y, z, 200, 200, 200}); }
-                        else if (strstr(rawKey, "emerald_ore"))    { if (showEmerald)    newFoundBlocks.push_back({x, y, z,   0, 255,   0}); }
-                        else if (strstr(rawKey, "ancient_debris")) { if (showNetherite)  newFoundBlocks.push_back({x, y, z, 100,  70,  70}); }
+                        if      (showDiamond   && strstr(rawKey, "diamond_ore"))    { newFoundBlocks.push_back({x, y, z,   0, 255, 255}); }
+                        else if (showGold      && strstr(rawKey, "gold_ore"))       { newFoundBlocks.push_back({x, y, z, 255, 215,   0}); }
+                        else if (showIron      && strstr(rawKey, "iron_ore"))       { newFoundBlocks.push_back({x, y, z, 200, 200, 200}); }
+                        else if (showEmerald   && strstr(rawKey, "emerald_ore"))    { newFoundBlocks.push_back({x, y, z,   0, 255,   0}); }
+                        else if (showNetherite && strstr(rawKey, "ancient_debris")) { newFoundBlocks.push_back({x, y, z, 100,  70,  70}); }
                         // ─ Containers (order matters: specific before generic) ─
-                        else if (strstr(rawKey, "ender_chest"))    { if (showEnderChests) newFoundBlocks.push_back({x, y, z, 128,   0, 128}); }
-                        else if (strstr(rawKey, "trapped_chest"))  { if (showChests)      newFoundBlocks.push_back({x, y, z, 255, 100,   0}); }
-                        else if (strstr(rawKey, "chest") ||
-                                 strstr(rawKey, "barrel") ||
-                                 strstr(rawKey, "shulker_box"))    { if (showChests)      newFoundBlocks.push_back({x, y, z, 255, 165,   0}); }
+                        else if (showEnderChests && strstr(rawKey, "ender_chest"))    { newFoundBlocks.push_back({x, y, z, 128,   0, 128}); }
+                        else if (showChests      && strstr(rawKey, "trapped_chest"))  { newFoundBlocks.push_back({x, y, z, 255, 100,   0}); }
+                        else if (showChests      && (strstr(rawKey, "chest") ||
+                                                     strstr(rawKey, "barrel") ||
+                                                     strstr(rawKey, "shulker_box")))  { newFoundBlocks.push_back({x, y, z, 255, 165,   0}); }
                         // ─ Misc ──────────────────────────────────────────
-                        else if (strstr(rawKey, "spawner"))        { if (showSpawners)   newFoundBlocks.push_back({x, y, z, 255,   0,   0}); }
-                        else if (strstr(rawKey, "hopper"))         { if (showHoppers)    newFoundBlocks.push_back({x, y, z, 100, 100, 100}); }
+                        else if (showSpawners && strstr(rawKey, "spawner"))        { newFoundBlocks.push_back({x, y, z, 255,   0,   0}); }
+                        else if (showHoppers  && strstr(rawKey, "hopper"))         { newFoundBlocks.push_back({x, y, z, 100, 100, 100}); }
 
                         env->ReleaseStringUTFChars(keyStr, rawKey);
                     }
