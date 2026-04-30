@@ -7,8 +7,7 @@
 
 void Menu::RenderCombatTab() {
     ImGui::BeginChild("Combat", ImVec2(0, 0), true);
-    
-    // Get the Killaura module instance from ModuleManager
+
     Killaura* ka = static_cast<Killaura*>(ModuleManager::GetModule("Killaura"));
     if (ka) {
         bool enabled = ka->IsEnabled();
@@ -30,6 +29,12 @@ void Menu::RenderCombatTab() {
             ka->Set360Enabled(enable360);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Bypass FOV check to hit entities all around you.");
+
+        bool pktOpt = ka->IsPacketOrderOptimizeEnabled();
+        if (ImGui::Checkbox("Packet Order Optimize##ka", &pktOpt))
+            ka->SetPacketOrderOptimizeEnabled(pktOpt);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Attack packet sent before movement packet. Server evaluates reach at last-tick position.");
     }
 
     ImGui::EndChild();
@@ -37,7 +42,7 @@ void Menu::RenderCombatTab() {
 
 void Menu::RenderTeleportAuraTab() {
     ImGui::BeginChild("Teleport Aura", ImVec2(0, 0), true);
-    
+
     TeleportAura* ta = static_cast<TeleportAura*>(ModuleManager::GetModule("TeleportAura"));
     if (ta) {
         bool enabled = ta->IsEnabled();
@@ -56,13 +61,12 @@ void Menu::RenderTeleportAuraTab() {
 
 void Menu::RenderVisualsTab() {
     ImGui::BeginChild("Visuals", ImVec2(0, 0), true);
-    
+
     XRay* xray = static_cast<XRay*>(ModuleManager::GetModule("XRay"));
     if (xray) {
         bool enabled = xray->IsEnabled();
-        if (ImGui::Checkbox("XRay", &enabled)) {
+        if (ImGui::Checkbox("XRay", &enabled))
             xray->SetEnabled(enabled);
-        }
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Scans nearby blocks and highlights ores/chests.");
 
