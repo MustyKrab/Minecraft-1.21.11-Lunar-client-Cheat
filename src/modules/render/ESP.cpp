@@ -81,7 +81,6 @@ static void InitGdipObjects() {
     s_modBgBrush   = new SolidBrush(Color(255, 45, 45, 45));
     s_colorPen     = new Pen(Color(255, 46, 204, 113), 2.0f);
 
-    // FIX: was L"Consolaes" (typo) — corrected to L"Consolas"
     s_consolasFam  = new FontFamily(L"Consolas");
     s_espFont      = new Font(s_consolasFam, 12, FontStyleBold,    UnitPixel);
     s_verdanaFam   = new FontFamily(L"Verdana");
@@ -371,7 +370,6 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
                     y += DrawCheckbox(L"Iron Ore",                xray->showIron,        130, y);
                     y += DrawCheckbox(L"Emerald Ore",             xray->showEmerald,     130, y);
                     y += DrawCheckbox(L"Ancient Debris",          xray->showNetherite,   130, y);
-                    // FIX: label updated to reflect shulker_box and trapped_chest now included
                     y += DrawCheckbox(L"Chests, Barrels & Shulkers", xray->showChests,    130, y);
                     y += DrawCheckbox(L"Ender Chests",            xray->showEnderChests, 130, y);
                     y += DrawCheckbox(L"Spawners",                xray->showSpawners,    130, y);
@@ -413,6 +411,13 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
                     bool  jitter = ac->IsJitterEnabled();
                     y += DrawSlider(L"Min CPS", minCps, 1.0f, 20.0f, draggingAcMinSlider, 130, y);
                     y += DrawSlider(L"Max CPS", maxCps, 1.0f, 20.0f, draggingAcMaxSlider, 130, y);
+                    
+                    // FIX: Ensure minCPS never exceeds maxCPS, and maxCPS never goes below minCPS
+                    if (minCps > maxCps) {
+                        if (draggingAcMinSlider) maxCps = minCps;
+                        else if (draggingAcMaxSlider) minCps = maxCps;
+                    }
+                    
                     y += DrawCheckbox(L"Jitter", jitter, 130, y);
                     ac->SetMinCps(minCps); ac->SetMaxCps(maxCps); ac->SetJitter(jitter);
                 }
@@ -791,13 +796,11 @@ void ESP::RenderLoop() {
             // ─ XRay blocks ───────────────────────────────────────────────────
             XRay* xray = (XRay*)ModuleManager::GetModule("XRay");
             if (xray && xray->IsEnabled()) {
-                // FIX: use xray->scanRadius for cull, not espRange
                 float xrayRange   = (float)xray->scanRadius * 1.5f; // slight overdraw margin
                 double xrayRangeSq = (double)xrayRange * (double)xrayRange;
 
                 std::vector<XRayBlock> blocks = xray->GetFoundBlocks();
 
-                // FIX: sort by distance and cap at 2048 to prevent render overload
                 std::sort(blocks.begin(), blocks.end(), [&](const XRayBlock& a, const XRayBlock& b) {
                     double adx = camPos.x - (a.x + 0.5), ady = camPos.y - (a.y + 0.5), adz = camPos.z - (a.z + 0.5);
                     double bdx = camPos.x - (b.x + 0.5), bdy = camPos.y - (b.y + 0.5), bdz = camPos.z - (b.z + 0.5);
