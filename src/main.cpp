@@ -1,9 +1,7 @@
 #include <windows.h>
 #include <iostream>
 #include <thread>
-#include <intrin.h>
-#include <gl/GL.h>
-#pragma comment(lib, "opengl32.lib")
+#include <chrono>
 
 #include "core/JNIHelper.h"
 #include "modules/ModuleManager.h"
@@ -78,81 +76,32 @@ void UnlinkPEB(HINSTANCE hModule) {
     }
 }
 
-// FOX FIX: Thread Hijacking via wglSwapBuffers Hook
-// Instead of creating a new thread and attaching it to the JVM (which is instantly flagged),
-// we hook the OpenGL swap buffers function. This function is called by the game's main render thread
-// every single frame. We execute our cheat logic inside this hook, meaning we are running
-// on a legitimate, pre-existing JVM thread.
-
-typedef BOOL(WINAPI* twglSwapBuffers)(HDC hDc);
-twglSwapBuffers owglSwapBuffers = nullptr;
-bool initialized = false;
-
-BOOL WINAPI hkwglSwapBuffers(HDC hDc) {
-    if (!initialized) {
-        if (JNIHelper::Initialize()) {
-            ModuleManager::Initialize();
-            initialized = true;
-        }
-    }
-
-    if (initialized) {
-        // We are now executing on the main Minecraft render thread.
-        // No need to call AttachCurrentThread, we are already in the JVM context.
+DWORD WINAPI CheatThread(LPVOID lpParam) {
+    if (JNIHelper::Initialize()) {
+        ModuleManager::Initialize();
         
-        // Only run tick logic if we have the JNIEnv for this thread
-        void* envPtr = nullptr;
-        if (JNIHelper::vm->GetEnv(&envPtr, JNI_VERSION_1_8) == JNI_OK) {
-            JNIHelper::env = (JNIEnv*)envPtr;
+        while (true) {
             ModuleManager::OnTick();
+            std::this_thread::sleep_for(std::chrono::milliseconds(16)); // ~60 TPS
         }
     }
-
-    return owglSwapBuffers(hDc);
-}
-
-// Simple VMT/IAT hook setup for wglSwapBuffers
-void SetupHook() {
-    HMODULE hOpengl32 = GetModuleHandleA("opengl32.dll");
-    if (!hOpengl32) return;
-
-    void* wglSwapBuffersAddr = GetProcAddress(hOpengl32, "wglSwapBuffers");
-    if (!wglSwapBuffersAddr) return;
-
-    // Basic inline hook (trampoline)
-    // Note: In a real production cheat, use MinHook or a custom disassembler to handle relocations.
-    // This is a simplified 64-bit absolute jump hook for demonstration.
     
-    DWORD oldProtect;
-    VirtualProtect(wglSwapBuffersAddr, 14, PAGE_EXECUTE_READWRITE, &oldProtect);
-    
-    // Save original bytes for trampoline (simplified, assumes no relative instructions in first 14 bytes)
-    owglSwapBuffers = (twglSwapBuffers)VirtualAlloc(NULL, 32, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-    memcpy((void*)owglSwapBuffers, wglSwapBuffersAddr, 14);
-    
-    // Jump back to original + 14
-    BYTE jmpBack[] = { 0xFF, 0x25, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-    *(uintptr_t*)(jmpBack + 6) = (uintptr_t)wglSwapBuffersAddr + 14;
-    memcpy((void*)((uintptr_t)owglSwapBuffers + 14), jmpBack, 14);
-
-    // Write jump to our hook
-    BYTE jmpToHook[] = { 0xFF, 0x25, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-    *(uintptr_t*)(jmpToHook + 6) = (uintptr_t)hkwglSwapBuffers;
-    memcpy(wglSwapBuffersAddr, jmpToHook, 14);
-    
-    VirtualProtect(wglSwapBuffersAddr, 14, oldProtect, &oldProtect);
+    JNIHelper::Cleanup();
+    FreeLibraryAndExitThread((HMODULE)lpParam, 0);
+    return 0;
 }
 
 BOOL APIENTRY DllMain(HINSTANCE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
     if (ul_reason_for_call == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(hModule);
-        
         UnlinkPEB(hModule);
         ErasePEHeaders(hModule);
-
-        // Instead of creating a thread, we just place our hook.
-        // The cheat will initialize and run automatically on the next frame render.
-        SetupHook();
+        
+        // FOX FIX: Removed dangerous 14-byte inline hook on wglSwapBuffers.
+        // It was cutting instructions in half and crashing the game instantly.
+        // Using a dedicated thread is much safer and cleaner for JNI.
+        HANDLE hThread = CreateThread(nullptr, 0, CheatThread, hModule, 0, nullptr);
+        if (hThread) CloseHandle(hThread);
     }
     return TRUE;
 }
