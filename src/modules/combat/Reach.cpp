@@ -104,9 +104,10 @@ void Reach::OnTick() {
         if (!playersList) goto cleanup;
 
         int size = env->CallIntMethod(playersList, listSize);
+        if (env->ExceptionCheck()) { env->ExceptionClear(); goto cleanupList; }
+
         jobject bestTarget = nullptr;
         
-        // FOX FIX: Randomize the reach slightly so it's not a static value
         std::random_device rd;
         std::mt19937 gen(rd());
         std::uniform_real_distribution<float> reachDist(reachDistance - 0.1f, reachDistance + 0.1f);
@@ -116,6 +117,7 @@ void Reach::OnTick() {
 
         for (int idx = 0; idx < size; idx++) {
             jobject target = env->CallObjectMethod(playersList, listGet, idx);
+            if (env->ExceptionCheck()) { env->ExceptionClear(); continue; }
             if (!target) continue;
 
             if (env->IsSameObject(player, target)) {
@@ -124,6 +126,7 @@ void Reach::OnTick() {
             }
 
             float hp = env->CallFloatMethod(target, getHealth);
+            if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(target); continue; }
             if (hp <= 0.0f) {
                 env->DeleteLocalRef(target);
                 continue;
@@ -151,14 +154,18 @@ void Reach::OnTick() {
 
         if (bestTarget) {
             env->CallVoidMethod(interactionManager, attackMethod, player, bestTarget);
+            if (env->ExceptionCheck()) env->ExceptionClear();
+
             jobject mainHand = env->GetStaticObjectField(handClass, mainHandField);
             if (mainHand) {
                 env->CallVoidMethod(player, swingMethod, mainHand);
+                if (env->ExceptionCheck()) env->ExceptionClear();
                 env->DeleteLocalRef(mainHand);
             }
             env->DeleteLocalRef(bestTarget);
         }
 
+cleanupList:
         env->DeleteLocalRef(playersList);
     }
 

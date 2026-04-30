@@ -49,7 +49,7 @@ ESP::~ESP() {
 }
 
 void ESP::OnEnable() {
-    if (running) return; // FOX FIX: Prevent double initialization
+    if (running) return; 
     running = true;
     renderThread = std::thread(&ESP::RenderLoop, this);
     updateThread = std::thread(&ESP::UpdateDataLoop, this); 
@@ -370,6 +370,8 @@ void ESP::UpdateDataLoop() {
     } else if (getEnvStat == JNI_EVERSION) {
         return;
     }
+
+    JNIHelper::env = env; // FOX FIX: Set thread-local env so JNIHelper functions work!
 
     auto checkEx = [&](JNIEnv* e) {
         if (e->ExceptionCheck()) {

@@ -1,5 +1,5 @@
 #include "TeleportAura.h"
-#include "../core/JNIHelper.h"
+#include "../../core/JNIHelper.h"
 #include <iostream>
 #include <cmath>
 
@@ -57,7 +57,6 @@ void TeleportAura::OnTick() {
 
         taSendPacketMethod = JNIHelper::GetMethodSafe(taNetworkHandlerClass, "method_52787", "(Lnet/minecraft/class_2596;)V", "sendPacket");
         
-        // FOX FIX: Try multiple signatures for the packet constructors to ensure compatibility
         taPacketInitMethod = env->GetMethodID(taPositionAndOnGroundClass, "<init>", "(DDDZ)V");
         if (env->ExceptionCheck()) {
             env->ExceptionClear();
@@ -77,7 +76,6 @@ void TeleportAura::OnTick() {
 
     if (!taInstanceField || !taPlayerField || !taWorldField || !taInteractionManagerField || !taPlayersField || !taEntX || !taEntY || !taEntZ || !taListSize || !taListGet || !taGetHealth || !taAttackMethod || !taSwingMethod || !taGetCooldownMethod || !taMainHandField || !taNetworkHandlerField) return;
 
-    // If we can't find either packet constructor, we can't teleport
     if (!taPacketInitMethod && !taFullPacketInitMethod) return;
 
     jobject mc = env->GetStaticObjectField(taMcClass, taInstanceField);
@@ -106,11 +104,14 @@ void TeleportAura::OnTick() {
         if (!playersList) goto cleanup;
 
         int size = env->CallIntMethod(playersList, taListSize);
+        if (env->ExceptionCheck()) { env->ExceptionClear(); goto cleanupList; }
+
         jobject bestTarget = nullptr;
         double bestDist = reach;
 
         for (int i = 0; i < size; i++) {
             jobject target = env->CallObjectMethod(playersList, taListGet, i);
+            if (env->ExceptionCheck()) { env->ExceptionClear(); continue; }
             if (!target) continue;
 
             if (env->IsSameObject(player, target)) {
@@ -124,8 +125,9 @@ void TeleportAura::OnTick() {
 
             double dist = std::sqrt(std::pow(tx - px, 2) + std::pow(ty - py, 2) + std::pow(tz - pz, 2));
             
-            if (dist <= bestDist && dist > 3.0) { // Only teleport if they are out of normal reach
+            if (dist <= bestDist && dist > 3.0) { 
                 float hp = env->CallFloatMethod(target, taGetHealth);
+                if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(target); continue; }
                 if (hp > 0.0f) {
                     bestDist = dist;
                     if (bestTarget) env->DeleteLocalRef(bestTarget);
@@ -137,6 +139,8 @@ void TeleportAura::OnTick() {
 
         if (bestTarget) {
             float cooldown = env->CallFloatMethod(player, taGetCooldownMethod, 0.5f);
+            if (env->ExceptionCheck()) { env->ExceptionClear(); cooldown = 1.0f; }
+
             if (cooldown >= 1.0f) {
                 double tx = env->GetDoubleField(bestTarget, taEntX);
                 double ty = env->GetDoubleField(bestTarget, taEntY);
@@ -151,38 +155,40 @@ void TeleportAura::OnTick() {
                     double tpY = ty;
                     double tpZ = tz - (diffZ / bestDist) * 2.0;
 
-                    // FOX FIX: Use Full packet if available, otherwise fallback to Position packet
-                    // Some servers/versions reject position-only packets for large teleports
                     jobject packetTo = nullptr;
                     if (taFullPacketInitMethod) {
                         packetTo = env->NewObject(taFullPacketClass, taFullPacketInitMethod, tpX, tpY, tpZ, pYaw, pPitch, JNI_TRUE);
                     } else if (taPacketInitMethod) {
                         packetTo = env->NewObject(taPositionAndOnGroundClass, taPacketInitMethod, tpX, tpY, tpZ, JNI_TRUE);
                     }
+                    if (env->ExceptionCheck()) { env->ExceptionClear(); packetTo = nullptr; }
 
                     if (packetTo) {
                         env->CallVoidMethod(networkHandler, taSendPacketMethod, packetTo);
+                        if (env->ExceptionCheck()) env->ExceptionClear();
                         env->DeleteLocalRef(packetTo);
 
-                        // 2. Attack the target
                         env->CallVoidMethod(interactionManager, taAttackMethod, player, bestTarget);
+                        if (env->ExceptionCheck()) env->ExceptionClear();
                         
                         jobject mainHand = env->GetStaticObjectField(taHandClass, taMainHandField);
                         if (mainHand) {
                             env->CallVoidMethod(player, taSwingMethod, mainHand);
+                            if (env->ExceptionCheck()) env->ExceptionClear();
                             env->DeleteLocalRef(mainHand);
                         }
 
-                        // 3. Send packet to teleport BACK to original position
                         jobject packetBack = nullptr;
                         if (taFullPacketInitMethod) {
                             packetBack = env->NewObject(taFullPacketClass, taFullPacketInitMethod, px, py, pz, pYaw, pPitch, JNI_TRUE);
                         } else if (taPacketInitMethod) {
                             packetBack = env->NewObject(taPositionAndOnGroundClass, taPacketInitMethod, px, py, pz, JNI_TRUE);
                         }
+                        if (env->ExceptionCheck()) { env->ExceptionClear(); packetBack = nullptr; }
 
                         if (packetBack) {
                             env->CallVoidMethod(networkHandler, taSendPacketMethod, packetBack);
+                            if (env->ExceptionCheck()) env->ExceptionClear();
                             env->DeleteLocalRef(packetBack);
                         }
                     }
@@ -191,6 +197,7 @@ void TeleportAura::OnTick() {
             }
             env->DeleteLocalRef(bestTarget);
         }
+cleanupList:
         env->DeleteLocalRef(playersList);
     }
 

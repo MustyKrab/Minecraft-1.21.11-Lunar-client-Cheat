@@ -59,7 +59,6 @@ void Aimbot::OnTick() {
     jobject mc = env->GetStaticObjectField(mcClass, instanceField);
     if (!mc) return;
 
-    // Only aim if left mouse button is held (Aim Assist style)
     if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
         env->DeleteLocalRef(mc);
         return;
@@ -88,12 +87,15 @@ void Aimbot::OnTick() {
         if (!playersList) goto cleanup;
 
         int size = env->CallIntMethod(playersList, listSize);
+        if (env->ExceptionCheck()) { env->ExceptionClear(); goto cleanupList; }
+
         jobject bestTarget = nullptr;
-        double bestDist = 6.0; // Max aim assist range
+        double bestDist = 6.0; 
         float bestYawDiff = fov;
 
         for (int i = 0; i < size; i++) {
             jobject target = env->CallObjectMethod(playersList, listGet, i);
+            if (env->ExceptionCheck()) { env->ExceptionClear(); continue; }
             if (!target) continue;
 
             if (env->IsSameObject(player, target)) {
@@ -109,6 +111,7 @@ void Aimbot::OnTick() {
             
             if (dist <= bestDist) {
                 float hp = env->CallFloatMethod(target, getHealth);
+                if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(target); continue; }
                 if (hp > 0.0f) {
                     double diffX = tx - px;
                     double diffZ = tz - pz;
@@ -134,21 +137,19 @@ void Aimbot::OnTick() {
             double tz = env->GetDoubleField(bestTarget, entZ);
 
             double diffX = tx - px;
-            double diffY = (ty + 1.0) - (py + 1.62); // Aim at chest
+            double diffY = (ty + 1.0) - (py + 1.62); 
             double diffZ = tz - pz;
             double distXZ = std::sqrt(diffX * diffX + diffZ * diffZ);
 
             float targetYaw = (float)(std::atan2(diffZ, diffX) * 180.0 / 3.14159265) - 90.0f;
             float targetPitch = (float)-(std::atan2(diffY, distXZ) * 180.0 / 3.14159265);
 
-            // Smooth interpolation (slerp)
             float yawDiff = targetYaw - currentYaw;
             while (yawDiff <= -180.0f) yawDiff += 360.0f;
             while (yawDiff > 180.0f) yawDiff -= 360.0f;
 
             float pitchDiff = targetPitch - currentPitch;
             
-            // FOX FIX: Add randomization to the smoothing to bypass heuristic checks
             std::random_device rd;
             std::mt19937 gen(rd());
             std::uniform_real_distribution<float> randomSmooth(smoothSpeed * 0.8f, smoothSpeed * 1.2f);
@@ -157,15 +158,16 @@ void Aimbot::OnTick() {
             float newYaw = currentYaw + (yawDiff * actualSmoothSpeed);
             float newPitch = currentPitch + (pitchDiff * actualSmoothSpeed);
 
-            // Apply GCD (Greatest Common Divisor) fix to bypass server-side rotation checks
             if (sensitivityField && getDoubleValue) {
                 jobject sensObj = env->GetObjectField(options, sensitivityField);
                 if (sensObj) {
                     jobject sensDoubleObj = env->CallObjectMethod(sensObj, getDoubleValue);
+                    if (env->ExceptionCheck()) { env->ExceptionClear(); }
                     if (sensDoubleObj) {
                         jclass doubleClass = env->FindClass("java/lang/Double");
                         jmethodID doubleValueMethod = env->GetMethodID(doubleClass, "doubleValue", "()D");
                         double sens = env->CallDoubleMethod(sensDoubleObj, doubleValueMethod);
+                        if (env->ExceptionCheck()) { env->ExceptionClear(); sens = 0.5; }
                         
                         float f = (float)(sens * 0.6 + 0.2);
                         float gcd = f * f * f * 1.2f;
@@ -173,7 +175,6 @@ void Aimbot::OnTick() {
                         newYaw -= std::fmod(newYaw, gcd);
                         newPitch -= std::fmod(newPitch, gcd);
                         
-                        // FOX FIX: Delete local ref to prevent table overflow crash
                         env->DeleteLocalRef(doubleClass);
                         env->DeleteLocalRef(sensDoubleObj);
                     }
@@ -187,6 +188,7 @@ void Aimbot::OnTick() {
             env->DeleteLocalRef(bestTarget);
         }
 
+cleanupList:
         env->DeleteLocalRef(playersList);
     }
 

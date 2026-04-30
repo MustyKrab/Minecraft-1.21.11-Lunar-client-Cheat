@@ -28,7 +28,6 @@ void Killaura::OnTick() {
         handClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_1268;", "net/minecraft/util/Hand");
         listClass = env->FindClass("java/util/List");
         
-        // Raycast classes
         hitResultClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_239;", "net/minecraft/util/hit/HitResult");
         raycastContextClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_3959;", "net/minecraft/world/RaycastContext");
         blockHitResultClass = JNIHelper::FindClassSafe("Lnet/minecraft/class_3965;", "net/minecraft/util/hit/BlockHitResult");
@@ -58,7 +57,6 @@ void Killaura::OnTick() {
 
         mainHandField = JNIHelper::GetStaticFieldSafe(handClass, "field_5808", "Lnet/minecraft/class_1268;", "MAIN_HAND");
         
-        // Raycast methods
         if (worldClass && raycastContextClass && hitResultClass) {
             raycastMethod = JNIHelper::GetMethodSafe(worldClass, "method_17742", "(Lnet/minecraft/class_3959;)Lnet/minecraft/class_3965;", "raycast");
             hitResultGetTypeMethod = JNIHelper::GetMethodSafe(hitResultClass, "method_17783", "()Lnet/minecraft/class_239$class_240;", "getType");
@@ -98,15 +96,18 @@ void Killaura::OnTick() {
         if (!playersList) goto cleanup;
 
         int size = env->CallIntMethod(playersList, listSize);
+        if (env->ExceptionCheck()) { env->ExceptionClear(); goto cleanupList; }
+
         jobject bestTarget = nullptr;
         double bestDist = reach;
 
         std::random_device rd;
         std::mt19937 gen(rd());
-        std::uniform_real_distribution<double> randomOffset(-0.3, 0.3); // Randomize hit vector slightly
+        std::uniform_real_distribution<double> randomOffset(-0.3, 0.3); 
 
         for (int i = 0; i < size; i++) {
             jobject target = env->CallObjectMethod(playersList, listGet, i);
+            if (env->ExceptionCheck()) { env->ExceptionClear(); continue; }
             if (!target) continue;
 
             if (env->IsSameObject(player, target)) {
@@ -114,17 +115,16 @@ void Killaura::OnTick() {
                 continue;
             }
 
-            // FOX FIX: Add slight randomization to target center to bypass strict hit vector checks
             double tx = env->GetDoubleField(target, entX) + randomOffset(gen);
-            double ty = env->GetDoubleField(target, entY) + 1.0 + randomOffset(gen); // Aim near chest
+            double ty = env->GetDoubleField(target, entY) + 1.0 + randomOffset(gen); 
             double tz = env->GetDoubleField(target, entZ) + randomOffset(gen);
 
             double dist = std::sqrt(std::pow(tx - px, 2) + std::pow(ty - (py + 1.62), 2) + std::pow(tz - pz, 2));
             
             if (dist <= bestDist) {
                 float hp = env->CallFloatMethod(target, getHealth);
+                if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(target); continue; }
                 if (hp > 0.0f) {
-                    // FOV Check
                     double diffX = tx - px;
                     double diffZ = tz - pz;
                     float targetYaw = (float)(std::atan2(diffZ, diffX) * 180.0 / 3.14159265) - 90.0f;
@@ -134,11 +134,6 @@ void Killaura::OnTick() {
                     while (yawDiff > 180.0f) yawDiff -= 360.0f;
                     
                     if (std::abs(yawDiff) <= fov) {
-                        
-                        // FOX FIX: Basic Line of Sight (LoS) check. 
-                        // If raycastMethod is available, we could do a full block raytrace here.
-                        // For now, we assume if it's within FOV and reach, it's valid, but we add a strict distance check.
-                        
                         bestDist = dist;
                         if (bestTarget) env->DeleteLocalRef(bestTarget);
                         bestTarget = env->NewLocalRef(target);
@@ -150,31 +145,33 @@ void Killaura::OnTick() {
 
         if (bestTarget) {
             float cooldown = env->CallFloatMethod(player, getCooldownMethod, 0.5f);
+            if (env->ExceptionCheck()) { env->ExceptionClear(); cooldown = 1.0f; }
             
-            // FOX FIX: Add randomized delay after cooldown finishes to simulate human reaction time
             if (cooldown >= 1.0f) {
                 if (randomDelay == 0) {
-                    std::uniform_int_distribution<> delayDist(1, 4); // 1 to 4 ticks delay
+                    std::uniform_int_distribution<> delayDist(1, 4); 
                     randomDelay = delayDist(gen);
                 }
 
                 if (ticksSinceLastAttack >= randomDelay) {
                     env->CallVoidMethod(interactionManager, attackMethod, player, bestTarget);
+                    if (env->ExceptionCheck()) env->ExceptionClear();
                     
                     jobject mainHand = env->GetStaticObjectField(handClass, mainHandField);
                     if (mainHand) {
                         env->CallVoidMethod(player, swingMethod, mainHand);
+                        if (env->ExceptionCheck()) env->ExceptionClear();
                         env->DeleteLocalRef(mainHand);
                     }
                     
                     ticksSinceLastAttack = 0;
-                    randomDelay = 0; // Reset delay for next hit
+                    randomDelay = 0; 
                 }
             }
-
             env->DeleteLocalRef(bestTarget);
         }
 
+cleanupList:
         env->DeleteLocalRef(playersList);
     }
 
