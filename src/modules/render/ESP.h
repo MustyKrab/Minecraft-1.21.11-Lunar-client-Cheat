@@ -17,6 +17,7 @@ struct PlayerData {
     float health;
     float maxHealth;
     std::wstring name;
+    double distSq; // FOX FIX: Added for distance sorting
 };
 
 class ESP : public Module {
@@ -38,8 +39,6 @@ private:
     bool draggingAimSlider = false;
     bool draggingEspRangeSlider = false;
     bool draggingReachSlider = false;
-    bool draggingAcMinSlider = false;
-    bool draggingAcMaxSlider = false;
 
     float espRange = 100.0f;
 
