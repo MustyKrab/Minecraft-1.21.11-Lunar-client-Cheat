@@ -1,5 +1,5 @@
 #include "Macro.h"
-#include "../core/JNIHelper.h"
+#include "../../core/JNIHelper.h"
 #include <windows.h>
 #include <chrono>
 #include <algorithm>
