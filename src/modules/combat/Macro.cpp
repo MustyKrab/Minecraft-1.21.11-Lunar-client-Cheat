@@ -3,6 +3,9 @@
 #include <chrono>
 #include <algorithm>
 
+extern bool bStunSlamEnabled;
+extern bool bSpearDashEnabled;
+
 static std::mt19937 s_macroRng([]() -> uint32_t {
     std::random_device rd;
     return rd() ^ (uint32_t)(GetTickCount64() * 2654435761ULL);
@@ -57,12 +60,10 @@ void Macro::OnTick() {
     long long currentTime = GetTimeMs();
 
     // --- StunSlam State Machine ---
-    // Mechanics: Axe hit (disable shield) -> instant switch to Mace -> Mace hit
-    // Requires tick lockout abuse: Axe Hotbar Key + LMB -> Mace Hotbar Key + LMB
-    if (stunSlamEnabled) {
+    if (bStunSlamEnabled) {
         if (stunSlamState == 0 && (GetAsyncKeyState(VK_XBUTTON2) & 0x8000)) {
-            // Start StunSlam: Press Axe Hotbar Key (Slot 4 - '4')
-            SendKeyDownEx('4');
+            // Start StunSlam: Press Axe Hotbar Key (Slot 1 - '1')
+            SendKeyDownEx('1');
             stunSlamNextTime = currentTime + GaussianSleep(12.0, 1.0, 10, 15);
             stunSlamState = 1;
         }
@@ -79,8 +80,8 @@ void Macro::OnTick() {
             stunSlamState = 3;
         }
         else if (stunSlamState == 3 && currentTime >= stunSlamNextTime) {
-            // Press Mace Hotbar Key (Slot 8 - '8')
-            SendKeyDownEx('8');
+            // Press Mace Hotbar Key (Slot 9 - '9')
+            SendKeyDownEx('9');
             stunSlamNextTime = currentTime + GaussianSleep(15.0, 1.5, 12, 18);
             stunSlamState = 4;
         }
@@ -93,8 +94,8 @@ void Macro::OnTick() {
         else if (stunSlamState == 5 && currentTime >= stunSlamNextTime) {
             // Release Left Click and Keys
             SendMouseUpEx();
-            SendKeyUpEx('4');
-            SendKeyUpEx('8');
+            SendKeyUpEx('1');
+            SendKeyUpEx('9');
             // Cooldown before next sequence
             stunSlamNextTime = currentTime + GaussianSleep(350.0, 25.0, 300, 450);
             stunSlamState = 6;
@@ -104,14 +105,13 @@ void Macro::OnTick() {
             stunSlamState = 0;
         }
     } else {
-        stunSlamState = 0; // Reset if disabled mid-macro
+        stunSlamState = 0;
     }
 
     // --- SpearDash Attribute Swapping State Machine ---
-    // Mechanics: Click with no-cooldown item -> switch to Spear -> Lunge (Dash) without waiting
-    if (spearDashEnabled) {
+    if (bSpearDashEnabled) {
         if (spearDashState == 0 && (GetAsyncKeyState('2') & 0x8000)) {
-            // Start SpearDash: Select No-Cooldown Item (Slot 1 - '1')
+            // Start SpearDash: Select No-Cooldown Item / Axe (Slot 1 - '1')
             SendKeyDownEx('1');
             spearDashNextTime = currentTime + GaussianSleep(12.0, 1.0, 10, 15);
             spearDashState = 1;
@@ -142,6 +142,6 @@ void Macro::OnTick() {
             spearDashState = 0;
         }
     } else {
-        spearDashState = 0; // Reset if disabled mid-macro
+        spearDashState = 0;
     }
 }
