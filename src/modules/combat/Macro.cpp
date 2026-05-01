@@ -173,19 +173,20 @@ void Macro::OnTick() {
                                         // field_6017 = fallDistance in class_1297 (Entity)
                                         jclass entityClass = env->FindClass("net/minecraft/class_1297");
                                         if (env->ExceptionCheck()) { env->ExceptionClear(); }
-                                        float fallDistance = 0.0f;
+                                        double fallDistance = 0.0;
                                         if (entityClass) {
-                                            jfieldID fallDistField = env->GetFieldID(entityClass, "field_6017", "F");
+                                            // In 1.21.11, fallDistance is a double (D), not a float (F)
+                                            jfieldID fallDistField = env->GetFieldID(entityClass, "field_6017", "D");
                                             if (env->ExceptionCheck()) { env->ExceptionClear(); }
                                             if (fallDistField) {
-                                                fallDistance = env->GetFloatField(player, fallDistField);
+                                                fallDistance = env->GetDoubleField(player, fallDistField);
                                                 if (env->ExceptionCheck()) { env->ExceptionClear(); }
                                             }
                                             env->DeleteLocalRef(entityClass);
                                         }
 
                                         int maceSlot = -1;
-                                        if (fallDistance <= 9.0f) {
+                                        if (fallDistance <= 9.0) {
                                             // <= 9 blocks: Try to find Breach mace first
                                             maceSlot = FindHotbarSlot(env, inventory, "mace", "breach");
                                         } else {
