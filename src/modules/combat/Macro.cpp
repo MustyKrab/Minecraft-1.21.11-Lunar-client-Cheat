@@ -56,59 +56,96 @@ void Macro::SendMouseUpEx() {
 }
 
 // JNI Helper to scan hotbar slots (0-8) for a specific item, optionally checking for an enchantment
-// Uses ItemStack.toString() which in 1.21 includes the item ID and all components (including enchantments)
 int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKey, const char* enchKey) {
     JNIEnv* env = (JNIEnv*)env_ptr;
     jobject inventory = (jobject)inventory_ptr;
     if (!env || !inventory) return -1;
 
     jclass invClass = env->GetObjectClass(inventory);
-    // method_5438 = getStack(int slot)
     jmethodID getStack = env->GetMethodID(invClass, "method_5438", "(I)Lnet/minecraft/class_1799;");
-    if (env->ExceptionCheck()) { env->ExceptionClear(); }
+    env->ExceptionClear();
     if (!getStack) { env->DeleteLocalRef(invClass); return -1; }
 
     for (int i = 0; i < 9; i++) {
         jobject stack = env->CallObjectMethod(inventory, getStack, i);
-        if (env->ExceptionCheck()) { env->ExceptionClear(); continue; }
+        env->ExceptionClear();
         if (!stack) continue;
 
         jclass stackClass = env->GetObjectClass(stack);
-        // method_10534 or toString() = toString()
-        jmethodID toString = env->GetMethodID(stackClass, "toString", "()Ljava/lang/String;");
-        if (env->ExceptionCheck()) { env->ExceptionClear(); }
+        jmethodID getItem = env->GetMethodID(stackClass, "method_7909", "()Lnet/minecraft/class_1792;");
+        env->ExceptionClear();
         
-        if (toString) {
-            jstring jStr = (jstring)env->CallObjectMethod(stack, toString);
-            if (env->ExceptionCheck()) { env->ExceptionClear(); }
-            
-            if (jStr) {
-                const char* str = env->GetStringUTFChars(jStr, 0);
-                std::string lowerStr = str;
-                std::transform(lowerStr.begin(), lowerStr.end(), lowerStr.begin(), ::tolower);
+        if (getItem) {
+            jobject item = env->CallObjectMethod(stack, getItem);
+            env->ExceptionClear();
+            if (item) {
+                jclass itemClass = env->GetObjectClass(item);
+                jmethodID getTranslationKey = env->GetMethodID(itemClass, "method_7866", "()Ljava/lang/String;");
+                env->ExceptionClear();
                 
-                std::string lowerItem = itemKey;
-                std::transform(lowerItem.begin(), lowerItem.end(), lowerItem.begin(), ::tolower);
-                
-                bool match = (lowerStr.find(lowerItem) != std::string::npos);
-                
-                if (match && enchKey != nullptr) {
-                    std::string lowerEnch = enchKey;
-                    std::transform(lowerEnch.begin(), lowerEnch.end(), lowerEnch.begin(), ::tolower);
-                    if (lowerStr.find(lowerEnch) == std::string::npos) {
-                        match = false; // Enchantment not found in the component string
+                if (getTranslationKey) {
+                    jstring jKey = (jstring)env->CallObjectMethod(item, getTranslationKey);
+                    env->ExceptionClear();
+                    if (jKey) {
+                        const char* keyStr = env->GetStringUTFChars(jKey, 0);
+                        std::string lowerStr = keyStr;
+                        std::transform(lowerStr.begin(), lowerStr.end(), lowerStr.begin(), ::tolower);
+                        
+                        std::string lowerItem = itemKey;
+                        std::transform(lowerItem.begin(), lowerItem.end(), lowerItem.begin(), ::tolower);
+                        
+                        bool match = (lowerStr.find(lowerItem) != std::string::npos);
+                        env->ReleaseStringUTFChars(jKey, keyStr);
+                        env->DeleteLocalRef(jKey);
+
+                        if (match && enchKey != nullptr) {
+                            match = false; // Assume false until we find the enchantment
+                            // Get ComponentMap: method_57353 ()Lnet/minecraft/class_9323;
+                            jmethodID getComponents = env->GetMethodID(stackClass, "method_57353", "()Lnet/minecraft/class_9323;");
+                            env->ExceptionClear();
+                            if (getComponents) {
+                                jobject compMap = env->CallObjectMethod(stack, getComponents);
+                                env->ExceptionClear();
+                                if (compMap) {
+                                    jclass compMapClass = env->GetObjectClass(compMap);
+                                    jmethodID mapToString = env->GetMethodID(compMapClass, "toString", "()Ljava/lang/String;");
+                                    env->ExceptionClear();
+                                    if (mapToString) {
+                                        jstring jCompStr = (jstring)env->CallObjectMethod(compMap, mapToString);
+                                        env->ExceptionClear();
+                                        if (jCompStr) {
+                                            const char* compStr = env->GetStringUTFChars(jCompStr, 0);
+                                            std::string lowerComp = compStr;
+                                            std::transform(lowerComp.begin(), lowerComp.end(), lowerComp.begin(), ::tolower);
+                                            
+                                            std::string lowerEnch = enchKey;
+                                            std::transform(lowerEnch.begin(), lowerEnch.end(), lowerEnch.begin(), ::tolower);
+                                            
+                                            if (lowerComp.find(lowerEnch) != std::string::npos) {
+                                                match = true;
+                                            }
+                                            env->ReleaseStringUTFChars(jCompStr, compStr);
+                                            env->DeleteLocalRef(jCompStr);
+                                        }
+                                    }
+                                    env->DeleteLocalRef(compMapClass);
+                                    env->DeleteLocalRef(compMap);
+                                }
+                            }
+                        }
+
+                        if (match) {
+                            env->DeleteLocalRef(itemClass);
+                            env->DeleteLocalRef(item);
+                            env->DeleteLocalRef(stackClass);
+                            env->DeleteLocalRef(stack);
+                            env->DeleteLocalRef(invClass);
+                            return i; // Found slot 0-8
+                        }
                     }
                 }
-
-                env->ReleaseStringUTFChars(jStr, str);
-                env->DeleteLocalRef(jStr);
-
-                if (match) {
-                    env->DeleteLocalRef(stackClass);
-                    env->DeleteLocalRef(stack);
-                    env->DeleteLocalRef(invClass);
-                    return i; // Found slot 0-8
-                }
+                env->DeleteLocalRef(itemClass);
+                env->DeleteLocalRef(item);
             }
         }
         env->DeleteLocalRef(stackClass);
@@ -132,28 +169,28 @@ void Macro::OnTick() {
         
         if (env) {
             jclass mcClass = env->FindClass("net/minecraft/class_310");
-            if (env->ExceptionCheck()) { env->ExceptionClear(); }
+            env->ExceptionClear();
             if (mcClass) {
                 jmethodID getInstance = env->GetStaticMethodID(mcClass, "method_1551", "()Lnet/minecraft/class_310;");
-                if (env->ExceptionCheck()) { env->ExceptionClear(); }
+                env->ExceptionClear();
                 if (getInstance) {
                     jobject mc = env->CallStaticObjectMethod(mcClass, getInstance);
-                    if (env->ExceptionCheck()) { env->ExceptionClear(); }
+                    env->ExceptionClear();
                     if (mc) {
                         // field_1724 = player
                         jfieldID playerField = env->GetFieldID(mcClass, "field_1724", "Lnet/minecraft/class_746;");
-                        if (env->ExceptionCheck()) { env->ExceptionClear(); }
+                        env->ExceptionClear();
                         if (playerField) {
                             jobject player = env->GetObjectField(mc, playerField);
-                            if (env->ExceptionCheck()) { env->ExceptionClear(); }
+                            env->ExceptionClear();
                             if (player) {
                                 jclass playerClass = env->GetObjectClass(player);
                                 // field_7514 = inventory
                                 jfieldID invField = env->GetFieldID(playerClass, "field_7514", "Lnet/minecraft/class_1661;");
-                                if (env->ExceptionCheck()) { env->ExceptionClear(); }
+                                env->ExceptionClear();
                                 if (invField) {
                                     jobject inventory = env->GetObjectField(player, invField);
-                                    if (env->ExceptionCheck()) { env->ExceptionClear(); }
+                                    env->ExceptionClear();
                                     
                                     if (inventory) {
                                         // --- Dynamic Hotbar Resolution ---
@@ -172,15 +209,23 @@ void Macro::OnTick() {
                                         // Fall distance check for Mace logic
                                         // field_6017 = fallDistance in class_1297 (Entity)
                                         jclass entityClass = env->FindClass("net/minecraft/class_1297");
-                                        if (env->ExceptionCheck()) { env->ExceptionClear(); }
+                                        env->ExceptionClear();
                                         double fallDistance = 0.0;
                                         if (entityClass) {
-                                            // In 1.21.11, fallDistance is a double (D), not a float (F)
+                                            // Try double first (1.21.11)
                                             jfieldID fallDistField = env->GetFieldID(entityClass, "field_6017", "D");
-                                            if (env->ExceptionCheck()) { env->ExceptionClear(); }
+                                            env->ExceptionClear();
                                             if (fallDistField) {
                                                 fallDistance = env->GetDoubleField(player, fallDistField);
-                                                if (env->ExceptionCheck()) { env->ExceptionClear(); }
+                                                env->ExceptionClear();
+                                            } else {
+                                                // Fallback to float
+                                                fallDistField = env->GetFieldID(entityClass, "field_6017", "F");
+                                                env->ExceptionClear();
+                                                if (fallDistField) {
+                                                    fallDistance = (double)env->GetFloatField(player, fallDistField);
+                                                    env->ExceptionClear();
+                                                }
                                             }
                                             env->DeleteLocalRef(entityClass);
                                         }
