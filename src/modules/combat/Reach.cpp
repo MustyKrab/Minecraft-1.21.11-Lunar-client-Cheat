@@ -9,12 +9,10 @@ static bool reachMappingsLoaded = false;
 static jclass mcClass, playerClass, worldClass, interactionManagerClass, entityClass, livingClass, handClass;
 static jfieldID instanceField, playerField, worldField, interactionManagerField, playersField;
 static jfieldID entX, entY, entZ, mainHandField;
-// FIX: cache yaw/pitch fields at mapping load time instead of re-fetching every tick
 static jfieldID yawField, pitchField;
 static jmethodID listSize, listGet, attackMethod, swingMethod, getHealth;
 
 // PATCH 4 — target-switch cooldown state
-// FIX: use jint identity (entity ID) instead of raw pointer cast to void* — local refs are invalidated each tick
 static jint   s_reachLastTargetId    = -1;
 static DWORD  s_reachTargetLostMs    = 0;
 static bool   s_reachTargetWasActive = false;
@@ -64,7 +62,6 @@ void Reach::OnTick() {
         entY = JNIHelper::GetFieldSafe(entityClass, "field_6036", "D", "y");
         entZ = JNIHelper::GetFieldSafe(entityClass, "field_5969", "D", "z");
 
-        // FIX: cache these here — was re-fetching inside OnTick body every call
         yawField   = JNIHelper::GetFieldSafe(entityClass, "field_5982", "F", "yaw");
         pitchField = JNIHelper::GetFieldSafe(entityClass, "field_5965", "F", "pitch");
 
@@ -118,7 +115,6 @@ void Reach::OnTick() {
         double py = env->GetDoubleField(player, entY) + 1.62;
         double pz = env->GetDoubleField(player, entZ);
 
-        // FIX: yawField/pitchField are now cached — no GetFieldSafe call here
         float yaw   = env->GetFloatField(player, yawField);
         float pitch = env->GetFloatField(player, pitchField);
 
@@ -143,7 +139,7 @@ void Reach::OnTick() {
         }
 
         jobject bestTarget   = nullptr;
-        jint    bestTargetId = -1; // FIX: use entity ID (jint) for identity, not raw pointer
+        jint    bestTargetId = -1;
 
         // PATCH 2 — randomised aim-height jitter
         std::uniform_real_distribution<float> heightJitter(0.6f, 1.4f);
@@ -153,7 +149,6 @@ void Reach::OnTick() {
         double actualReach = reachDist(s_reachRng);
         double bestDist    = actualReach;
 
-        // FIX: need entity ID field — cache at mapping load; use getEntityId method as fallback
         jmethodID getIdMethod = env->GetMethodID(entityClass, "getId", "()I");
 
         for (int idx = 0; idx < size; idx++) {
@@ -179,12 +174,11 @@ void Reach::OnTick() {
             double diffZ = tz - pz;
             double dist  = std::sqrt(diffX * diffX + diffY * diffY + diffZ * diffZ);
 
-            // FIX: removed dist > 3.0 hardcoded lower bound — was blocking targets closer than 3 blocks
-            if (dist <= bestDist) {
+            // FIX: Added dist > 0.5 to match Killaura and TeleportAura
+            if (dist <= bestDist && dist > 0.5) {
                 double dot = (diffX * lookX + diffY * lookY + diffZ * lookZ) / dist;
                 if (dot > 0.95) {
                     bestDist = dist;
-                    // FIX: get actual entity ID for stable cross-tick identity comparison
                     bestTargetId = getIdMethod ? env->CallIntMethod(target, getIdMethod) : -1;
                     if (env->ExceptionCheck()) { env->ExceptionClear(); bestTargetId = -1; }
                     if (bestTarget) env->DeleteLocalRef(bestTarget);
@@ -222,7 +216,6 @@ void Reach::OnTick() {
             env->DeleteLocalRef(bestTarget);
         }
 
-        // FIX: playersList deleted here before goto — was leaked on yawField/pitchField failure path
         env->DeleteLocalRef(playersList);
     }
 
