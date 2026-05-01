@@ -15,7 +15,6 @@ static jfieldID taInstanceField, taPlayerField, taWorldField, taInteractionManag
 static jfieldID taEntX, taEntY, taEntZ, taYaw, taPitch, taMainHandField;
 static jmethodID taListSize, taListGet, taGetHealth, taAttackMethod, taSwingMethod,
                  taGetCooldownMethod, taSendPacketMethod, taPacketInitMethod, taFullPacketInitMethod;
-// FIX: cache getId method
 static jmethodID taGetIdMethod;
 
 // rotation velocity caps
@@ -23,7 +22,6 @@ static constexpr float kTAMaxYawPerTick   = 18.0f;
 static constexpr float kTAMaxPitchPerTick = 12.0f;
 
 // target-switch cooldown
-// FIX: use jint identity (entity ID) instead of raw pointer cast to void*
 static jint   s_taLastTargetId     = -1;
 static DWORD  s_taTargetLostMs     = 0;
 static bool   s_taTargetWasActive  = false;
@@ -105,7 +103,6 @@ void TeleportAura::OnTick() {
 
         taMainHandField = JNIHelper::GetStaticFieldSafe(taHandClass, "field_5808", "Lnet/minecraft/class_1268;", "MAIN_HAND");
 
-        // FIX: cache getId method
         taGetIdMethod = env->GetMethodID(taEntityClass, "getId", "()I");
 
         if (!taInstanceField || !taPlayerField || !taWorldField || !taInteractionManagerField ||
@@ -125,216 +122,25 @@ void TeleportAura::OnTick() {
 
     if (!taPacketInitMethod && !taFullPacketInitMethod) return;
 
-    // stochastic tick interval
-    {
-        DWORD now = (DWORD)GetTickCount64();
-        if (now < s_taNextTickMs) {
-            // still service any pending back-packet while waiting
-            goto service_back;
-        }
-        std::uniform_int_distribution<int> baseDist(35, 60);
-        int base   = baseDist(s_taRng);
-        int jitter = (int)gaussian_noise_ta(4.0f);
-        s_taNextTickMs = now + (DWORD)(base + jitter);
-    }
+    jobject mc = env->GetStaticObjectField(taMcClass, taInstanceField);
+    if (!mc) return;
 
-    {
-        jobject mc = env->GetStaticObjectField(taMcClass, taInstanceField);
-        if (!mc) return;
-
-        jobject player             = env->GetObjectField(mc, taPlayerField);
-        jobject world              = env->GetObjectField(mc, taWorldField);
-        jobject interactionManager = env->GetObjectField(mc, taInteractionManagerField);
-
-        if (!player || !world || !interactionManager) {
-            if (player)             env->DeleteLocalRef(player);
-            if (world)              env->DeleteLocalRef(world);
-            if (interactionManager) env->DeleteLocalRef(interactionManager);
-            env->DeleteLocalRef(mc);
-            return;
-        }
-
-        {
-            double px   = env->GetDoubleField(player, taEntX);
-            double py   = env->GetDoubleField(player, taEntY);
-            double pz   = env->GetDoubleField(player, taEntZ);
-            float  pYaw = env->GetFloatField(player,  taYaw);
-            float  pPitch = env->GetFloatField(player, taPitch);
-
-            jobject playersList = env->GetObjectField(world, taPlayersField);
-            if (!playersList) goto cleanup_inner;
-
-            int size = env->CallIntMethod(playersList, taListSize);
-            if (env->ExceptionCheck()) {
-                env->ExceptionClear();
-                env->DeleteLocalRef(playersList);
-                goto cleanup_inner;
-            }
-
-            jobject   bestTarget   = nullptr;
-            // FIX: init to reach so anything within range wins on first hit
-            double    bestDist     = (double)reach;
-            jint      bestTargetId = -1;
-
-            // aim-height jitter — sampled once per scan
-            std::uniform_real_distribution<float> heightJitter(0.6f, 1.4f);
-            float aimHeight = heightJitter(s_taRng);
-
-            for (int i = 0; i < size; i++) {
-                jobject target = env->CallObjectMethod(playersList, taListGet, i);
-                if (env->ExceptionCheck()) { env->ExceptionClear(); continue; }
-                if (!target) continue;
-
-                if (env->IsSameObject(player, target)) { env->DeleteLocalRef(target); continue; }
-
-                double tx = env->GetDoubleField(target, taEntX);
-                double ty = env->GetDoubleField(target, taEntY);
-                double tz = env->GetDoubleField(target, taEntZ);
-
-                double dist = std::sqrt(std::pow(tx - px, 2) + std::pow(ty - py, 2) + std::pow(tz - pz, 2));
-
-                // FIX: lower bound 3.0 was blocking close targets — use 0.5 (melee min)
-                if (dist <= bestDist && dist > 0.5) {
-                    float hp = env->CallFloatMethod(target, taGetHealth);
-                    if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(target); continue; }
-                    if (hp > 0.0f) {
-                        bestDist     = dist;
-                        // FIX: use entity ID
-                        bestTargetId = taGetIdMethod ? env->CallIntMethod(target, taGetIdMethod) : -1;
-                        if (env->ExceptionCheck()) { env->ExceptionClear(); bestTargetId = -1; }
-                        if (bestTarget) env->DeleteLocalRef(bestTarget);
-                        bestTarget = env->NewLocalRef(target);
-                    }
-                }
-                env->DeleteLocalRef(target);
-            }
-
-            // target-switch cooldown
-            DWORD nowMs = (DWORD)GetTickCount64();
-            if (bestTargetId != s_taLastTargetId) {
-                if (s_taTargetWasActive) s_taTargetLostMs = nowMs;
-                s_taLastTargetId     = bestTargetId;
-                s_taTargetWasActive  = (bestTarget != nullptr);
-                if (bestTarget) {
-                    std::uniform_int_distribution<int> cdDist(150, 300);
-                    if (nowMs - s_taTargetLostMs < (DWORD)cdDist(s_taRng)) {
-                        env->DeleteLocalRef(bestTarget);
-                        bestTarget = nullptr;
-                    }
-                }
-            }
-
-            if (bestTarget) {
-                float cooldown = env->CallFloatMethod(player, taGetCooldownMethod, 0.5f);
-                if (env->ExceptionCheck()) { env->ExceptionClear(); cooldown = 1.0f; }
-
-                if (cooldown >= 1.0f) {
-                    double tx = env->GetDoubleField(bestTarget, taEntX);
-                    double ty = env->GetDoubleField(bestTarget, taEntY);
-                    double tz = env->GetDoubleField(bestTarget, taEntZ);
-
-                    double diffX = tx - px;
-                    double diffZ = tz - pz;
-
-                    // clamped yaw
-                    float rawYaw   = (float)(std::atan2(diffZ, diffX) * 180.0 / 3.14159265) - 90.0f;
-                    float yawDelta = rawYaw - pYaw;
-                    while (yawDelta <= -180.0f) yawDelta += 360.0f;
-                    while (yawDelta >   180.0f) yawDelta -= 360.0f;
-                    yawDelta = std::max(-kTAMaxYawPerTick, std::min(kTAMaxYawPerTick, yawDelta));
-                    float clampedYaw = pYaw + yawDelta;
-
-                    // clamped pitch with aimHeight jitter
-                    double distXZ   = std::sqrt(diffX*diffX + diffZ*diffZ);
-                    double diffY    = (ty + aimHeight) - (py + 1.62);
-                    float rawPitch  = (float)-(std::atan2(diffY, distXZ) * 180.0 / 3.14159265);
-                    float pitchDelta = rawPitch - pPitch;
-                    while (pitchDelta <= -180.0f) pitchDelta += 360.0f;
-                    while (pitchDelta >   180.0f) pitchDelta -= 360.0f;
-                    pitchDelta = std::max(-kTAMaxPitchPerTick, std::min(kTAMaxPitchPerTick, pitchDelta));
-                    float clampedPitch = pPitch + pitchDelta;
-
-                    // TP offset: land 2 blocks in front of target + small XZ jitter
-                    std::uniform_real_distribution<float> offsetJitter(-0.3f, 0.3f);
-                    double tpX = tx - (diffX / bestDist) * 2.0 + offsetJitter(s_taRng);
-                    double tpY = ty;
-                    double tpZ = tz - (diffZ / bestDist) * 2.0 + offsetJitter(s_taRng);
-
-                    jobject networkHandler = env->GetObjectField(player, taNetworkHandlerField);
-                    if (networkHandler) {
-                        // send TP-to packet
-                        jobject packetTo = nullptr;
-                        if (taFullPacketInitMethod) {
-                            packetTo = env->NewObject(taFullPacketClass, taFullPacketInitMethod,
-                                                      tpX, tpY, tpZ, clampedYaw, clampedPitch, JNI_TRUE);
-                        } else if (taPacketInitMethod) {
-                            packetTo = env->NewObject(taPositionAndOnGroundClass, taPacketInitMethod,
-                                                      tpX, tpY, tpZ, JNI_TRUE);
-                        }
-                        if (env->ExceptionCheck()) { env->ExceptionClear(); packetTo = nullptr; }
-
-                        if (packetTo) {
-                            env->CallVoidMethod(networkHandler, taSendPacketMethod, packetTo);
-                            if (env->ExceptionCheck()) env->ExceptionClear();
-                            env->DeleteLocalRef(packetTo);
-
-                            // attack + swing
-                            env->CallVoidMethod(interactionManager, taAttackMethod, player, bestTarget);
-                            if (env->ExceptionCheck()) env->ExceptionClear();
-
-                            jobject mainHand = env->GetStaticObjectField(taHandClass, taMainHandField);
-                            if (mainHand) {
-                                // jitter swing timing: 0-40 ms after attack
-                                std::uniform_int_distribution<int> swingDelay(0, 40);
-                                DWORD swingAt = nowMs + (DWORD)swingDelay(s_taRng);
-                                if (nowMs >= swingAt) {
-                                    env->CallVoidMethod(player, taSwingMethod, mainHand);
-                                    if (env->ExceptionCheck()) env->ExceptionClear();
-                                }
-                                env->DeleteLocalRef(mainHand);
-                            }
-
-                            // queue back-packet for next tick (50-120ms later) — avoids
-                            // same-tick teleport-back which is a trivial AC signature
-                            std::uniform_int_distribution<int> backDelay(50, 120);
-                            s_taPendingBackMs  = nowMs + (DWORD)backDelay(s_taRng);
-                            s_taPendingPx      = px;
-                            s_taPendingPy      = py;
-                            s_taPendingPz      = pz;
-                            s_taPendingYaw     = pYaw;
-                            s_taPendingPitch   = pPitch;
-                            s_taHasPendingBack = true;
-                        }
-                        env->DeleteLocalRef(networkHandler);
-                    }
-                }
-                // FIX: delete bestTarget local ref to prevent memory leak
-                env->DeleteLocalRef(bestTarget);
-            }
-            env->DeleteLocalRef(playersList);
-        }
-
-cleanup_inner:
-        env->DeleteLocalRef(interactionManager);
-        env->DeleteLocalRef(world);
-        env->DeleteLocalRef(player);
+    jobject player = env->GetObjectField(mc, taPlayerField);
+    if (!player) {
         env->DeleteLocalRef(mc);
         return;
     }
 
-service_back:
-    // send deferred return-to-origin packet
-    if (s_taHasPendingBack) {
-        DWORD now2 = (DWORD)GetTickCount64();
-        if (now2 >= s_taPendingBackMs) {
-            s_taHasPendingBack = false;
+    DWORD now = (DWORD)GetTickCount64();
 
-            jobject mc2 = env->GetStaticObjectField(taMcClass, taInstanceField);
-            if (!mc2) return;
-            jobject player2 = env->GetObjectField(mc2, taPlayerField);
-            if (!player2) { env->DeleteLocalRef(mc2); return; }
-            jobject nh2 = env->GetObjectField(player2, taNetworkHandlerField);
-            if (nh2) {
+    // FIX: Service pending back packet FIRST.
+    // If we have a pending return teleport, we MUST execute it before initiating any new attacks.
+    // Otherwise, a new attack could overwrite the pending packet and leave the player stuck in the air.
+    if (s_taHasPendingBack) {
+        if (now >= s_taPendingBackMs) {
+            s_taHasPendingBack = false;
+            jobject nh = env->GetObjectField(player, taNetworkHandlerField);
+            if (nh) {
                 jobject packetBack = nullptr;
                 if (taFullPacketInitMethod) {
                     packetBack = env->NewObject(taFullPacketClass, taFullPacketInitMethod,
@@ -346,14 +152,198 @@ service_back:
                 }
                 if (env->ExceptionCheck()) { env->ExceptionClear(); packetBack = nullptr; }
                 if (packetBack) {
-                    env->CallVoidMethod(nh2, taSendPacketMethod, packetBack);
+                    env->CallVoidMethod(nh, taSendPacketMethod, packetBack);
                     if (env->ExceptionCheck()) env->ExceptionClear();
                     env->DeleteLocalRef(packetBack);
                 }
-                env->DeleteLocalRef(nh2);
+                env->DeleteLocalRef(nh);
             }
-            env->DeleteLocalRef(player2);
-            env->DeleteLocalRef(mc2);
         }
+        // Block new attacks until we've returned
+        env->DeleteLocalRef(player);
+        env->DeleteLocalRef(mc);
+        return;
     }
+
+    // stochastic tick interval
+    if (now < s_taNextTickMs) {
+        env->DeleteLocalRef(player);
+        env->DeleteLocalRef(mc);
+        return;
+    }
+    
+    std::uniform_int_distribution<int> baseDist(35, 60);
+    s_taNextTickMs = now + (DWORD)(baseDist(s_taRng) + (int)gaussian_noise_ta(4.0f));
+
+    jobject world = env->GetObjectField(mc, taWorldField);
+    jobject interactionManager = env->GetObjectField(mc, taInteractionManagerField);
+
+    if (!world || !interactionManager) {
+        if (world) env->DeleteLocalRef(world);
+        if (interactionManager) env->DeleteLocalRef(interactionManager);
+        env->DeleteLocalRef(player);
+        env->DeleteLocalRef(mc);
+        return;
+    }
+
+    {
+        double px   = env->GetDoubleField(player, taEntX);
+        double py   = env->GetDoubleField(player, taEntY);
+        double pz   = env->GetDoubleField(player, taEntZ);
+        float  pYaw = env->GetFloatField(player,  taYaw);
+        float  pPitch = env->GetFloatField(player, taPitch);
+
+        jobject playersList = env->GetObjectField(world, taPlayersField);
+        if (!playersList) goto cleanup_inner;
+
+        int size = env->CallIntMethod(playersList, taListSize);
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            env->DeleteLocalRef(playersList);
+            goto cleanup_inner;
+        }
+
+        jobject   bestTarget   = nullptr;
+        double    bestDist     = (double)reach;
+        jint      bestTargetId = -1;
+
+        // aim-height jitter — sampled once per scan
+        std::uniform_real_distribution<float> heightJitter(0.6f, 1.4f);
+        float aimHeight = heightJitter(s_taRng);
+
+        for (int i = 0; i < size; i++) {
+            jobject target = env->CallObjectMethod(playersList, taListGet, i);
+            if (env->ExceptionCheck()) { env->ExceptionClear(); continue; }
+            if (!target) continue;
+
+            if (env->IsSameObject(player, target)) { env->DeleteLocalRef(target); continue; }
+
+            double tx = env->GetDoubleField(target, taEntX);
+            double ty = env->GetDoubleField(target, taEntY);
+            double tz = env->GetDoubleField(target, taEntZ);
+
+            double dist = std::sqrt(std::pow(tx - px, 2) + std::pow(ty - py, 2) + std::pow(tz - pz, 2));
+
+            if (dist <= bestDist && dist > 0.5) {
+                float hp = env->CallFloatMethod(target, taGetHealth);
+                if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(target); continue; }
+                if (hp > 0.0f) {
+                    bestDist     = dist;
+                    bestTargetId = taGetIdMethod ? env->CallIntMethod(target, taGetIdMethod) : -1;
+                    if (env->ExceptionCheck()) { env->ExceptionClear(); bestTargetId = -1; }
+                    if (bestTarget) env->DeleteLocalRef(bestTarget);
+                    bestTarget = env->NewLocalRef(target);
+                }
+            }
+            env->DeleteLocalRef(target);
+        }
+
+        // target-switch cooldown
+        DWORD nowMs = (DWORD)GetTickCount64();
+        if (bestTargetId != s_taLastTargetId) {
+            if (s_taTargetWasActive) s_taTargetLostMs = nowMs;
+            s_taLastTargetId     = bestTargetId;
+            s_taTargetWasActive  = (bestTarget != nullptr);
+            if (bestTarget) {
+                std::uniform_int_distribution<int> cdDist(150, 300);
+                if (nowMs - s_taTargetLostMs < (DWORD)cdDist(s_taRng)) {
+                    env->DeleteLocalRef(bestTarget);
+                    bestTarget = nullptr;
+                }
+            }
+        }
+
+        if (bestTarget) {
+            float cooldown = env->CallFloatMethod(player, taGetCooldownMethod, 0.5f);
+            if (env->ExceptionCheck()) { env->ExceptionClear(); cooldown = 1.0f; }
+
+            if (cooldown >= 1.0f) {
+                double tx = env->GetDoubleField(bestTarget, taEntX);
+                double ty = env->GetDoubleField(bestTarget, taEntY);
+                double tz = env->GetDoubleField(bestTarget, taEntZ);
+
+                double diffX = tx - px;
+                double diffZ = tz - pz;
+
+                // clamped yaw
+                float rawYaw   = (float)(std::atan2(diffZ, diffX) * 180.0 / 3.14159265) - 90.0f;
+                float yawDelta = rawYaw - pYaw;
+                while (yawDelta <= -180.0f) yawDelta += 360.0f;
+                while (yawDelta >   180.0f) yawDelta -= 360.0f;
+                yawDelta = std::max(-kTAMaxYawPerTick, std::min(kTAMaxYawPerTick, yawDelta));
+                float clampedYaw = pYaw + yawDelta;
+
+                // clamped pitch with aimHeight jitter
+                double distXZ   = std::sqrt(diffX*diffX + diffZ*diffZ);
+                double diffY    = (ty + aimHeight) - (py + 1.62);
+                float rawPitch  = (float)-(std::atan2(diffY, distXZ) * 180.0 / 3.14159265);
+                float pitchDelta = rawPitch - pPitch;
+                while (pitchDelta <= -180.0f) pitchDelta += 360.0f;
+                while (pitchDelta >   180.0f) pitchDelta -= 360.0f;
+                pitchDelta = std::max(-kTAMaxPitchPerTick, std::min(kTAMaxPitchPerTick, pitchDelta));
+                float clampedPitch = pPitch + pitchDelta;
+
+                // TP offset: land 2 blocks in front of target + small XZ jitter
+                std::uniform_real_distribution<float> offsetJitter(-0.3f, 0.3f);
+                double tpX = tx - (diffX / bestDist) * 2.0 + offsetJitter(s_taRng);
+                double tpY = ty;
+                double tpZ = tz - (diffZ / bestDist) * 2.0 + offsetJitter(s_taRng);
+
+                jobject networkHandler = env->GetObjectField(player, taNetworkHandlerField);
+                if (networkHandler) {
+                    // send TP-to packet
+                    jobject packetTo = nullptr;
+                    if (taFullPacketInitMethod) {
+                        packetTo = env->NewObject(taFullPacketClass, taFullPacketInitMethod,
+                                                  tpX, tpY, tpZ, clampedYaw, clampedPitch, JNI_TRUE);
+                    } else if (taPacketInitMethod) {
+                        packetTo = env->NewObject(taPositionAndOnGroundClass, taPacketInitMethod,
+                                                  tpX, tpY, tpZ, JNI_TRUE);
+                    }
+                    if (env->ExceptionCheck()) { env->ExceptionClear(); packetTo = nullptr; }
+
+                    if (packetTo) {
+                        env->CallVoidMethod(networkHandler, taSendPacketMethod, packetTo);
+                        if (env->ExceptionCheck()) env->ExceptionClear();
+                        env->DeleteLocalRef(packetTo);
+
+                        // attack + swing
+                        env->CallVoidMethod(interactionManager, taAttackMethod, player, bestTarget);
+                        if (env->ExceptionCheck()) env->ExceptionClear();
+
+                        jobject mainHand = env->GetStaticObjectField(taHandClass, taMainHandField);
+                        if (mainHand) {
+                            // jitter swing timing: 0-40 ms after attack
+                            std::uniform_int_distribution<int> swingDelay(0, 40);
+                            DWORD swingAt = nowMs + (DWORD)swingDelay(s_taRng);
+                            if (nowMs >= swingAt) {
+                                env->CallVoidMethod(player, taSwingMethod, mainHand);
+                                if (env->ExceptionCheck()) env->ExceptionClear();
+                            }
+                            env->DeleteLocalRef(mainHand);
+                        }
+
+                        // queue back-packet for next tick (50-120ms later)
+                        std::uniform_int_distribution<int> backDelay(50, 120);
+                        s_taPendingBackMs  = nowMs + (DWORD)backDelay(s_taRng);
+                        s_taPendingPx      = px;
+                        s_taPendingPy      = py;
+                        s_taPendingPz      = pz;
+                        s_taPendingYaw     = pYaw;
+                        s_taPendingPitch   = pPitch;
+                        s_taHasPendingBack = true;
+                    }
+                    env->DeleteLocalRef(networkHandler);
+                }
+            }
+            env->DeleteLocalRef(bestTarget);
+        }
+        env->DeleteLocalRef(playersList);
+    }
+
+cleanup_inner:
+    env->DeleteLocalRef(interactionManager);
+    env->DeleteLocalRef(world);
+    env->DeleteLocalRef(player);
+    env->DeleteLocalRef(mc);
 }
