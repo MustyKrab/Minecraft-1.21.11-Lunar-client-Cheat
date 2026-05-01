@@ -22,6 +22,8 @@ add_library(MustyClient SHARED
     src/modules/combat/WTap.h
     src/modules/combat/AutoClicker.cpp
     src/modules/combat/AutoClicker.h
+    src/modules/combat/Macro.cpp
+    src/modules/combat/Macro.h
     src/modules/TeleportAura.cpp
     src/modules/TeleportAura.h
     src/modules/FakeLag.cpp
