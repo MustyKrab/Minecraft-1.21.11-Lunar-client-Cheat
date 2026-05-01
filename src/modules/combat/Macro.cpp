@@ -57,37 +57,44 @@ void Macro::OnTick() {
     long long currentTime = GetTimeMs();
 
     // --- StunSlam State Machine ---
+    // Mechanics: Axe hit (disable shield) -> instant switch to Mace -> Mace hit
+    // Requires tick lockout abuse: Axe Hotbar Key + LMB -> Mace Hotbar Key + LMB
     if (stunSlamEnabled) {
         if (stunSlamState == 0 && (GetAsyncKeyState(VK_XBUTTON2) & 0x8000)) {
-            // Start StunSlam
-            SendKeyDownEx('1');
+            // Start StunSlam: Press Axe Hotbar Key (Slot 4 - '4')
+            SendKeyDownEx('4');
             stunSlamNextTime = currentTime + GaussianSleep(12.0, 1.0, 10, 15);
             stunSlamState = 1;
         }
         else if (stunSlamState == 1 && currentTime >= stunSlamNextTime) {
+            // Left Click (Axe hit to disable shield)
             SendMouseDownEx();
             stunSlamNextTime = currentTime + GaussianSleep(15.0, 1.5, 12, 18);
             stunSlamState = 2;
         }
         else if (stunSlamState == 2 && currentTime >= stunSlamNextTime) {
-            SendKeyDownEx('9');
+            // Release Left Click
+            SendMouseUpEx();
             stunSlamNextTime = currentTime + GaussianSleep(10.0, 1.0, 8, 13);
             stunSlamState = 3;
         }
         else if (stunSlamState == 3 && currentTime >= stunSlamNextTime) {
-            SendMouseUpEx();
+            // Press Mace Hotbar Key (Slot 8 - '8')
+            SendKeyDownEx('8');
             stunSlamNextTime = currentTime + GaussianSleep(15.0, 1.5, 12, 18);
             stunSlamState = 4;
         }
         else if (stunSlamState == 4 && currentTime >= stunSlamNextTime) {
+            // Left Click (Mace hit for damage)
             SendMouseDownEx();
             stunSlamNextTime = currentTime + GaussianSleep(12.0, 1.0, 10, 15);
             stunSlamState = 5;
         }
         else if (stunSlamState == 5 && currentTime >= stunSlamNextTime) {
+            // Release Left Click and Keys
             SendMouseUpEx();
-            SendKeyUpEx('1');
-            SendKeyUpEx('9');
+            SendKeyUpEx('4');
+            SendKeyUpEx('8');
             // Cooldown before next sequence
             stunSlamNextTime = currentTime + GaussianSleep(350.0, 25.0, 300, 450);
             stunSlamState = 6;
@@ -100,37 +107,37 @@ void Macro::OnTick() {
         stunSlamState = 0; // Reset if disabled mid-macro
     }
 
-    // --- SpearDash State Machine ---
+    // --- SpearDash Attribute Swapping State Machine ---
+    // Mechanics: Click with no-cooldown item -> switch to Spear -> Lunge (Dash) without waiting
     if (spearDashEnabled) {
         if (spearDashState == 0 && (GetAsyncKeyState('2') & 0x8000)) {
-            // Wait for server to register spear equip
-            spearDashNextTime = currentTime + GaussianSleep(50.0, 3.0, 45, 55);
+            // Start SpearDash: Select No-Cooldown Item (Slot 1 - '1')
+            SendKeyDownEx('1');
+            spearDashNextTime = currentTime + GaussianSleep(12.0, 1.0, 10, 15);
             spearDashState = 1;
         }
         else if (spearDashState == 1 && currentTime >= spearDashNextTime) {
-            SendKeyDownEx('4');
+            // Left Click (Attribute swap trigger)
+            SendMouseDownEx();
             spearDashNextTime = currentTime + GaussianSleep(12.0, 1.0, 10, 15);
             spearDashState = 2;
         }
         else if (spearDashState == 2 && currentTime >= spearDashNextTime) {
-            SendMouseDownEx();
+            // Switch to Spear (Slot 2 - '2')
+            SendKeyDownEx('2');
             spearDashNextTime = currentTime + GaussianSleep(12.0, 1.0, 10, 15);
             spearDashState = 3;
         }
         else if (spearDashState == 3 && currentTime >= spearDashNextTime) {
-            SendKeyDownEx('2');
-            spearDashNextTime = currentTime + GaussianSleep(12.0, 1.0, 10, 15);
-            spearDashState = 4;
-        }
-        else if (spearDashState == 4 && currentTime >= spearDashNextTime) {
+            // Release Left Click and Keys
             SendMouseUpEx();
-            SendKeyUpEx('4');
+            SendKeyUpEx('1');
             SendKeyUpEx('2');
             // Cooldown before next sequence
             spearDashNextTime = currentTime + GaussianSleep(250.0, 20.0, 200, 300);
-            spearDashState = 5;
+            spearDashState = 4;
         }
-        else if (spearDashState == 5 && currentTime >= spearDashNextTime) {
+        else if (spearDashState == 4 && currentTime >= spearDashNextTime) {
             // Ready for next trigger
             spearDashState = 0;
         }
