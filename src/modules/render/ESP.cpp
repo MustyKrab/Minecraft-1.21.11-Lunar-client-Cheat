@@ -383,7 +383,6 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
                     y += DrawSlider(L"Reach", r,   3.0f,   6.0f, draggingKaReachSlider, 130, y);
                     y += DrawSlider(L"FOV",   fov, 10.0f, 360.0f, draggingKaFovSlider,  130, y);
                     
-                    // FIX: Only call setters if values actually changed to prevent torn reads on the cheat thread
                     if (r != origR) ka->SetReach(r); 
                     if (fov != origFov) ka->SetFOV(fov);
                 }
@@ -430,7 +429,6 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
                     
                     y += DrawCheckbox(L"Jitter", jitter, 130, y);
                     
-                    // FIX: Only call setters if values actually changed to prevent torn reads on the cheat thread
                     if (minCps != origMin) ac->SetMinCps(minCps); 
                     if (maxCps != origMax) ac->SetMaxCps(maxCps); 
                     if (jitter != origJitter) ac->SetJitter(jitter);
@@ -643,6 +641,7 @@ void ESP::UpdateDataLoop() {
                                         playerName = std::wstring((const wchar_t*)raw, len);
                                         env->ReleaseStringChars(nameStr, raw);
                                     }
+                                    // FIX: Delete local ref for textObj
                                     env->DeleteLocalRef(textObj);
                                 }
                             }
