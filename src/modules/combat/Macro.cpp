@@ -1,4 +1,5 @@
 #include "Macro.h"
+#include "../core/JNIHelper.h"
 #include <windows.h>
 #include <chrono>
 #include <algorithm>
@@ -56,52 +57,198 @@ void Macro::SendMouseUpEx() {
     SendInput(1, &input, sizeof(INPUT));
 }
 
+// JNI Helper to scan hotbar slots (0-8) for a specific item, optionally checking for an enchantment
+int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKey, const char* enchKey) {
+    JNIEnv* env = (JNIEnv*)env_ptr;
+    jobject inventory = (jobject)inventory_ptr;
+    if (!env || !inventory) return -1;
+
+    jclass invClass = env->GetObjectClass(inventory);
+    // method_5438 = getStack(int slot)
+    jmethodID getStack = env->GetMethodID(invClass, "method_5438", "(I)Lnet/minecraft/class_1799;");
+    if (!getStack) { env->DeleteLocalRef(invClass); return -1; }
+
+    for (int i = 0; i < 9; i++) {
+        jobject stack = env->CallObjectMethod(inventory, getStack, i);
+        if (!stack) continue;
+
+        jclass stackClass = env->GetObjectClass(stack);
+        // method_7909 = getItem()
+        jmethodID getItem = env->GetMethodID(stackClass, "method_7909", "()Lnet/minecraft/class_1792;");
+        if (!getItem) { env->DeleteLocalRef(stackClass); env->DeleteLocalRef(stack); continue; }
+
+        jobject item = env->CallObjectMethod(stack, getItem);
+        if (!item) { env->DeleteLocalRef(stackClass); env->DeleteLocalRef(stack); continue; }
+
+        jclass itemClass = env->GetObjectClass(item);
+        // method_7866 = getTranslationKey()
+        jmethodID getTranslationKey = env->GetMethodID(itemClass, "method_7866", "()Ljava/lang/String;");
+        if (!getTranslationKey) { env->DeleteLocalRef(itemClass); env->DeleteLocalRef(item); env->DeleteLocalRef(stackClass); env->DeleteLocalRef(stack); continue; }
+
+        jstring jKey = (jstring)env->CallObjectMethod(item, getTranslationKey);
+        const char* keyStr = env->GetStringUTFChars(jKey, 0);
+        bool match = (strstr(keyStr, itemKey) != nullptr);
+        env->ReleaseStringUTFChars(jKey, keyStr);
+        env->DeleteLocalRef(jKey);
+
+        if (match && enchKey != nullptr) {
+            // Check enchantments if required (e.g. Breach vs Density)
+            // method_7921 = getEnchantments()
+            jmethodID getEnchants = env->GetMethodID(stackClass, "method_7921", "()Lnet/minecraft/class_2499;");
+            if (getEnchants) {
+                jobject nbtList = env->CallObjectMethod(stack, getEnchants);
+                if (nbtList) {
+                    jclass nbtListClass = env->GetObjectClass(nbtList);
+                    // method_10534 = toString() -> easy way to check NBT contents
+                    jmethodID toString = env->GetMethodID(nbtListClass, "toString", "()Ljava/lang/String;");
+                    if (toString) {
+                        jstring jNbtStr = (jstring)env->CallObjectMethod(nbtList, toString);
+                        const char* nbtStr = env->GetStringUTFChars(jNbtStr, 0);
+                        if (strstr(nbtStr, enchKey) == nullptr) {
+                            match = false; // Enchantment not found
+                        }
+                        env->ReleaseStringUTFChars(jNbtStr, nbtStr);
+                        env->DeleteLocalRef(jNbtStr);
+                    }
+                    env->DeleteLocalRef(nbtListClass);
+                    env->DeleteLocalRef(nbtList);
+                } else {
+                    match = false; // No enchantments
+                }
+            } else {
+                match = false;
+            }
+        }
+
+        env->DeleteLocalRef(itemClass);
+        env->DeleteLocalRef(item);
+        env->DeleteLocalRef(stackClass);
+        env->DeleteLocalRef(stack);
+
+        if (match) {
+            env->DeleteLocalRef(invClass);
+            return i; // Found slot 0-8
+        }
+    }
+    env->DeleteLocalRef(invClass);
+    return -1;
+}
+
 void Macro::OnTick() {
     long long currentTime = GetTimeMs();
+    JNIEnv* env = nullptr;
+    
+    // Only attach JNI if we are actively triggering a macro to save CPU
+    if ((bStunSlamEnabled && stunSlamState == 0 && (GetAsyncKeyState(VK_XBUTTON2) & 0x8000)) || 
+        (bSpearDashEnabled && spearDashState == 0 && (GetAsyncKeyState('2') & 0x8000))) {
+        
+        if (JNIHelper::vm) {
+            JNIHelper::vm->AttachCurrentThread((void**)&env, nullptr);
+        }
+        
+        if (env) {
+            jclass mcClass = env->FindClass("net/minecraft/class_310");
+            if (mcClass) {
+                jmethodID getInstance = env->GetStaticMethodID(mcClass, "method_1551", "()Lnet/minecraft/class_310;");
+                jobject mc = env->CallStaticObjectMethod(mcClass, getInstance);
+                if (mc) {
+                    // field_1724 = player
+                    jfieldID playerField = env->GetFieldID(mcClass, "field_1724", "Lnet/minecraft/class_746;");
+                    jobject player = env->GetObjectField(mc, playerField);
+                    if (player) {
+                        jclass playerClass = env->GetObjectClass(player);
+                        // field_7514 = inventory
+                        jfieldID invField = env->GetFieldID(playerClass, "field_7514", "Lnet/minecraft/class_1661;");
+                        jobject inventory = env->GetObjectField(player, invField);
+                        
+                        if (inventory) {
+                            // --- Dynamic Hotbar Resolution ---
+                            
+                            // Find Axe (any type)
+                            int axeSlot = FindHotbarSlot(env, inventory, "axe", nullptr);
+                            if (axeSlot != -1) currentAxeKey = '1' + axeSlot;
+                            
+                            // Find Spear
+                            int spearSlot = FindHotbarSlot(env, inventory, "spear", nullptr); // Assuming 'spear' is in the translation key
+                            if (spearSlot != -1) currentSpearKey = '1' + spearSlot;
+                            
+                            // Find No-CD item (fallback to Axe if none found)
+                            currentNoCdKey = currentAxeKey; 
+
+                            // Fall distance check for Mace logic
+                            // field_6017 = fallDistance
+                            jfieldID fallDistField = env->GetFieldID(playerClass, "field_6017", "F");
+                            float fallDistance = 0.0f;
+                            if (fallDistField) {
+                                fallDistance = env->GetFloatField(player, fallDistField);
+                            }
+
+                            int maceSlot = -1;
+                            if (fallDistance < 9.0f) {
+                                // Try to find Breach mace first
+                                maceSlot = FindHotbarSlot(env, inventory, "mace", "breach");
+                                if (maceSlot == -1) {
+                                    // Fallback to any mace
+                                    maceSlot = FindHotbarSlot(env, inventory, "mace", nullptr);
+                                }
+                            } else {
+                                // Try to find Density mace first
+                                maceSlot = FindHotbarSlot(env, inventory, "mace", "density");
+                                if (maceSlot == -1) {
+                                    // Fallback to any mace
+                                    maceSlot = FindHotbarSlot(env, inventory, "mace", nullptr);
+                                }
+                            }
+                            
+                            if (maceSlot != -1) currentMaceKey = '1' + maceSlot;
+
+                            env->DeleteLocalRef(inventory);
+                        }
+                        env->DeleteLocalRef(playerClass);
+                        env->DeleteLocalRef(player);
+                    }
+                    env->DeleteLocalRef(mc);
+                }
+                env->DeleteLocalRef(mcClass);
+            }
+        }
+    }
 
     // --- StunSlam State Machine ---
     if (bStunSlamEnabled) {
         if (stunSlamState == 0 && (GetAsyncKeyState(VK_XBUTTON2) & 0x8000)) {
-            // Start StunSlam: Press Axe Hotbar Key (Slot 1 - '1')
-            SendKeyDownEx('1');
+            SendKeyDownEx(currentAxeKey);
             stunSlamNextTime = currentTime + GaussianSleep(12.0, 1.0, 10, 15);
             stunSlamState = 1;
         }
         else if (stunSlamState == 1 && currentTime >= stunSlamNextTime) {
-            // Left Click (Axe hit to disable shield)
             SendMouseDownEx();
             stunSlamNextTime = currentTime + GaussianSleep(15.0, 1.5, 12, 18);
             stunSlamState = 2;
         }
         else if (stunSlamState == 2 && currentTime >= stunSlamNextTime) {
-            // Release Left Click
             SendMouseUpEx();
             stunSlamNextTime = currentTime + GaussianSleep(10.0, 1.0, 8, 13);
             stunSlamState = 3;
         }
         else if (stunSlamState == 3 && currentTime >= stunSlamNextTime) {
-            // Press Mace Hotbar Key (Slot 9 - '9')
-            SendKeyDownEx('9');
+            SendKeyDownEx(currentMaceKey);
             stunSlamNextTime = currentTime + GaussianSleep(15.0, 1.5, 12, 18);
             stunSlamState = 4;
         }
         else if (stunSlamState == 4 && currentTime >= stunSlamNextTime) {
-            // Left Click (Mace hit for damage)
             SendMouseDownEx();
             stunSlamNextTime = currentTime + GaussianSleep(12.0, 1.0, 10, 15);
             stunSlamState = 5;
         }
         else if (stunSlamState == 5 && currentTime >= stunSlamNextTime) {
-            // Release Left Click and Keys
             SendMouseUpEx();
-            SendKeyUpEx('1');
-            SendKeyUpEx('9');
-            // Cooldown before next sequence
+            SendKeyUpEx(currentAxeKey);
+            SendKeyUpEx(currentMaceKey);
             stunSlamNextTime = currentTime + GaussianSleep(350.0, 25.0, 300, 450);
             stunSlamState = 6;
         }
         else if (stunSlamState == 6 && currentTime >= stunSlamNextTime) {
-            // Ready for next trigger
             stunSlamState = 0;
         }
     } else {
@@ -111,34 +258,28 @@ void Macro::OnTick() {
     // --- SpearDash Attribute Swapping State Machine ---
     if (bSpearDashEnabled) {
         if (spearDashState == 0 && (GetAsyncKeyState('2') & 0x8000)) {
-            // Start SpearDash: Select No-Cooldown Item / Axe (Slot 1 - '1')
-            SendKeyDownEx('1');
+            SendKeyDownEx(currentNoCdKey);
             spearDashNextTime = currentTime + GaussianSleep(12.0, 1.0, 10, 15);
             spearDashState = 1;
         }
         else if (spearDashState == 1 && currentTime >= spearDashNextTime) {
-            // Left Click (Attribute swap trigger)
             SendMouseDownEx();
             spearDashNextTime = currentTime + GaussianSleep(12.0, 1.0, 10, 15);
             spearDashState = 2;
         }
         else if (spearDashState == 2 && currentTime >= spearDashNextTime) {
-            // Switch to Spear (Slot 2 - '2')
-            SendKeyDownEx('2');
+            SendKeyDownEx(currentSpearKey);
             spearDashNextTime = currentTime + GaussianSleep(12.0, 1.0, 10, 15);
             spearDashState = 3;
         }
         else if (spearDashState == 3 && currentTime >= spearDashNextTime) {
-            // Release Left Click and Keys
             SendMouseUpEx();
-            SendKeyUpEx('1');
-            SendKeyUpEx('2');
-            // Cooldown before next sequence
+            SendKeyUpEx(currentNoCdKey);
+            SendKeyUpEx(currentSpearKey);
             spearDashNextTime = currentTime + GaussianSleep(250.0, 20.0, 200, 300);
             spearDashState = 4;
         }
         else if (spearDashState == 4 && currentTime >= spearDashNextTime) {
-            // Ready for next trigger
             spearDashState = 0;
         }
     } else {
