@@ -1,133 +1,203 @@
-I2luY2x1ZGUgPHdpbmRvd3MuaD4KI2luY2x1ZGUgPGlvc3RyZWFtPgojaW5j
-bHVkZSA8dGhyZWFkPgojaW5jbHVkZSA8Y2hyb25vPgoKI2luY2x1ZGUgImNv
-cmUvSk5JSGVscGVyLmgiCiNpbmNsdWRlICJtb2R1bGVzL01vZHVsZU1hbmFn
-ZXIuaCIKCi8vIC0tLSBNQUNSTyBHTE9CQUxTIC0tLQpib29sIGJTdHVuU2xh
-bUVuYWJsZWQgPSBmYWxzZTsKYm9vbCBiU3BlYXJEYXNoRW5hYmxlZCA9IGZh
-bHNlOwoKLy8gLS0tIEpOSSBNQUNSTyBFWUVDVVRJT05TIC0tLQp2b2lkIEV4
-ZWN1dGVTdHVuU2xhbShKTklFbnYqIGVudikgewogICAgamNsYXNzIG1jQ2xh
-c3MgPSBlbnYtPkZpbmRDbGFzcygibmV0L21pbmVjcmFmdC9jbGFzc18zMTAi
-KTsKICAgIGlmICghbWNDbGFzcykgcmV0dXJuOwoKICAgIGptZXRob2RJRCBn
-ZXRJbnN0YW5jZSA9IGVudi0+R2V0U3RhdGljTWV0aG9kSUQobWNDbGFzcywg
-Im1ldGhvZF8xNTUxIiwgIigpTG5ldC9taW5lY3JhZnQvY2xhc3NfMzEwOyIp
-OwogICAgaWYgKCFnZXRJbnN0YW5jZSkgewogICAgICAgIGVudi0+RGVsZXRl
-TG9jYWxSZWYobWNDbGFzcyk7CiAgICAgICAgcmV0dXJuOwogICAgfQoKICAg
-IGpvYmplY3QgbWMgPSBlbnYtPkNhbGxTdGF0aWJPYmplY3RNZXRob2QobWND
-bGFzcywgZ2V0SW5zdGFuY2UpOwogICAgaWYgKCFtYykgewogICAgICAgIGVu
-di0+RGVsZXRlTG9jYWxSZWYobWNDbGFzcyk7CiAgICAgICAgcmV0dXJuOwog
-ICAgfQoKICAgIGptZXRob2RJRCBkb0F0dGFjayA9IGVudi0+R2V0TWV0aG9k
-SUQobWNDbGFzcywgIm1ldGhvZF8xNTM2IiwgIigpWiIpOwogICAgaWYgKGRv
-QXR0YWNrKSB7CiAgICAgICAgZW52LT5DYWxsQm9vbGVhbk1ldGhvZChtYywg
-ZG9BdHRhY2spOwogICAgfQoKICAgIGVudi0+RGVsZXRlTG9jYWxSZWYobWMp
-OwogICAgZW52LT5EZWxldGVMb2NhbFJlZihtY0NsYXNzKTsKfQoKdm9pZCBF
-eGVjdXRlU3BlYXJEYXNoKEpOSUVudiogZW52KSB7CiAgICBqY2xhc3MgbWND
-bGFzcyA9IGVudi0+RmluZENsYXNzKCJuZXQvbWluZWNyYWZ0L2NsYXNzXzMx
-MCIpOwogICAgaWYgKCFtY0NsYXNzKSByZXR1cm47CgogICAgam1ldGhvZElE
-IGdldEluc3RhbmNlID0gZW52LT5HZXRTdGF0aWNNZXRob2RJRChtY0NsYXNz
-LCAibWV0aG9kXzE1NTEiLCAiKClMbmV0L21pbmVjcmFmdC9jbGFzc18zMTA7
-Iik7CiAgICBpZiAoIWdldEluc3RhbmNlKSB7CiAgICAgICAgZW52LT5EZWxl
-dGVMb2NhbFJlZihtY0NsYXNzKTsKICAgICAgICByZXR1cm47CiAgICB9Cgog
-ICAgam9iamVjdCBtYyA9IGVudi0+Q2FsbFN0YXRpY09iamVjdE1ldGhvZCht
-Y0NsYXNzLCBnZXRJbnN0YW5jZSk7CiAgICBpZiAoIW1jKSB7CiAgICAgICAg
-ZW52LT5EZWxldGVMb2NhbFJlZihtY0NsYXNzKTsKICAgICAgICByZXR1cm47
-CiAgICB9CgogICAgam1ldGhvZElEIGRvSXRlbVVzZSA9IGVudi0+R2V0TWV0
-aG9kSUQobWNDbGFzcywgIm1ldGhvZF8xNTgzIiwgIigpVCIpOwogICAgaWYg
-KGRvSXRlbVVzZSkgewogICAgICAgIGVudi0+Q2FsbFZvaWRNZXRob2QobWMs
-IGRvSXRlbVVzZSk7CiAgICB9CgogICAgZW52LT5EZWxldGVMb2NhbFJlZiht
-Yyk7CiAgICBlbnYtPkRlbGV0ZUxvY2FsUmVmKG1jQ2xhc3MpOwp9CgovLyAt
-LS0gTUFDUk8gSU5QVVQgVEhSRUFEIC0tLQpEV09SRCBXSU5BUEkgTWFjcm9J
-bnB1dFRocmVhZChMUFZPSUQgbFBhcmFtKSB7CiAgICBKYXZhVk0qIGp2bSA9
-IChKYXZhVk0qKWxQYXJhbTsKICAgIEpOSUVudiogZW52ID0gbnVsbHB0cjsK
-ICAgIAogICAganZtLT5BdHRhY2hDdXJyZW50VGhyZWFkKCh2b2lkKiopJmVu
-diwgbnVsbHB0cik7CgogICAgYm9vbCBzdHVuU2xhbVByZXNzZWQgPSBmYWxz
-ZTsKICAgIGJvb2wgc3BlYXJEYXNoUHJlc3NlZCA9IGZhbHNlOwoKICAgIHdo
-aWxlICh0cnVlKSB7CiAgICAgICAgaWYgKGJTdHVuU2xhbUVuYWJsZWQpIHsK
-ICAgICAgICAgICAgaWYgKEdldEFzeW5jS2V5U3RhdGUoVktfWEJVVFRPTjIp
-ICYgMHg4MDAwKSB7CiAgICAgICAgICAgICAgICBpZiAoIXN0dW5TbGFtUHJl
-c3NlZCkgewogICAgICAgICAgICAgICAgICAgIEV4ZWN1dGVTdHVuU2xhbShl
-bnYpOwogICAgICAgICAgICAgICAgICAgIHN0dW5TbGFtUHJlc3NlZCA9IHRy
-dWU7CiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgIH0gZWxzZSB7CiAg
-ICAgICAgICAgICAgICBzdHVuU2xhbVByZXNzZWQgPSBmYWxzZTsKICAgICAg
-ICAgICAgfQogICAgICAgIH0KCiAgICAgICAgaWYgKGJTcGVhckRhc2hFbmFi
-bGVkKSB7CiAgICAgICAgICAgIGlmIChHZXRBc3luY0tleVN0YXRlKDB4MzIp
-ICYgMHg4MDAwKSB7CiAgICAgICAgICAgICAgICBpZiAoIXNwZWFyRGFzaFBy
-ZXNzZWQpIHsKICAgICAgICAgICAgICAgICAgICBFeGVjdXRlU3BlYXJEYXNo
-KGVudik7CiAgICAgICAgICAgICAgICAgICAgc3BlYXJEYXNoUHJlc3NlZCA9
-IHRydWU7CiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgIH0gZWxzZSB7
-CiAgICAgICAgICAgICAgICBzcGVhckRhc2hQcmVzc2VkID0gZmFsc2U7CiAg
-ICAgICAgICAgIH0KICAgICAgICB9CiAgICAgICAgU2xlZXAoMSk7CiAgICB9
-CiAgICBqdm0tPkRldGFjaEN1cnJlbnRUaHJlYWQoKTsKICAgIHJldHVybiAw
-Owp9CgovLyBDdXN0b20gUEVCIHN0cnVjdHVyZXMgZm9yIHN0ZWFsdGgKdHlw
-ZWRlZiBzdHJ1Y3QgX1VOSUNPREVfU1RSSU5HX0MgewogICAgVVNIT1JUIExl
-bmd0aDsKICAgIFVTSE9SVCBNYXhpbXVtTGVuZ3RoOwogICAgUFdTVFIgIEJ1
-ZmZlcjsKfSBVTklDT0RFX1NUUklOR19DOwoKdHlwZWRlZiBzdHJ1Y3QgX1BF
-Ql9MRFJfREFUQV9DIHsKICAgIFVMT05HIExlbmd0aDsKICAgIEJPT0xFQU4g
-SW5pdGlhbGl6ZWQ7CiAgICBIQU5ETEUgU3NIYW5kbGU7CiAgICBMSVNUX0VO
-VFJZIEluTG9hZE9yZGVyTW9kdWxlTGlzdDsKICAgIExJU1RfRU5UUlkgSW5N
-ZW1vcnlPcmRlck1vZHVsZUxpc3Q7CiAgICBMSVNUX0VOVFJZIEluSW5pdGlh
-bGl6YXRpb25PcmRlck1vZHVsZUxpc3Q7Cn0gUEVCX0xEUl9EQVRBX0MsICog
-UFBFQl9MRFJfREFUQV9DOwoKdHlwZWRlZiBzdHJ1Y3QgX0xEUl9EQVRBX1RB
-QkxFX0VOVFJZX0MgewogICAgTElTVF9FTlRSWSBJbkxvYWRPcmRlckxpbmtz
-OwogICAgTElTVF9FTlRSWSBJbk1lbW9yeU9yZGVyTGlua3M7CiAgICBMSVNU
-X0VOVFJZIEluSW5pdGlhbGl6YXRpb25PcmRlckxpbmtzOwogICAgUFZPSUQg
-RGxsQmFzZTsKICAgIFBWT0lEIEVudHJ5UG9pbnQ7CiAgICBVTE9ORyBTaXpl
-T2ZJbWFnZTsKICAgIFVOSUNPREVfU1RSSU5HX0MgRnVsbERsbE5hbWU7CiAg
-ICBVTklDT0RFX1NUUklOR19DIEJhc2VEbGxOYW1lOwp9IExEUl9EQVRBX1RB
-QkxFX0VOVFJZX0MsICogUExEUl9EQVRBX1RBQkxFX0VOVFJZX0M7Cgp0eXBl
-ZGVmIHN0cnVjdCBfUEVCX0MgewogICAgQllURSBSZXNlcnZlZDFbMl07CiAg
-ICBCWVRFIEJlaW5nRGVidWdnZWQ7CiAgICBCWVRFIFJlc2VydmVkMlsxXTsK
-ICAgIFBWT0lEIFJlc2VydmVkM1syXTsKICAgIFBQRUJfTERSX0RBVEFfQyBM
-ZHI7Cn0gUEVCX0MsICogUFBFQl9DOwoKdm9pZCBFcmFzZVBFSGVhZGVycyhI
-SU5TVEFOQ0UgaE1vZHVsZSkgewogICAgRFdPUkQgb2xkUHJvdGVjdDsKICAg
-IFZpcnR1YWxQcm90ZWN0KGhNb2R1bGUsIDQwOTYsIFBBR0VfUkVBRFdSSVRF
-LCAmb2xkUHJvdGVjdCk7CiAgICBTZWN1cmVaZXJvTWVtb3J5KGhNb2R1bGUs
-IDQwOTYpOwogICAgVmlydHVhbFByb3RlY3QoaE1vZHVsZSwgNDA5Niwgb2xk
-UHJvdGVjdCwgJm9sZFByb3RlY3QpOwp9Cgp2b2lkIFVubGlua1BFQihISU5T
-VEFOQ0UgaE1vZHVsZSkgewojaWZkZWYgX1dJTjY0CiAgICBQUEVCX0MgcFBF
-QiA9IChQUEVCX0MpX19yZWFkZ3Nxd29yZCgweDYwKTsKI2Vsc2UKICAgIFBQ
-RUJfQyBwUEVCID0gKFBQRUJfQylfX3JlYWRmc2R3b3JkKDB4MzApOwojZW5k
-aWYKCiAgICBQUEVCX0xEUl9EQVRBX0MgcExvYWRlckRhdGEgPSBwUEVCLT5M
-ZHI7CiAgICBQTElTVF9FTlRSWSBsaXN0SGVhZCA9ICZwTG9hZGVyRGF0YS0+
-SW5NZW1vcnlPcmRlck1vZHVsZUxpc3Q7CiAgICBQTElTVF9FTlRSWSBsaXN0
-Q3VycmVudCA9IGxpc3RIZWFkLT5GbGluazsKCiAgICB3aGlsZSAobGlzdEN1
-cnJlbnQgIT0gbGlzdEhlYWQpIHsKICAgICAgICBQTERSX0RBVEFfVEFCTEVf
-RU5UUllfQyBwRW50cnkgPSBDT05UQUlOSU5HX1JFQ09SRChsaXN0Q3VycmVu
-dCwgTERSX0RBVEFfVEFCTEVfRU5UUllfQywgSW5NZW1vcnlPcmRlckxpbmtz
-KTsKICAgICAgICBpZiAoKEhJTlNUQU5DRSlwRW50cnktPkRsbEJhc2UgPT0g
-aE1vZHVsZSkgewogICAgICAgICAgICBwRW50cnktPkluTG9hZE9yZGVyTGlu
-a3MuQmxpbmstPkZsaW5rID0gcEVudHJ5LT5JbkxvYWRPcmRlckxpbmtzLkZs
-aW5rOwogICAgICAgICAgICBwRW50cnktPkluTG9hZE9yZGVyTGlua3MuRmxp
-bmstPkJsaW5rID0gcEVudHJ5LT5JbkxvYWRPcmRlckxpbmtzLkJsaW5rOwog
-ICAgICAgICAgICAKICAgICAgICAgICAgcEVudHJ5LT5Jbk1lbW9yeU9yZGVy
-TGlua3MuQmxpbmstPkZsaW5rID0gcEVudHJ5LT5Jbk1lbW9yeU9yZGVyTGlu
-a3MuRmxpbms7CiAgICAgICAgICAgIHBFbnRyeS0+SW5NZW1vcnlPcmRlckxp
-bmtzLkZsaW5rLT5CbGluayA9IHBFbnRyeS0+SW5NZW1vcnlPcmRlckxpbmtz
-LkJsaW5rOwogICAgICAgICAgICAKICAgICAgICAgICAgcEVudHJ5LT5Jbklu
-aXRpYWxpemF0aW9uT3JkZXJMaW5rcy5CbGluay0+RmxpbmsgPSBwRW50cnkt
-PkluSW5pdGlhbGl6YXRpb25PcmRlckxpbmtzLkZsaW5rOwogICAgICAgICAg
-ICBwRW50cnktPkluSW5pdGlhbGl6YXRpb25PcmRlckxpbmtzLkZsaW5rLT5C
-bGluayA9IHBFbnRyeS0+SW5Jbml0aWFsaXphdGlvbk9yZGVyTGlua3MuQmxp
-bms7CiAgICAgICAgICAgIGJyZWFrOwogICAgICAgIH0KICAgICAgICBsaXN0
-Q3VycmVudCA9IGxpc3RDdXJyZW50LT5GbGluazsKICAgIH0KfQoKRFdPUkQg
-V0lOQVBJIENoZWF0VGhyZWFkKExQVk9JRCBsUGFyYW0pIHsKICAgIGlmIChK
-TklIZWxwZXI6OkluaXRpYWxpemUoKSkgewogICAgICAgIE1vZHVsZU1hbmFn
-ZXI6OkluaXRpYWxpemUoKTsKICAgICAgICAKICAgICAgICAvLyBTdGFydCB0
-aGUgTWFjcm8gSW5wdXQgVGhyZWFkCiAgICAgICAgQ3JlYXRlVGhyZWFkKG51
-bGxwdHIsIDAsIE1hY3JvSW5wdXRUaHJlYWQsIEpOSUhlbHBlcjo6R2V0SlZN
-KCksIDAsIG51bGxwdHIpOwogICAgICAgIAogICAgICAgIHdoaWxlICghKEdl
-dEFzeW5jS2V5U3RhdGUoVktfRU5EKSAmIDB4ODAwMCkpIHsKICAgICAgICAg
-ICAgTW9kdWxlTWFuYWdlcjo6T25UaWNrKCk7CiAgICAgICAgICAgIHN0ZDo6
-dGhpc190aHJlYWQ6OnNsZWVwX2ZvcihzdGQ6OmNocm9ubzo6bWlsbGlzZWNv
-bmRzKDE2KSk7IC8vIH42MCBUUFMKICAgICAgICB9CiAgICB9CiAgICAKICAg
-IC8vIENsZWFuIHVwIGFsbG9jYXRlZCBtZW1vcnkgYmVmb3JlIGV4aXRpbmcK
-ICAgIE1vZHVsZU1hbmFnZXI6OkNsZWFudXAoKTsKICAgIEpOSUhlbHBlcjo6
-Q2xlYW51cCgpOwogICAgRnJlZUxpYnJhcnlBbmRFeGl0VGhyZWFkKChITU9E
-VUxFKWxQYXJhbSwgMCk7CiAgICByZXR1cm4gMDsKfQoKQk9PTCBBUElFTlRS
-WSBEbGxNYWluKEhJTlNUQU5DRSBoTW9kdWxlLCBEV09SRCB1bF9yZWFzb25f
-Zm9yX2NhbGwsIExQVk9JRCBscFJlc2VydmVkKSB7CiAgICBpZiAodWxfcmVh
-c29uX2Zvcl9jYWxsID09IERMTF9QUk9DRVNTX0FUVEFDSCkgewogICAgICAg
-IERpc2FibGVUaHJlYWRMaWJyYXJ5Q2FsbHMoaE1vZHVsZSk7CiAgICAgICAg
-VW5saW5rUEVCKGhNb2R1bGUpOwogICAgICAgIEVyYXNlUEVIZWFkZXJzKGhN
-b2R1bGUpOwogICAgICAgIAogICAgICAgIEhBTkRMRSBoVGhyZWFkID0gQ3Jl
-YXRlVGhyZWFkKG51bGxwdHIsIDAsIENoZWF0VGhyZWFkLCBoTW9kdWxlLCAw
-LCBudWxscHRyKTsKICAgICAgICBpZiAoaFRocmVhZCkgQ2xvc2VIYW5kbGUo
-aFRocmVhZCk7CiAgICB9CiAgICByZXR1cm4gVFJVRTsKfQo=
+#include <windows.h>
+#include <iostream>
+#include <thread>
+#include <chrono>
+
+#include "core/JNIHelper.h"
+#include "modules/ModuleManager.h"
+
+// --- MACRO GLOBALS ---
+bool bStunSlamEnabled = false;
+bool bSpearDashEnabled = false;
+
+// --- JNI MACRO EXECUTIONS ---
+void ExecuteStunSlam(JNIEnv* env) {
+    jclass mcClass = env->FindClass("net/minecraft/class_310");
+    if (!mcClass) return;
+
+    jmethodID getInstance = env->GetStaticMethodID(mcClass, "method_1551", "()Lnet/minecraft/class_310;");
+    if (!getInstance) {
+        env->DeleteLocalRef(mcClass);
+        return;
+    }
+
+    jobject mc = env->CallStaticObjectMethod(mcClass, getInstance);
+    if (!mc) {
+        env->DeleteLocalRef(mcClass);
+        return;
+    }
+
+    jmethodID doAttack = env->GetMethodID(mcClass, "method_1536", "()Z");
+    if (doAttack) {
+        env->CallBooleanMethod(mc, doAttack);
+    }
+
+    env->DeleteLocalRef(mc);
+    env->DeleteLocalRef(mcClass);
+}
+
+void ExecuteSpearDash(JNIEnv* env) {
+    jclass mcClass = env->FindClass("net/minecraft/class_310");
+    if (!mcClass) return;
+
+    jmethodID getInstance = env->GetStaticMethodID(mcClass, "method_1551", "()Lnet/minecraft/class_310;");
+    if (!getInstance) {
+        env->DeleteLocalRef(mcClass);
+        return;
+    }
+
+    jobject mc = env->CallStaticObjectMethod(mcClass, getInstance);
+    if (!mc) {
+        env->DeleteLocalRef(mcClass);
+        return;
+    }
+
+    jmethodID doItemUse = env->GetMethodID(mcClass, "method_1583", "()V");
+    if (doItemUse) {
+        env->CallVoidMethod(mc, doItemUse);
+    }
+
+    env->DeleteLocalRef(mc);
+    env->DeleteLocalRef(mcClass);
+}
+
+// --- MACRO INPUT THREAD ---
+DWORD WINAPI MacroInputThread(LPVOID lpParam) {
+    JavaVM* jvm = (JavaVM*)lpParam;
+    JNIEnv* env = nullptr;
+    
+    jvm->AttachCurrentThread((void**)&env, nullptr);
+
+    bool stunSlamPressed = false;
+    bool spearDashPressed = false;
+
+    while (true) {
+        if (bStunSlamEnabled) {
+            if (GetAsyncKeyState(VK_XBUTTON2) & 0x8000) {
+                if (!stunSlamPressed) {
+                    ExecuteStunSlam(env);
+                    stunSlamPressed = true;
+                }
+            } else {
+                stunSlamPressed = false;
+            }
+        }
+
+        if (bSpearDashEnabled) {
+            if (GetAsyncKeyState(0x32) & 0x8000) {
+                if (!spearDashPressed) {
+                    ExecuteSpearDash(env);
+                    spearDashPressed = true;
+                }
+            } else {
+                spearDashPressed = false;
+            }
+        }
+        Sleep(1);
+    }
+    jvm->DetachCurrentThread();
+    return 0;
+}
+
+// Custom PEB structures for stealth
+typedef struct _UNICODE_STRING_C {
+    USHORT Length;
+    USHORT MaximumLength;
+    PWSTR  Buffer;
+} UNICODE_STRING_C;
+
+typedef struct _PEB_LDR_DATA_C {
+    ULONG Length;
+    BOOLEAN Initialized;
+    HANDLE SsHandle;
+    LIST_ENTRY InLoadOrderModuleList;
+    LIST_ENTRY InMemoryOrderModuleList;
+    LIST_ENTRY InInitializationOrderModuleList;
+} PEB_LDR_DATA_C, * PPEB_LDR_DATA_C;
+
+typedef struct _LDR_DATA_TABLE_ENTRY_C {
+    LIST_ENTRY InLoadOrderLinks;
+    LIST_ENTRY InMemoryOrderLinks;
+    LIST_ENTRY InInitializationOrderLinks;
+    PVOID DllBase;
+    PVOID EntryPoint;
+    ULONG SizeOfImage;
+    UNICODE_STRING_C FullDllName;
+    UNICODE_STRING_C BaseDllName;
+} LDR_DATA_TABLE_ENTRY_C, * PLDR_DATA_TABLE_ENTRY_C;
+
+typedef struct _PEB_C {
+    BYTE Reserved1[2];
+    BYTE BeingDebugged;
+    BYTE Reserved2[1];
+    PVOID Reserved3[2];
+    PPEB_LDR_DATA_C Ldr;
+} PEB_C, * PPEB_C;
+
+void ErasePEHeaders(HINSTANCE hModule) {
+    DWORD oldProtect;
+    VirtualProtect(hModule, 4096, PAGE_READWRITE, &oldProtect);
+    SecureZeroMemory(hModule, 4096);
+    VirtualProtect(hModule, 4096, oldProtect, &oldProtect);
+}
+
+void UnlinkPEB(HINSTANCE hModule) {
+#ifdef _WIN64
+    PPEB_C pPEB = (PPEB_C)__readgsqword(0x60);
+#else
+    PPEB_C pPEB = (PPEB_C)__readfsdword(0x30);
+#endif
+
+    PPEB_LDR_DATA_C pLoaderData = pPEB->Ldr;
+    PLIST_ENTRY listHead = &pLoaderData->InMemoryOrderModuleList;
+    PLIST_ENTRY listCurrent = listHead->Flink;
+
+    while (listCurrent != listHead) {
+        PLDR_DATA_TABLE_ENTRY_C pEntry = CONTAINING_RECORD(listCurrent, LDR_DATA_TABLE_ENTRY_C, InMemoryOrderLinks);
+        if ((HINSTANCE)pEntry->DllBase == hModule) {
+            pEntry->InLoadOrderLinks.Blink->Flink = pEntry->InLoadOrderLinks.Flink;
+            pEntry->InLoadOrderLinks.Flink->Blink = pEntry->InLoadOrderLinks.Blink;
+            
+            pEntry->InMemoryOrderLinks.Blink->Flink = pEntry->InMemoryOrderLinks.Flink;
+            pEntry->InMemoryOrderLinks.Flink->Blink = pEntry->InMemoryOrderLinks.Blink;
+            
+            pEntry->InInitializationOrderLinks.Blink->Flink = pEntry->InInitializationOrderLinks.Flink;
+            pEntry->InInitializationOrderLinks.Flink->Blink = pEntry->InInitializationOrderLinks.Blink;
+            break;
+        }
+        listCurrent = listCurrent->Flink;
+    }
+}
+
+DWORD WINAPI CheatThread(LPVOID lParam) {
+    if (JNIHelper::Initialize()) {
+        ModuleManager::Initialize();
+        
+        // Start the Macro Input Thread
+        CreateThread(nullptr, 0, MacroInputThread, JNIHelper::GetJVM(), 0, nullptr);
+        
+        // FIX: Added a way to cleanly exit the cheat thread (e.g. pressing END key)
+        while (!(GetAsyncKeyState(VK_END) & 0x8000)) {
+            ModuleManager::OnTick();
+            std::this_thread::sleep_for(std::chrono::milliseconds(16)); // ~60 TPS
+        }
+    }
+    
+    // Clean up allocated memory before exiting
+    ModuleManager::Cleanup();
+    JNIHelper::Cleanup();
+    FreeLibraryAndExitThread((HMODULE)lParam, 0);
+    return 0;
+}
+
+BOOL APIENTRY DllMain(HINSTANCE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
+    if (ul_reason_for_call == DLL_PROCESS_ATTACH) {
+        DisableThreadLibraryCalls(hModule);
+        UnlinkPEB(hModule);
+        ErasePEHeaders(hModule);
+        
+        HANDLE hThread = CreateThread(nullptr, 0, CheatThread, hModule, 0, nullptr);
+        if (hThread) CloseHandle(hThread);
+    }
+    return TRUE;
+}
