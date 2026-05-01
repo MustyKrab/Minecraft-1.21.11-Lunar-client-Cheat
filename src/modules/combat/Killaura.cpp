@@ -18,19 +18,14 @@ static jmethodID raycastMethod, hitResultGetTypeMethod, getCameraPosVecMethod, g
 static jmethodID sendPacketMethod;
 static jclass clientPlayerClass;
 static jfieldID clientNetworkHandlerField;
-// FIX: cache getId method for entity identity
 static jmethodID getIdMethod;
 
-// PATCH 4 — target-switch cooldown state
-// FIX: use jint identity (entity ID) instead of raw pointer cast to void*
 static jint   s_kaLastTargetId    = -1;
 static DWORD  s_kaTargetLostMs    = 0;
 static bool   s_kaTargetWasActive = false;
 
-// PATCH 5 — stochastic tick interval
 static DWORD  s_kaNextTickMs = 0;
 
-// persistent RNG
 static std::mt19937 s_kaRng([]() -> uint32_t {
     std::random_device rd;
     return rd() ^ (uint32_t)(GetTickCount64() * 2654435761ULL);
@@ -94,7 +89,6 @@ void Killaura::OnTick() {
         getCooldownMethod = JNIHelper::GetMethodSafe(playerClass,             "method_7261", "(F)F",  "getAttackCooldownProgress");
         mainHandField     = JNIHelper::GetStaticFieldSafe(handClass,          "field_5808",  "Lnet/minecraft/class_1268;", "MAIN_HAND");
 
-        // FIX: cache getId method
         getIdMethod = env->GetMethodID(entityClass, "getId", "()I");
 
         if (networkHandlerClass)
@@ -115,7 +109,6 @@ void Killaura::OnTick() {
         !listSize || !listGet || !getHealth || !attackMethod || !swingMethod ||
         !getCooldownMethod || !mainHandField) return;
 
-    // PATCH 5 — stochastic tick interval
     {
         DWORD now = (DWORD)GetTickCount64();
         if (now < s_kaNextTickMs) return;
@@ -164,13 +157,11 @@ void Killaura::OnTick() {
 
         jobject bestTarget = nullptr;
         double  bestDist   = reach;
-        jint    bestTargetId = -1; // FIX: use entity ID
+        jint    bestTargetId = -1;
 
-        // PATCH 2 — randomised aim-height jitter
         std::uniform_real_distribution<float> heightJitter(0.6f, 1.4f);
         float aimHeight = heightJitter(s_kaRng);
 
-        // small position noise (existing behaviour)
         std::uniform_real_distribution<double> randomOffset(-0.3, 0.3);
 
         for (int i = 0; i < size; i++) {
@@ -193,7 +184,6 @@ void Killaura::OnTick() {
                 std::pow(tz - evalPz, 2)
             );
 
-            // FIX: lower bound 0.5 to allow melee hits
             if (dist <= bestDist && dist > 0.5) {
                 float hp = env->CallFloatMethod(target, getHealth);
                 if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(target); continue; }
@@ -207,14 +197,14 @@ void Killaura::OnTick() {
                         while (yawDiff <= -180.0f) yawDiff += 360.0f;
                         while (yawDiff >   180.0f) yawDiff -= 360.0f;
 
-                        if (std::abs(yawDiff) > fov) {
+                        // FIX: Ensure absolute value is used correctly for FOV check
+                        if (std::abs(yawDiff) > (fov / 2.0f)) { // FOV is total angle, so check against half
                             env->DeleteLocalRef(target);
                             continue;
                         }
                     }
 
                     bestDist = dist;
-                    // FIX: get actual entity ID
                     bestTargetId = getIdMethod ? env->CallIntMethod(target, getIdMethod) : -1;
                     if (env->ExceptionCheck()) { env->ExceptionClear(); bestTargetId = -1; }
                     if (bestTarget) env->DeleteLocalRef(bestTarget);
@@ -224,7 +214,6 @@ void Killaura::OnTick() {
             env->DeleteLocalRef(target);
         }
 
-        // PATCH 4 — target-switch cooldown
         DWORD nowMs = (DWORD)GetTickCount64();
         if (bestTargetId != s_kaLastTargetId) {
             if (s_kaTargetWasActive) s_kaTargetLostMs = nowMs;
@@ -288,7 +277,6 @@ void Killaura::OnTick() {
                     randomDelay          = 0;
                 }
             }
-            // FIX: delete bestTarget local ref to prevent memory leak
             env->DeleteLocalRef(bestTarget);
         }
 
