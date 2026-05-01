@@ -1,13 +1,11 @@
 #include "Menu.h"
 #include "../modules/combat/Killaura.h"
 #include "../modules/combat/Aimbot.h"
+#include "../modules/combat/Macro.h"
 #include "../modules/TeleportAura.h"
 #include "../modules/render/XRay.h"
 #include "../modules/ModuleManager.h"
 #include <imgui.h>
-
-extern bool bStunSlamEnabled;
-extern bool bSpearDashEnabled;
 
 void Menu::RenderCombatTab() {
     ImGui::BeginChild("Combat", ImVec2(0, 0), true);
@@ -65,9 +63,18 @@ void Menu::RenderCombatTab() {
     }
 
     ImGui::Separator();
-    if (ImGui::CollapsingHeader("Combat Macros")) {
-        ImGui::Checkbox("StunSlam (MB5)", &bStunSlamEnabled);
-        ImGui::Checkbox("SpearDash (Key 2)", &bSpearDashEnabled);
+    
+    Macro* macro = static_cast<Macro*>(ModuleManager::GetModule("Macro"));
+    if (macro) {
+        if (ImGui::CollapsingHeader("Combat Macros")) {
+            bool stunSlam = macro->IsStunSlamEnabled();
+            if (ImGui::Checkbox("StunSlam (MB5)", &stunSlam))
+                macro->SetStunSlamEnabled(stunSlam);
+                
+            bool spearDash = macro->IsSpearDashEnabled();
+            if (ImGui::Checkbox("SpearDash (Key 2)", &spearDash))
+                macro->SetSpearDashEnabled(spearDash);
+        }
     }
 
     ImGui::EndChild();
