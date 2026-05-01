@@ -54,11 +54,10 @@ void XRay::OnTick() {
         blockPosInit = env->GetMethodID(blockPosClass, "<init>", "(III)V");
         if (env->ExceptionCheck()) { env->ExceptionClear(); return; }
 
-        jclass objectClass = env->FindClass("java/lang/Object");
-        if (objectClass) {
-            toStringMethod = env->GetMethodID(objectClass, "toString", "()Ljava/lang/String;");
-            env->DeleteLocalRef(objectClass);
-        }
+        // FIX: use getTranslationKey instead of toString.
+        // method_9518 gets the translation key (e.g. "block.minecraft.diamond_ore")
+        toStringMethod = JNIHelper::GetMethodSafe(blockClass, "method_9518", "()Ljava/lang/String;", "getTranslationKey");
+        if (env->ExceptionCheck()) { env->ExceptionClear(); return; }
 
         if (!instanceField || !worldField || !getBlockStateMethod || !getBlockMethod ||
             !toStringMethod || !blockPosInit)
@@ -163,8 +162,6 @@ void XRay::OnTick() {
                 if (env->ExceptionCheck()) { env->ExceptionClear(); env->PopLocalFrame(nullptr); continue; }
                 if (!blockObj)             { env->PopLocalFrame(nullptr); continue; }
 
-                // FIX: use getTranslationKey instead of toString. toString includes block properties (e.g. "Block{minecraft:chest}[facing=north,type=single]")
-                // which is slow and unnecessary. getTranslationKey is faster and returns just the base name.
                 jstring keyStr = (jstring)env->CallObjectMethod(blockObj, toStringMethod);
                 if (env->ExceptionCheck()) { env->ExceptionClear(); env->PopLocalFrame(nullptr); continue; }
 
