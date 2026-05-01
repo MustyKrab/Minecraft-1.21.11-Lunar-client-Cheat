@@ -293,7 +293,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
             else if (n == "TeleportAura")totalHeight += 40   + 10;
             else if (n == "Aimbot")      totalHeight += 40   + 10;
             else if (n == "AutoClicker") totalHeight += 2*40 + 25 + 10;
-            else if (n == "Macro")       totalHeight += 2*25 + 10; // FIX: Added Macro height
+            else if (n == "Macro")       totalHeight += 2*25 + 10;
             else if (n == "ESP")         totalHeight += 40   + 10;
             else if (n == "Reach")       totalHeight += 40   + 10;
             else if (n == "FakeLag")     totalHeight += 40   + 10;
@@ -436,7 +436,6 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
                     if (jitter != origJitter) ac->SetJitter(jitter);
                 }
             } else if (nameStr == "Macro") {
-                // FIX: Added Macro UI controls
                 Macro* macro = (Macro*)mod;
                 if (macro) {
                     bool stunSlam = macro->IsStunSlamEnabled();
