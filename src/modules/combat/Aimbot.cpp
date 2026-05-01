@@ -203,7 +203,8 @@ void Aimbot::OnTick() {
             float pDiff  = wrap180(tPitch - currentPitch);
             float angDist = std::sqrt(yDiff*yDiff + pDiff*pDiff);
 
-            if (angDist < fov) {
+            // FIX: Ensure absolute value is used correctly for FOV check
+            if (angDist < (fov / 2.0f)) { // FOV is total angle, so check against half
                 if (angDist < bestAngDist || (angDist == bestAngDist && dist3D < bestDist3D)) {
                     bestAngDist  = angDist;
                     bestDist3D   = dist3D;
@@ -273,9 +274,6 @@ void Aimbot::OnTick() {
                 }
             }
 
-            // FIX: fmod can return negative values if the dividend is negative.
-            // This causes the aim to snap in the opposite direction slightly when crossing the GCD boundary.
-            // We need to ensure the remainder is always positive and subtract it correctly.
             float yawRem = std::fmod(yawDiff, gcd);
             if (yawRem < 0) yawRem += gcd;
             yawDiff -= yawRem;
