@@ -9,7 +9,6 @@ static int retryCounter = 0;
 static jclass mcClass, playerClass, optionsClass, keyBindingClass;
 static jfieldID instanceField, playerField, optionsField, forwardKeyField, swingProgressField;
 static jmethodID setPressedMethod, setSprintingMethod;
-// FIX: need to read the actual bound key scancode from forwardKey to avoid hardcoded 'W'
 static jmethodID getKeyCodeMethod;
 
 // PATCH 5 — stochastic tick interval
@@ -49,16 +48,11 @@ void WTap::OnTick() {
         optionsField        = JNIHelper::GetFieldSafe(mcClass,             "field_1690",  "Lnet/minecraft/class_315;",  "options");
         forwardKeyField     = JNIHelper::GetFieldSafe(optionsClass,        "field_1894",  "Lnet/minecraft/class_304;",  "forwardKey");
 
-        // FIX: swingProgressField — field_6220 is handSwingTicks which is an int in 1.21.x; type "I" is correct
-        // however the field tracks ticks 0..maxSwingProgress; on swing start it resets to 0 and counts up.
-        // We check == 1 which is the first tick of a new swing — that's fine.
         swingProgressField  = JNIHelper::GetFieldSafe(playerClass,         "field_6220",  "I",                          "handSwingTicks");
 
         setPressedMethod    = JNIHelper::GetMethodSafe(keyBindingClass,    "method_1430", "(Z)V",                       "setPressed");
         setSprintingMethod  = JNIHelper::GetMethodSafe(playerClass,        "method_5728", "(Z)V",                       "setSprinting");
 
-        // FIX: get the bound key code from KeyBinding so we can check the actual scancode instead of hardcoded 'W'
-        // method_1428 = getBoundKeyCode() -> int (GLFW key code)
         getKeyCodeMethod    = JNIHelper::GetMethodSafe(keyBindingClass,    "method_1428", "()I",                        "getBoundKeyCode");
 
         wtapMappingsLoaded = true;
@@ -85,22 +79,36 @@ void WTap::OnTick() {
         swingTicks = 0;
     }
 
-    // FIX: tick gate moved AFTER swing detection — previously it could gate out mid-swing entirely
     if (swingTicks == 1 || swingTicks == 2) {
-        isWTapping = true;
-        ticksSinceAttack = 0;
-
-        std::uniform_int_distribution<> delayDist(2, 6);
-        wTapDelay = delayDist(s_wtapRng);
-
-        env->CallVoidMethod(player, setSprintingMethod, JNI_FALSE);
-        if (env->ExceptionCheck()) env->ExceptionClear();
-
-        jobject forwardKey = env->GetObjectField(options, forwardKeyField);
-        if (forwardKey) {
-            env->CallVoidMethod(forwardKey, setPressedMethod, JNI_FALSE);
+        // FIX: Only trigger WTap if the player is actually sprinting
+        // If they aren't sprinting, un-sprinting and re-sprinting does nothing for knockback
+        jmethodID isSprintingMethod = JNIHelper::GetMethodSafe(playerClass, "method_5624", "()Z", "isSprinting");
+        bool isSprinting = false;
+        
+        if (isSprintingMethod) {
+            isSprinting = env->CallBooleanMethod(player, isSprintingMethod) == JNI_TRUE;
             if (env->ExceptionCheck()) env->ExceptionClear();
-            env->DeleteLocalRef(forwardKey);
+        } else {
+            // Fallback: assume they are sprinting if W is held
+            isSprinting = (GetAsyncKeyState('W') & 0x8000) != 0;
+        }
+
+        if (isSprinting) {
+            isWTapping = true;
+            ticksSinceAttack = 0;
+
+            std::uniform_int_distribution<> delayDist(2, 6);
+            wTapDelay = delayDist(s_wtapRng);
+
+            env->CallVoidMethod(player, setSprintingMethod, JNI_FALSE);
+            if (env->ExceptionCheck()) env->ExceptionClear();
+
+            jobject forwardKey = env->GetObjectField(options, forwardKeyField);
+            if (forwardKey) {
+                env->CallVoidMethod(forwardKey, setPressedMethod, JNI_FALSE);
+                if (env->ExceptionCheck()) env->ExceptionClear();
+                env->DeleteLocalRef(forwardKey);
+            }
         }
     }
 
@@ -119,16 +127,12 @@ void WTap::OnTick() {
         if (ticksSinceAttack >= wTapDelay) {
             isWTapping = false;
 
-            // FIX: use actual bound key scancode via getKeyCodeMethod instead of hardcoded 'W'
-            // GLFW_KEY_W = 87; fall back to that if method unavailable
             bool wHeld = false;
             if (getKeyCodeMethod && forwardKeyField) {
                 jobject forwardKey = env->GetObjectField(options, forwardKeyField);
                 if (forwardKey) {
                     int keyCode = env->CallIntMethod(forwardKey, getKeyCodeMethod);
                     if (env->ExceptionCheck()) { env->ExceptionClear(); keyCode = 87; }
-                    // GLFW key codes: positive = keyboard key; map to VK via GLFW->VK is non-trivial,
-                    // so we check both the GLFW code path (keyCode == 87 means W) and GetAsyncKeyState as fallback
                     wHeld = (GetAsyncKeyState('W') & 0x8000) != 0;
                     env->DeleteLocalRef(forwardKey);
                 }
