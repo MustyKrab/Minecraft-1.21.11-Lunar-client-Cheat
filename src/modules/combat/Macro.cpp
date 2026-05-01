@@ -56,17 +56,18 @@ void Macro::SendMouseUpEx() {
     SendInput(1, &input, sizeof(INPUT));
 }
 
-// Returns a list of hotbar slots containing the specified item
-std::vector<int> Macro::GetItemSlots(void* env_ptr, void* inventory_ptr, const char* itemKey) {
+// Scans hotbar slots (0-8) for a specific item, optionally checking for an enchantment/name
+int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKey, const char* enchKey) {
     JNIEnv* env = (JNIEnv*)env_ptr;
     jobject inventory = (jobject)inventory_ptr;
-    std::vector<int> slots;
-    if (!env || !inventory) return slots;
+    if (!env || !inventory) return -1;
 
     jclass invClass = env->GetObjectClass(inventory);
     jmethodID getStack = env->GetMethodID(invClass, "method_5438", "(I)Lnet/minecraft/class_1799;");
     env->ExceptionClear();
-    if (!getStack) { env->DeleteLocalRef(invClass); return slots; }
+    if (!getStack) { env->DeleteLocalRef(invClass); return -1; }
+
+    int fallbackSlot = -1;
 
     for (int i = 0; i < 9; i++) {
         jobject stack = env->CallObjectMethod(inventory, getStack, i);
@@ -82,7 +83,6 @@ std::vector<int> Macro::GetItemSlots(void* env_ptr, void* inventory_ptr, const c
             env->ExceptionClear();
             if (item) {
                 jclass itemClass = env->GetObjectClass(item);
-                // method_7866 = getTranslationKey()
                 jmethodID getTranslationKey = env->GetMethodID(itemClass, "method_7866", "()Ljava/lang/String;");
                 env->ExceptionClear();
                 
@@ -97,11 +97,117 @@ std::vector<int> Macro::GetItemSlots(void* env_ptr, void* inventory_ptr, const c
                         std::string lowerItem = itemKey;
                         std::transform(lowerItem.begin(), lowerItem.end(), lowerItem.begin(), ::tolower);
                         
-                        if (lowerStr.find(lowerItem) != std::string::npos) {
-                            slots.push_back(i);
-                        }
+                        bool isCorrectItem = (lowerStr.find(lowerItem) != std::string::npos);
                         env->ReleaseStringUTFChars(jKey, keyStr);
                         env->DeleteLocalRef(jKey);
+
+                        if (isCorrectItem) {
+                            if (enchKey == nullptr) {
+                                env->DeleteLocalRef(itemClass);
+                                env->DeleteLocalRef(item);
+                                env->DeleteLocalRef(stackClass);
+                                env->DeleteLocalRef(stack);
+                                env->DeleteLocalRef(invClass);
+                                return i; // Exact match, no ench required
+                            }
+
+                            if (fallbackSlot == -1) fallbackSlot = i; // Save first matching item as fallback
+
+                            bool hasEnch = false;
+                            std::string lowerEnch = enchKey;
+                            std::transform(lowerEnch.begin(), lowerEnch.end(), lowerEnch.begin(), ::tolower);
+
+                            // In 1.21.11, the most reliable way to check enchantments is to check the item's hover tooltip lines
+                            // method_56150 = getTooltip(Item.TooltipContext, PlayerEntity, TooltipType) -> List<Text>
+                            jclass tooltipContextClass = env->FindClass("net/minecraft/class_1792$class_9635");
+                            jclass tooltipTypeClass = env->FindClass("net/minecraft/class_1836");
+                            env->ExceptionClear();
+                            
+                            if (tooltipContextClass && tooltipTypeClass) {
+                                // Get TooltipContext.DEFAULT
+                                jfieldID defaultContextField = env->GetStaticFieldID(tooltipContextClass, "field_51296", "Lnet/minecraft/class_1792$class_9635;");
+                                env->ExceptionClear();
+                                jobject defaultContext = nullptr;
+                                if (defaultContextField) {
+                                    defaultContext = env->GetStaticObjectField(tooltipContextClass, defaultContextField);
+                                    env->ExceptionClear();
+                                }
+                                
+                                // Get TooltipType.BASIC
+                                jfieldID basicTypeField = env->GetStaticFieldID(tooltipTypeClass, "field_8949", "Lnet/minecraft/class_1836;");
+                                env->ExceptionClear();
+                                jobject basicType = nullptr;
+                                if (basicTypeField) {
+                                    basicType = env->GetStaticObjectField(tooltipTypeClass, basicTypeField);
+                                    env->ExceptionClear();
+                                }
+                                
+                                if (defaultContext && basicType) {
+                                    jmethodID getTooltip = env->GetMethodID(stackClass, "method_56150", "(Lnet/minecraft/class_1792$class_9635;Lnet/minecraft/class_1657;Lnet/minecraft/class_1836;)Ljava/util/List;");
+                                    env->ExceptionClear();
+                                    
+                                    if (getTooltip) {
+                                        jobject tooltipList = env->CallObjectMethod(stack, getTooltip, defaultContext, nullptr, basicType);
+                                        env->ExceptionClear();
+                                        
+                                        if (tooltipList) {
+                                            jclass listClass = env->GetObjectClass(tooltipList);
+                                            jmethodID listSize = env->GetMethodID(listClass, "size", "()I");
+                                            jmethodID listGet = env->GetMethodID(listClass, "get", "(I)Ljava/lang/Object;");
+                                            env->ExceptionClear();
+                                            
+                                            if (listSize && listGet) {
+                                                int size = env->CallIntMethod(tooltipList, listSize);
+                                                env->ExceptionClear();
+                                                
+                                                for (int t = 0; t < size; t++) {
+                                                    jobject textObj = env->CallObjectMethod(tooltipList, listGet, t);
+                                                    env->ExceptionClear();
+                                                    if (textObj) {
+                                                        jclass textClass = env->GetObjectClass(textObj);
+                                                        jmethodID getString = env->GetMethodID(textClass, "method_10851", "()Ljava/lang/String;");
+                                                        env->ExceptionClear();
+                                                        
+                                                        if (getString) {
+                                                            jstring jStr = (jstring)env->CallObjectMethod(textObj, getString);
+                                                            env->ExceptionClear();
+                                                            if (jStr) {
+                                                                const char* str = env->GetStringUTFChars(jStr, 0);
+                                                                std::string tooltipStr = str;
+                                                                std::transform(tooltipStr.begin(), tooltipStr.end(), tooltipStr.begin(), ::tolower);
+                                                                if (tooltipStr.find(lowerEnch) != std::string::npos) {
+                                                                    hasEnch = true;
+                                                                }
+                                                                env->ReleaseStringUTFChars(jStr, str);
+                                                                env->DeleteLocalRef(jStr);
+                                                            }
+                                                        }
+                                                        env->DeleteLocalRef(textClass);
+                                                        env->DeleteLocalRef(textObj);
+                                                    }
+                                                    if (hasEnch) break;
+                                                }
+                                            }
+                                            env->DeleteLocalRef(listClass);
+                                            env->DeleteLocalRef(tooltipList);
+                                        }
+                                    }
+                                }
+                                if (defaultContext) env->DeleteLocalRef(defaultContext);
+                                if (basicType) env->DeleteLocalRef(basicType);
+                                env->DeleteLocalRef(tooltipContextClass);
+                                env->DeleteLocalRef(tooltipTypeClass);
+                            }
+
+                            if (hasEnch) {
+                                env->DeleteLocalRef(itemClass);
+                                env->DeleteLocalRef(item);
+                                env->DeleteLocalRef(stackClass);
+                                env->DeleteLocalRef(stack);
+                                env->DeleteLocalRef(invClass);
+                                return i; // Exact match with enchantment/name!
+                            }
+                        }
                     }
                 }
                 env->DeleteLocalRef(itemClass);
@@ -111,14 +217,16 @@ std::vector<int> Macro::GetItemSlots(void* env_ptr, void* inventory_ptr, const c
         env->DeleteLocalRef(stackClass);
         env->DeleteLocalRef(stack);
     }
+    
     env->DeleteLocalRef(invClass);
-    return slots;
+    return fallbackSlot; // Return fallback if no exact match found
 }
 
 void Macro::OnTick() {
     long long currentTime = GetTimeMs();
     JNIEnv* env = nullptr;
     
+    // Only attach JNI if we are actively triggering a macro to save CPU
     if ((stunSlamEnabled && stunSlamState == 0 && (GetAsyncKeyState(VK_XBUTTON2) & 0x8000)) || 
         (spearDashEnabled && spearDashState == 0 && (GetAsyncKeyState('2') & 0x8000))) {
         
@@ -136,6 +244,7 @@ void Macro::OnTick() {
                     jobject mc = env->CallStaticObjectMethod(mcClass, getInstance);
                     env->ExceptionClear();
                     if (mc) {
+                        // field_1724 = player
                         jfieldID playerField = env->GetFieldID(mcClass, "field_1724", "Lnet/minecraft/class_746;");
                         env->ExceptionClear();
                         if (playerField) {
@@ -143,6 +252,7 @@ void Macro::OnTick() {
                             env->ExceptionClear();
                             if (player) {
                                 jclass playerClass = env->GetObjectClass(player);
+                                // field_7514 = inventory
                                 jfieldID invField = env->GetFieldID(playerClass, "field_7514", "Lnet/minecraft/class_1661;");
                                 env->ExceptionClear();
                                 if (invField) {
@@ -150,18 +260,20 @@ void Macro::OnTick() {
                                     env->ExceptionClear();
                                     
                                     if (inventory) {
-                                        // Find Axe
-                                        std::vector<int> axes = GetItemSlots(env, inventory, "axe");
-                                        if (!axes.empty()) currentAxeKey = '1' + axes[0];
+                                        // --- Dynamic Hotbar Resolution ---
+                                        
+                                        // Find Axe (any type)
+                                        int axeSlot = FindHotbarSlot(env, inventory, "axe", nullptr);
+                                        if (axeSlot != -1) currentAxeKey = '1' + axeSlot;
                                         
                                         // Find Spear
-                                        std::vector<int> spears = GetItemSlots(env, inventory, "spear");
-                                        if (!spears.empty()) currentSpearKey = '1' + spears[0];
+                                        int spearSlot = FindHotbarSlot(env, inventory, "spear", nullptr);
+                                        if (spearSlot != -1) currentSpearKey = '1' + spearSlot;
                                         
+                                        // Find No-CD item (fallback to Axe if none found)
                                         currentNoCdKey = currentAxeKey; 
 
-                                        // Fall distance check
-                                        // Fetching directly from playerClass to avoid FindClass issues
+                                        // Fall distance check for Mace logic
                                         double fallDistance = 0.0;
                                         jfieldID fallDistFieldD = env->GetFieldID(playerClass, "field_6017", "D");
                                         env->ExceptionClear();
@@ -177,25 +289,16 @@ void Macro::OnTick() {
                                             }
                                         }
 
-                                        // Find all Maces
-                                        std::vector<int> maces = GetItemSlots(env, inventory, "mace");
-                                        
-                                        if (!maces.empty()) {
-                                            if (maces.size() == 1) {
-                                                // Only one mace, use it regardless of fall distance
-                                                currentMaceKey = '1' + maces[0];
-                                            } else {
-                                                // Multiple maces found. Apply heuristic:
-                                                // Leftmost = Breach, Rightmost = Density
-                                                if (fallDistance <= 9.0) {
-                                                    // Want Breach (Leftmost)
-                                                    currentMaceKey = '1' + maces.front();
-                                                } else {
-                                                    // Want Density (Rightmost)
-                                                    currentMaceKey = '1' + maces.back();
-                                                }
-                                            }
+                                        int maceSlot = -1;
+                                        if (fallDistance <= 9.0) {
+                                            // <= 9 blocks: Try to find Breach mace first
+                                            maceSlot = FindHotbarSlot(env, inventory, "mace", "breach");
+                                        } else {
+                                            // > 9 blocks: Try to find Density mace first
+                                            maceSlot = FindHotbarSlot(env, inventory, "mace", "density");
                                         }
+                                        
+                                        if (maceSlot != -1) currentMaceKey = '1' + maceSlot;
 
                                         env->DeleteLocalRef(inventory);
                                     }
