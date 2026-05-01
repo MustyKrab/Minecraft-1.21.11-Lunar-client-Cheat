@@ -1,111 +1,101 @@
-#include "Menu.h"
-#include "../modules/combat/Killaura.h"
-#include "../modules/combat/Aimbot.h"
-#include "../modules/TeleportAura.h"
-#include "../modules/render/XRay.h"
-#include "../modules/ModuleManager.h"
-#include <imgui.h>
-
-void Menu::RenderCombatTab() {
-    ImGui::BeginChild("Combat", ImVec2(0, 0), true);
-
-    Killaura* ka = static_cast<Killaura*>(ModuleManager::GetModule("Killaura"));
-    if (ka) {
-        bool enabled = ka->IsEnabled();
-        if (ImGui::Checkbox("KillAura", &enabled))
-            ka->SetEnabled(enabled);
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Standard melee aura. Keep reach under 3.0f for bypass.");
-
-        float reach = ka->GetReach();
-        if (ImGui::SliderFloat("Reach##ka", &reach, 2.0f, 6.0f, "%.1f"))
-            ka->SetReach(reach);
-
-        float fov = ka->GetFOV();
-        if (ImGui::SliderFloat("FOV##ka", &fov, 10.0f, 180.0f, "%.0f"))
-            ka->SetFOV(fov);
-
-        bool enable360 = ka->Is360Enabled();
-        if (ImGui::Checkbox("360 Mode##ka", &enable360))
-            ka->Set360Enabled(enable360);
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Bypass FOV check to hit entities all around you.");
-
-        bool pktOpt = ka->IsPacketOrderOptimizeEnabled();
-        if (ImGui::Checkbox("Packet Order Optimize##ka", &pktOpt))
-            ka->SetPacketOrderOptimizeEnabled(pktOpt);
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Attack packet sent before movement packet. Server evaluates reach at last-tick position.");
-    }
-
-    ImGui::Separator();
-
-    Aimbot* ab = static_cast<Aimbot*>(ModuleManager::GetModule("Aimbot"));
-    if (ab) {
-        bool abEnabled = ab->IsEnabled();
-        if (ImGui::Checkbox("Aimbot", &abEnabled))
-            ab->SetEnabled(abEnabled);
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Smooth humanised aim assist. Activates on LMB hold.");
-
-        float abFov = ab->GetFOV();
-        if (ImGui::SliderFloat("FOV##ab", &abFov, 10.0f, 180.0f, "%.0f"))
-            ab->SetFOV(abFov);
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Angular radius (degrees) to scan for targets. Lower = tighter lock.");
-
-        float abSpeed = ab->GetSmoothSpeed();
-        if (ImGui::SliderFloat("Smooth Speed##ab", &abSpeed, 0.01f, 1.0f, "%.2f"))
-            ab->SetSmoothSpeed(abSpeed);
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Base lerp factor. 0.01 = very slow/human, 1.0 = near-instant.");
-    }
-
-    ImGui::EndChild();
-}
-
-void Menu::RenderTeleportAuraTab() {
-    ImGui::BeginChild("Teleport Aura", ImVec2(0, 0), true);
-
-    TeleportAura* ta = static_cast<TeleportAura*>(ModuleManager::GetModule("TeleportAura"));
-    if (ta) {
-        bool enabled = ta->IsEnabled();
-        if (ImGui::Checkbox("Teleport Aura", &enabled))
-            ta->SetEnabled(enabled);
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Cross-map teleport attacks. Standalone module.");
-
-        float reach = ta->GetReach();
-        if (ImGui::SliderFloat("Reach##ta", &reach, 10.0f, 100.0f, "%.0f"))
-            ta->SetReach(reach);
-    }
-
-    ImGui::EndChild();
-}
-
-void Menu::RenderVisualsTab() {
-    ImGui::BeginChild("Visuals", ImVec2(0, 0), true);
-
-    XRay* xray = static_cast<XRay*>(ModuleManager::GetModule("XRay"));
-    if (xray) {
-        bool enabled = xray->IsEnabled();
-        if (ImGui::Checkbox("XRay", &enabled))
-            xray->SetEnabled(enabled);
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Scans nearby blocks and highlights ores/chests.");
-
-        ImGui::Indent();
-        ImGui::Checkbox("Diamond",     &xray->showDiamond);
-        ImGui::Checkbox("Gold",        &xray->showGold);
-        ImGui::Checkbox("Iron",        &xray->showIron);
-        ImGui::Checkbox("Emerald",     &xray->showEmerald);
-        ImGui::Checkbox("Netherite",   &xray->showNetherite);
-        ImGui::Checkbox("Chests",      &xray->showChests);
-        ImGui::Checkbox("Ender Chests",&xray->showEnderChests);
-        ImGui::Checkbox("Spawners",    &xray->showSpawners);
-        ImGui::Checkbox("Hoppers",     &xray->showHoppers);
-        ImGui::Unindent();
-    }
-
-    ImGui::EndChild();
-}
+I2luY2x1ZGUgIk1lbnUuaCIKI2luY2x1ZGUgIi4uL21vZHVsZXMvY29tYmF0
+L0tpbGxhdXJhLmgiCiNpbmNsdWRlICIuLi9tb2R1bGVzL2NvbWJhdC9BaW1i
+b3QuaCIKI2luY2x1ZGUgIi4uL21vZHVsZXMvVGVsZXBvcnRBdXJhLmgiCiNp
+bmNsdWRlICIuLi9tb2R1bGVzL3JlbmRlci9YUmF5LmgiCiNpbmNsdWRlICIu
+Li9tb2R1bGVzL01vZHVsZU1hbmFnZXIuaCIKI2luY2x1ZGUgPGltZ3VpLmg+
+CgpleHRlcm4gYm9vbCBiU3R1blNsYW1FbmFibGVkOwpleHRlcm4gYm9vbCBi
+U3BlYXJEYXNoRW5hYmxlZDsKCnZvaWQgTWVudTo6UmVuZGVyQ29tYmF0VGFi
+KCkgewogICAgSW1HdWk6OkJlZ2luQ2hpbGQoIkNvbWJhdCIsIEltVmVjMigw
+LCAwKSwgdHJ1ZSk7CgogICAgS2lsbGF1cmEqIGthID0gc3RhdGljX2Nhc3Q8
+S2lsbGF1cmEqPihNb2R1bGVNYW5hZ2VyOjpHZXRNb2R1bGUoIktpbGxhdXJh
+IikpOwogICAgaWYgKGthKSB7CiAgICAgICAgYm9vbCBlbmFibGVkID0ga2Et
+PklzRW5hYmxlZCgpOwogICAgICAgIGlmIChJbUd1aTo6Q2hlY2tib3goIktp
+bGxBdXJhIiwgJmVuYWJsZWQpKQogICAgICAgICAgICBrYS0+U2V0RW5hYmxl
+ZChlbmFibGVkKTsKICAgICAgICBpZiAoSW1HdWk6OklzSXRlbUhvdmVyZWQo
+KSkKICAgICAgICAgICAgSW1HdWk6OlNldFRvb2x0aXAoIlN0YW5kYXJkIG1l
+bGVlIGF1cmEuIEtlZXAgcmVhY2ggdW5kZXIgMy4wZiBmb3IgYnlwYXNzLiIp
+OwoKICAgICAgICBmbG9hdCByZWFjaCA9IGthLT5HZXRSZWFjaCgpOwogICAg
+ICAgIGlmIChJbUd1aTo6U2xpZGVyRmxvYXQoIlJlYWNoIyNrYSIsICZyZWFj
+aCwgMi4wZiwgNi4wZiwgIiUuMWYiKSkKICAgICAgICAgICAga2EtPlNldFJl
+YWNoKHJlYWNoKTsKCiAgICAgICAgZmxvYXQgZm92ID0ga2EtPkdldEZPVigp
+OwogICAgICAgIGlmIChJbUd1aTo6U2xpZGVyRmxvYXQoIkZPViMja2EiLCAm
+Zm92LCAxMC4wZiwgMTgwLjBmPCAiJS4wZiIpKQogICAgICAgICAgICBrYS0+
+U2V0Rk9WKGZvdik7CgogICAgICAgIGJvb2wgZW5hYmxlZDM2MCA9IGthLT5J
+czM2MEVuYWJsZWQoKTsKICAgICAgICBpZiAoSW1HdWk6OkNoZWNrYm94KCIz
+NjAgTW9kZSMja2EiLCAmZW5hYmxlMzYwKSkKICAgICAgICAgICAga2EtPlNl
+dDM2MEVuYWJsZWQoZW5hYmxlMzYwKTsKICAgICAgICBpZiAoSW1HdWk6Oklz
+SXRlbUhvdmVyZWQoKSkKICAgICAgICAgICAgSW1HdWk6OlNldFRvb2x0aXAo
+IkJ5cGFzcyBGT1YgY2hlY2sgdG8gaGl0IGVudGl0aWVzIGFsbCBhcm91bmQg
+eW91LiIpOwoKICAgICAgICBib29sIHBrdE9wdCA9IGthLT5Jc1BhY2tldE9y
+ZGVyT3B0aW1pemVFbmFibGVkKCk7CiAgICAgICAgaWYgKEltR3VpOjpDaGVj
+a2JveCgiUGFja2V0IE9yZGVyIE9wdGltaXplIyNrYSIsICZwa3RPcHQpKQog
+ICAgICAgICAgICBrYS0+U2V0UGFja2V0T3JkZXJPcHRpbWl6ZUVuYWJsZWQo
+cGt0T3B0KTsKICAgICAgICBpZiAoSW1HdWk6OklzSXRlbUhvdmVyZWQoKSkK
+ICAgICAgICAgICAgSW1HdWk6OlNldFRvb2x0aXAoIkF0dGFjayBwYWNrZXQg
+c2VudCBiZWZvcmUgbW92ZW1lbnQgcGFja2V0LiBTZXJ2ZXIgZXZhbHVhdGVz
+IHJlYWNoIGF0IGxhc3QtdGljayBwb3NpdGlvbi4iKTsKICAgIH0KCiAgICBJ
+bUd1aTo6U2VwYXJhdG9yKCk7CgogICAgQWltYm90KiBhYiA9IHN0YXRpY19j
+YXN0PEFpbWJvdCo+KE1vZHVsZU1hbmFnZXI6OkdldE1vZHVsZSgiQWltYm90
+IikpOwogICAgaWYgKGFiKSB7CiAgICAgICAgYm9vbCBhYkVuYWJsZWQgPSBh
+Yi0+SXNFbmFibGVkKCk7CiAgICAgICAgaWYgKEltR3VpOjpDaGVja2JveCgi
+QWltYm90IiwgJmFiRW5hYmxlZCkpCiAgICAgICAgICAgIGFiLT5TZXRFbmFi
+bGVkKGFiRW5hYmxlZCk7CiAgICAgICAgaWYgKEltR3VpOjpJc0l0ZW1Ib3Zl
+cmVkKCkpCiAgICAgICAgICAgIEltR3VpOjpTZXRUb29sdGlwKCJTbW9vdGgg
+aHVtYW5pc2VkIGFpbSBhc3Npc3QuIEFjdGl2YXRlcyBvbiBMTUIgaG9sZC4i
+KTsKCiAgICAgICAgZmxvYXQgYWJGb3YgPSBhYi0+R2V0Rk9WKCk7CiAgICAg
+ICAgaWYgKEltR3VpOjpTbGlkZXJGbG9hdCgiRk9WIyNhYiIsICZhYkZvdiwg
+MTAuMGYsIDE4MC4wZiwgIiUuMGYiKSkKICAgICAgICAgICAgYWItPlNldEZP
+VihhYkZvdik7CiAgICAgICAgaWYgKEltR3VpOjpJc0l0ZW1Ib3ZlcmVkKCkp
+CiAgICAgICAgICAgIEltR3VpOjpTZXRUb29sdGlwKCJBbmd1bGFyIHJhZGl1
+cyAoZGVncmVlcykgdG8gc2NhbiBmb3IgdGFyZ2V0cy4gTG93ZXIgPSB0aWdo
+dGVyIGxvY2suIik7CgogICAgICAgIGZsb2F0IGFiU3BlZWQgPSBhYi0+R2V0
+U21vb3RoU3BlZWQoKTsKICAgICAgICBpZiAoSW1HdWk6OlNsaWRlckZsb2F0
+KCJTbW9vdGggU3BlZWQjI2FiIiwgJmFiU3BlZWQsIDAuMDFmLCAxLjBmLCAi
+JS4yZiIpKQogICAgICAgICAgICBhYi0+U2V0U21vb3RoU3BlZWQoYWJTcGVl
+ZCk7CiAgICAgICAgaWYgKEltR3VpOjpJc0l0ZW1Ib3ZlcmVkKCkpCiAgICAg
+ICAgICAgIEltR3VpOjpTZXRUb29sdGlwKCJCYXNlIGxlcnAgZmFjdG9yLiAw
+LjAxID0gdmVyeSBzbG93L2h1bWFuLCAxLjAgPSBuZWFyLWluc3RhbnQuIik7
+CiAgICB9CgogICAgSW1HdWk6OlNlcGFyYXRvcigpOwogICAgaWYgKEltR3Vp
+OjpDb2xsYXBzaW5nSGVhZGVyKCJDb21iYXQgTWFjcm9zIikpIHsKICAgICAg
+ICBJbUd1aTo6Q2hlY2tib3goIlN0dW5TbGFtIChNQjUpIiwgJmJTdHVuU2xh
+bUVuYWJsZWQpOwogICAgICAgIEltR3VpOjpDaGVja2JveCgiU3BlYXJEYXNo
+IChLZXkgMikiLCAmYlNwZWFyRGFzaEVuYWJsZWQpOwogICAgfQoKICAgIElt
+R3VpOjpFbmRDaGlsZCgpOwp9Cgp2b2lkIE1lbnU6OlJlbmRlclRlbGVwb3J0
+QXVyYVRhYigpIHsKICAgIEltR3VpOjpCZWdpbkNoaWxkKCJUZWxlcG9ydCBB
+dXJhIiwgSW1WZWMyKDAsIDApLCB0cnVlKTsKCiAgICBUZWxlcG9ydEF1cmEq
+IHRhID0gc3RhdGljX2Nhc3Q8VGVsZXBvcnRBdXJhKj4oTW9kdWxlTWFuYWdl
+cjo6R2V0TW9kdWxlKCJUZWxlcG9ydEF1cmEiKSk7CiAgICBpZiAodGEpIHsK
+ICAgICAgICBib29sIGVuYWJsZWQgPSB0YS0+SXNFbmFibGVkKCk7CiAgICAg
+ICAgaWYgKEltR3VpOjpDaGVja2JveCgiVGVsZXBvcnQgQXVyYSIsICZlbmFi
+bGVkKSkKICAgICAgICAgICAgdGEtPlNldEVuYWJsZWQoZW5hYmxlZCk7CiAg
+ICAgICAgaWYgKEltR3VpOjpJc0l0ZW1Ib3ZlcmVkKCkpCiAgICAgICAgICAg
+IEltR3VpOjpTZXRUb29sdGlwKCJDcm9zcy1tYXAgdGVsZXBvcnQgYXR0YWNr
+cy4gU3RhbmRhbG9uZSBtb2R1bGUuIik7CgogICAgICAgIGZsb2F0IHJlYWNo
+ID0gdGEtPkdldFJlYWNoKCk7CiAgICAgICAgaWYgKEltR3VpOjpTbGlkZXJG
+bG9hdCgiUmVhY2gjI3RhIiwgJnJlYWNoLCAxMC4wZiwgMTAwLjBmPCAiJS4w
+ZiIpKQogICAgICAgICAgICB0YS0+U2V0UmVhY2gocmVhY2gpOwogICAgfQoK
+ICAgIEltR3VpOjpFbmRDaGlsZCgpOwp9Cgp2b2lkIE1lbnU6OlJlbmRlclZp
+c3VhbHNUYWIoKSB7CiAgICBJbUd1aTo6QmVnaW5DaGlsZCgiVmlzdWFscyIs
+IEltVmVjMigwLCAwKSwgdHJ1ZSk7CgogICAgWFJheSogeHJheSA9IHN0YXRp
+Y19jYXN0PFhSYXkqPihNb2R1bGVNYW5hZ2VyOjpHZXRNb2R1bGUoIlhSYXki
+KSk7CiAgICBpZiAoeHJheSkgewogICAgICAgIGJvb2wgZW5hYmxlZCA9IHhy
+YXktPklzRW5hYmxlZCgpOwogICAgICAgIGlmIChJbUd1aTo6Q2hlY2tib3go
+IlhSYXkiLCAmZW5hYmxlZCkpCiAgICAgICAgICAgIHhyYXktPlNldEVuYWJs
+ZWQoZW5hYmxlZCk7CiAgICAgICAgaWYgKEltR3VpOjpJc0l0ZW1Ib3ZlcmVk
+KCkpCiAgICAgICAgICAgIEltR3VpOjpTZXRUb29sdGlwKCJTY2FucyBuZWFy
+YnkgYmxvY2tzIGFuZCBoaWdobGlnaHRzIG9yZXMvY2hlc3RzLiIpOwoKICAg
+ICAgICBJbUd1aTo6SW5kZW50KCk7CiAgICAgICAgSW1HdWk6OkNoZWNrYm94
+KCJEaWFtb25kIiwgICAgICYoeHJheS0+c2hvd0RpYW1vbmQpKTsKICAgICAg
+ICBJbUd1aTo6Q2hlY2tib3goIkdvbGQiLCAgICAgICAgICYoeHJheS0+c2hv
+d0dvbGQpKTsKICAgICAgICBJbUd1aTo6Q2hlY2tib3goIklyb24iLCAgICAg
+ICAgICYoeHJheS0+c2hvd0lyb24pKTsKICAgICAgICBJbUd1aTo6Q2hlY2ti
+b3goIkVtZXJhbGQiLCAgICAgICYoeHJheS0+c2hvd0VtZXJhbGQpKTsKICAg
+ICAgICBJbUd1aTo6Q2hlY2tib3goIk5ldGhlcml0ZSIsICAgICYoeHJheS0+
+c2hvd05ldGhlcml0ZSk7CiAgICAgICAgSW1HdWk6OkNoZWNrYm94KCJDaGVz
+dHMiLCAgICAgICYoeHJheS0+c2hvd0NoZXN0cykpOwogICAgICAgIEltR3Vp
+OjpDaGVja2JveCgiRW5kZXIgQ2hlc3RzIiwgJih4cmF5LT5zaG93RW5kZXJD
+aGVzdHMpKTsKICAgICAgICBJbUd1aTo6Q2hlY2tib3goIlNwYXduZXJzIiwg
+ICAgJih4cmF5LT5zaG93U3Bhd25lcnMpKTsKICAgICAgICBJbUd1aTo6Q2hl
+Y2tib3goIkhvcHBlcnMiLCAgICAgICYoeHJheS0+c2hvd0hvcHBlcnMpKTsK
+ICAgICAgICBJbUd1aTo6VW5pbmRlbnQoKTsKICAgIH0KCiAgICBJbUd1aTo6
+RW5kQ2hpbGQoKTsKfQo=
