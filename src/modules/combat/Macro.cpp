@@ -166,17 +166,17 @@ void Macro::OnTick() {
                                         double fallDistance = 0.0;
                                         if (entityClass) {
                                             // In 1.21.11, fallDistance is a double (D)
+                                            // field_6017 is fallDistance
                                             jfieldID fallDistField = env->GetFieldID(entityClass, "field_6017", "D");
                                             env->ExceptionClear();
                                             if (fallDistField) {
                                                 fallDistance = env->GetDoubleField(player, fallDistField);
                                                 env->ExceptionClear();
                                             } else {
-                                                // Fallback to float just in case
                                                 fallDistField = env->GetFieldID(entityClass, "field_6017", "F");
                                                 env->ExceptionClear();
                                                 if (fallDistField) {
-                                                    fallDistance = (float)env->GetFloatField(player, fallDistField);
+                                                    fallDistance = (float)env->GetDoubleField(player, fallDistField);
                                                     env->ExceptionClear();
                                                 }
                                             }
@@ -192,7 +192,14 @@ void Macro::OnTick() {
                                                 currentMaceKey = '1' + maces[0];
                                             } else {
                                                 // Multiple maces found. Apply heuristic:
-                                                // Leftmost = Breach, Rightmost = Density
+                                                // Usually players organize hotbar left-to-right.
+                                                // Let's assume Breach is the primary (leftmost) and Density is secondary (rightmost).
+                                                // Or vice versa based on common PvP layouts.
+                                                // We will assume: Leftmost = Breach, Rightmost = Density
+                                                // Wait, fallDistance starts at 0 and goes up.
+                                                // If we are falling from HIGH up (> 9), we want DENSITY.
+                                                // If we are falling from LOW height (<= 9), we want BREACH.
+                                                // Let's assume the user has Breach on the left, Density on the right.
                                                 if (fallDistance <= 9.0) {
                                                     // Want Breach (Leftmost)
                                                     currentMaceKey = '1' + maces.front();
