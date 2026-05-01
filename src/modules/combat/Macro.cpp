@@ -4,9 +4,6 @@
 #include <chrono>
 #include <algorithm>
 
-extern bool bStunSlamEnabled;
-extern bool bSpearDashEnabled;
-
 static std::mt19937 s_macroRng([]() -> uint32_t {
     std::random_device rd;
     return rd() ^ (uint32_t)(GetTickCount64() * 2654435761ULL);
@@ -139,8 +136,8 @@ void Macro::OnTick() {
     JNIEnv* env = nullptr;
     
     // Only attach JNI if we are actively triggering a macro to save CPU
-    if ((bStunSlamEnabled && stunSlamState == 0 && (GetAsyncKeyState(VK_XBUTTON2) & 0x8000)) || 
-        (bSpearDashEnabled && spearDashState == 0 && (GetAsyncKeyState('2') & 0x8000))) {
+    if ((stunSlamEnabled && stunSlamState == 0 && (GetAsyncKeyState(VK_XBUTTON2) & 0x8000)) || 
+        (spearDashEnabled && spearDashState == 0 && (GetAsyncKeyState('2') & 0x8000))) {
         
         if (JNIHelper::vm) {
             JNIHelper::vm->AttachCurrentThread((void**)&env, nullptr);
@@ -215,7 +212,7 @@ void Macro::OnTick() {
     }
 
     // --- StunSlam State Machine ---
-    if (bStunSlamEnabled) {
+    if (stunSlamEnabled) {
         if (stunSlamState == 0 && (GetAsyncKeyState(VK_XBUTTON2) & 0x8000)) {
             SendKeyDownEx(currentAxeKey);
             stunSlamNextTime = currentTime + GaussianSleep(12.0, 1.0, 10, 15);
@@ -256,7 +253,7 @@ void Macro::OnTick() {
     }
 
     // --- SpearDash Attribute Swapping State Machine ---
-    if (bSpearDashEnabled) {
+    if (spearDashEnabled) {
         if (spearDashState == 0 && (GetAsyncKeyState('2') & 0x8000)) {
             SendKeyDownEx(currentNoCdKey);
             spearDashNextTime = currentTime + GaussianSleep(12.0, 1.0, 10, 15);
