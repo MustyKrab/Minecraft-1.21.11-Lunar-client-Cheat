@@ -641,7 +641,6 @@ void ESP::UpdateDataLoop() {
                                         playerName = std::wstring((const wchar_t*)raw, len);
                                         env->ReleaseStringChars(nameStr, raw);
                                     }
-                                    // FIX: Delete local ref for textObj
                                     env->DeleteLocalRef(textObj);
                                 }
                             }
