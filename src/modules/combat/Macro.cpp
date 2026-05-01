@@ -55,7 +55,7 @@ void Macro::SendMouseUpEx() {
     SendInput(1, &input, sizeof(INPUT));
 }
 
-// JNI Helper to scan hotbar slots (0-8) for a specific item, optionally checking for an enchantment
+// JNI Helper to scan hotbar slots (0-8) for a specific item, optionally checking for an enchantment/name
 int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKey, const char* enchKey) {
     JNIEnv* env = (JNIEnv*)env_ptr;
     jobject inventory = (jobject)inventory_ptr;
@@ -65,6 +65,8 @@ int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKe
     jmethodID getStack = env->GetMethodID(invClass, "method_5438", "(I)Lnet/minecraft/class_1799;");
     env->ExceptionClear();
     if (!getStack) { env->DeleteLocalRef(invClass); return -1; }
+
+    int fallbackSlot = -1;
 
     for (int i = 0; i < 9; i++) {
         jobject stack = env->CallObjectMethod(inventory, getStack, i);
@@ -94,53 +96,94 @@ int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKe
                         std::string lowerItem = itemKey;
                         std::transform(lowerItem.begin(), lowerItem.end(), lowerItem.begin(), ::tolower);
                         
-                        bool match = (lowerStr.find(lowerItem) != std::string::npos);
+                        bool isCorrectItem = (lowerStr.find(lowerItem) != std::string::npos);
                         env->ReleaseStringUTFChars(jKey, keyStr);
                         env->DeleteLocalRef(jKey);
 
-                        if (match && enchKey != nullptr) {
-                            match = false; // Assume false until we find the enchantment
-                            // Get ComponentMap: method_57353 ()Lnet/minecraft/class_9323;
-                            jmethodID getComponents = env->GetMethodID(stackClass, "method_57353", "()Lnet/minecraft/class_9323;");
+                        if (isCorrectItem) {
+                            if (enchKey == nullptr) {
+                                env->DeleteLocalRef(itemClass);
+                                env->DeleteLocalRef(item);
+                                env->DeleteLocalRef(stackClass);
+                                env->DeleteLocalRef(stack);
+                                env->DeleteLocalRef(invClass);
+                                return i; // Exact match, no ench required
+                            }
+
+                            if (fallbackSlot == -1) fallbackSlot = i; // Save first matching item as fallback
+
+                            bool hasEnch = false;
+                            std::string lowerEnch = enchKey;
+                            std::transform(lowerEnch.begin(), lowerEnch.end(), lowerEnch.begin(), ::tolower);
+
+                            // 1. Check Enchantments Component (method_57356 -> class_9304)
+                            jmethodID getEnchants = env->GetMethodID(stackClass, "method_57356", "()Lnet/minecraft/class_9304;");
                             env->ExceptionClear();
-                            if (getComponents) {
-                                jobject compMap = env->CallObjectMethod(stack, getComponents);
+                            if (getEnchants) {
+                                jobject enchantsObj = env->CallObjectMethod(stack, getEnchants);
                                 env->ExceptionClear();
-                                if (compMap) {
-                                    jclass compMapClass = env->GetObjectClass(compMap);
-                                    jmethodID mapToString = env->GetMethodID(compMapClass, "toString", "()Ljava/lang/String;");
+                                if (enchantsObj) {
+                                    jclass enchClass = env->GetObjectClass(enchantsObj);
+                                    jmethodID toString = env->GetMethodID(enchClass, "toString", "()Ljava/lang/String;");
                                     env->ExceptionClear();
-                                    if (mapToString) {
-                                        jstring jCompStr = (jstring)env->CallObjectMethod(compMap, mapToString);
+                                    if (toString) {
+                                        jstring jStr = (jstring)env->CallObjectMethod(enchantsObj, toString);
                                         env->ExceptionClear();
-                                        if (jCompStr) {
-                                            const char* compStr = env->GetStringUTFChars(jCompStr, 0);
-                                            std::string lowerComp = compStr;
-                                            std::transform(lowerComp.begin(), lowerComp.end(), lowerComp.begin(), ::tolower);
-                                            
-                                            std::string lowerEnch = enchKey;
-                                            std::transform(lowerEnch.begin(), lowerEnch.end(), lowerEnch.begin(), ::tolower);
-                                            
-                                            if (lowerComp.find(lowerEnch) != std::string::npos) {
-                                                match = true;
+                                        if (jStr) {
+                                            const char* str = env->GetStringUTFChars(jStr, 0);
+                                            std::string enchStr = str;
+                                            std::transform(enchStr.begin(), enchStr.end(), enchStr.begin(), ::tolower);
+                                            if (enchStr.find(lowerEnch) != std::string::npos) {
+                                                hasEnch = true;
                                             }
-                                            env->ReleaseStringUTFChars(jCompStr, compStr);
-                                            env->DeleteLocalRef(jCompStr);
+                                            env->ReleaseStringUTFChars(jStr, str);
+                                            env->DeleteLocalRef(jStr);
                                         }
                                     }
-                                    env->DeleteLocalRef(compMapClass);
-                                    env->DeleteLocalRef(compMap);
+                                    env->DeleteLocalRef(enchClass);
+                                    env->DeleteLocalRef(enchantsObj);
                                 }
                             }
-                        }
 
-                        if (match) {
-                            env->DeleteLocalRef(itemClass);
-                            env->DeleteLocalRef(item);
-                            env->DeleteLocalRef(stackClass);
-                            env->DeleteLocalRef(stack);
-                            env->DeleteLocalRef(invClass);
-                            return i; // Found slot 0-8
+                            // 2. Check Custom Name (method_7964 -> class_2561)
+                            if (!hasEnch) {
+                                jmethodID getName = env->GetMethodID(stackClass, "method_7964", "()Lnet/minecraft/class_2561;");
+                                env->ExceptionClear();
+                                if (getName) {
+                                    jobject nameObj = env->CallObjectMethod(stack, getName);
+                                    env->ExceptionClear();
+                                    if (nameObj) {
+                                        jclass textClass = env->GetObjectClass(nameObj);
+                                        jmethodID getString = env->GetMethodID(textClass, "method_10851", "()Ljava/lang/String;");
+                                        env->ExceptionClear();
+                                        if (getString) {
+                                            jstring jStr = (jstring)env->CallObjectMethod(nameObj, getString);
+                                            env->ExceptionClear();
+                                            if (jStr) {
+                                                const char* str = env->GetStringUTFChars(jStr, 0);
+                                                std::string nameStr = str;
+                                                std::transform(nameStr.begin(), nameStr.end(), nameStr.begin(), ::tolower);
+                                                if (nameStr.find(lowerEnch) != std::string::npos) {
+                                                    hasEnch = true;
+                                                }
+                                                env->ReleaseStringUTFChars(jStr, str);
+                                                env->DeleteLocalRef(jStr);
+                                            }
+                                        }
+                                        env->DeleteLocalRef(textClass);
+                                        env->DeleteLocalRef(nameObj);
+                                    }
+                                }
+                            }
+
+                            if (hasEnch) {
+                                env->DeleteLocalRef(itemClass);
+                                env->DeleteLocalRef(item);
+                                env->DeleteLocalRef(stackClass);
+                                env->DeleteLocalRef(stack);
+                                env->DeleteLocalRef(invClass);
+                                return i; // Exact match with enchantment/name!
+                            }
                         }
                     }
                 }
@@ -151,8 +194,9 @@ int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKe
         env->DeleteLocalRef(stackClass);
         env->DeleteLocalRef(stack);
     }
+    
     env->DeleteLocalRef(invClass);
-    return -1;
+    return fallbackSlot; // Return fallback if no exact match found
 }
 
 void Macro::OnTick() {
@@ -210,20 +254,20 @@ void Macro::OnTick() {
                                         // field_6017 = fallDistance in class_1297 (Entity)
                                         jclass entityClass = env->FindClass("net/minecraft/class_1297");
                                         env->ExceptionClear();
-                                        double fallDistance = 0.0;
+                                        float fallDistance = 0.0f;
                                         if (entityClass) {
-                                            // Try double first (1.21.11)
-                                            jfieldID fallDistField = env->GetFieldID(entityClass, "field_6017", "D");
+                                            // Try float first (standard Java Edition mapping)
+                                            jfieldID fallDistField = env->GetFieldID(entityClass, "field_6017", "F");
                                             env->ExceptionClear();
                                             if (fallDistField) {
-                                                fallDistance = env->GetDoubleField(player, fallDistField);
+                                                fallDistance = env->GetFloatField(player, fallDistField);
                                                 env->ExceptionClear();
                                             } else {
-                                                // Fallback to float
-                                                fallDistField = env->GetFieldID(entityClass, "field_6017", "F");
+                                                // Fallback to double just in case
+                                                fallDistField = env->GetFieldID(entityClass, "field_6017", "D");
                                                 env->ExceptionClear();
                                                 if (fallDistField) {
-                                                    fallDistance = (double)env->GetFloatField(player, fallDistField);
+                                                    fallDistance = (float)env->GetDoubleField(player, fallDistField);
                                                     env->ExceptionClear();
                                                 }
                                             }
@@ -231,17 +275,12 @@ void Macro::OnTick() {
                                         }
 
                                         int maceSlot = -1;
-                                        if (fallDistance <= 9.0) {
+                                        if (fallDistance <= 9.0f) {
                                             // <= 9 blocks: Try to find Breach mace first
                                             maceSlot = FindHotbarSlot(env, inventory, "mace", "breach");
                                         } else {
                                             // > 9 blocks: Try to find Density mace first
                                             maceSlot = FindHotbarSlot(env, inventory, "mace", "density");
-                                        }
-                                        
-                                        // Fallback if specific enchanted mace wasn't found
-                                        if (maceSlot == -1) {
-                                            maceSlot = FindHotbarSlot(env, inventory, "mace", nullptr);
                                         }
                                         
                                         if (maceSlot != -1) currentMaceKey = '1' + maceSlot;
