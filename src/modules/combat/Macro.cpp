@@ -161,26 +161,20 @@ void Macro::OnTick() {
                                         currentNoCdKey = currentAxeKey; 
 
                                         // Fall distance check
-                                        jclass entityClass = env->FindClass("net/minecraft/class_1297");
-                                        env->ExceptionClear();
+                                        // Fetching directly from playerClass to avoid FindClass issues
                                         double fallDistance = 0.0;
-                                        if (entityClass) {
-                                            // In 1.21.11, fallDistance is a double (D)
-                                            // field_6017 is fallDistance
-                                            jfieldID fallDistField = env->GetFieldID(entityClass, "field_6017", "D");
+                                        jfieldID fallDistFieldD = env->GetFieldID(playerClass, "field_6017", "D");
+                                        env->ExceptionClear();
+                                        if (fallDistFieldD) {
+                                            fallDistance = env->GetDoubleField(player, fallDistFieldD);
                                             env->ExceptionClear();
-                                            if (fallDistField) {
-                                                fallDistance = env->GetDoubleField(player, fallDistField);
+                                        } else {
+                                            jfieldID fallDistFieldF = env->GetFieldID(playerClass, "field_6017", "F");
+                                            env->ExceptionClear();
+                                            if (fallDistFieldF) {
+                                                fallDistance = (double)env->GetFloatField(player, fallDistFieldF);
                                                 env->ExceptionClear();
-                                            } else {
-                                                fallDistField = env->GetFieldID(entityClass, "field_6017", "F");
-                                                env->ExceptionClear();
-                                                if (fallDistField) {
-                                                    fallDistance = (float)env->GetDoubleField(player, fallDistField);
-                                                    env->ExceptionClear();
-                                                }
                                             }
-                                            env->DeleteLocalRef(entityClass);
                                         }
 
                                         // Find all Maces
@@ -192,14 +186,7 @@ void Macro::OnTick() {
                                                 currentMaceKey = '1' + maces[0];
                                             } else {
                                                 // Multiple maces found. Apply heuristic:
-                                                // Usually players organize hotbar left-to-right.
-                                                // Let's assume Breach is the primary (leftmost) and Density is secondary (rightmost).
-                                                // Or vice versa based on common PvP layouts.
-                                                // We will assume: Leftmost = Breach, Rightmost = Density
-                                                // Wait, fallDistance starts at 0 and goes up.
-                                                // If we are falling from HIGH up (> 9), we want DENSITY.
-                                                // If we are falling from LOW height (<= 9), we want BREACH.
-                                                // Let's assume the user has Breach on the left, Density on the right.
+                                                // Leftmost = Breach, Rightmost = Density
                                                 if (fallDistance <= 9.0) {
                                                     // Want Breach (Leftmost)
                                                     currentMaceKey = '1' + maces.front();
