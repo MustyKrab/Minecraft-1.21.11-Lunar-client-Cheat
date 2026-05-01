@@ -10,95 +10,6 @@
 bool bStunSlamEnabled = false;
 bool bSpearDashEnabled = false;
 
-// --- JNI MACRO EXECUTIONS ---
-void ExecuteStunSlam(JNIEnv* env) {
-    jclass mcClass = env->FindClass("net/minecraft/class_310");
-    if (!mcClass) return;
-
-    jmethodID getInstance = env->GetStaticMethodID(mcClass, "method_1551", "()Lnet/minecraft/class_310;");
-    if (!getInstance) {
-        env->DeleteLocalRef(mcClass);
-        return;
-    }
-
-    jobject mc = env->CallStaticObjectMethod(mcClass, getInstance);
-    if (!mc) {
-        env->DeleteLocalRef(mcClass);
-        return;
-    }
-
-    jmethodID doAttack = env->GetMethodID(mcClass, "method_1536", "()Z");
-    if (doAttack) {
-        env->CallBooleanMethod(mc, doAttack);
-    }
-
-    env->DeleteLocalRef(mc);
-    env->DeleteLocalRef(mcClass);
-}
-
-void ExecuteSpearDash(JNIEnv* env) {
-    jclass mcClass = env->FindClass("net/minecraft/class_310");
-    if (!mcClass) return;
-
-    jmethodID getInstance = env->GetStaticMethodID(mcClass, "method_1551", "()Lnet/minecraft/class_310;");
-    if (!getInstance) {
-        env->DeleteLocalRef(mcClass);
-        return;
-    }
-
-    jobject mc = env->CallStaticObjectMethod(mcClass, getInstance);
-    if (!mc) {
-        env->DeleteLocalRef(mcClass);
-        return;
-    }
-
-    jmethodID doItemUse = env->GetMethodID(mcClass, "method_1583", "()V");
-    if (doItemUse) {
-        env->CallVoidMethod(mc, doItemUse);
-    }
-
-    env->DeleteLocalRef(mc);
-    env->DeleteLocalRef(mcClass);
-}
-
-// --- MACRO INPUT THREAD ---
-DWORD WINAPI MacroInputThread(LPVOID lpParam) {
-    JavaVM* jvm = (JavaVM*)lpParam;
-    JNIEnv* env = nullptr;
-    
-    jvm->AttachCurrentThread((void**)&env, nullptr);
-
-    bool stunSlamPressed = false;
-    bool spearDashPressed = false;
-
-    while (true) {
-        if (bStunSlamEnabled) {
-            if (GetAsyncKeyState(VK_XBUTTON2) & 0x8000) {
-                if (!stunSlamPressed) {
-                    ExecuteStunSlam(env);
-                    stunSlamPressed = true;
-                }
-            } else {
-                stunSlamPressed = false;
-            }
-        }
-
-        if (bSpearDashEnabled) {
-            if (GetAsyncKeyState(0x32) & 0x8000) {
-                if (!spearDashPressed) {
-                    ExecuteSpearDash(env);
-                    spearDashPressed = true;
-                }
-            } else {
-                spearDashPressed = false;
-            }
-        }
-        Sleep(1);
-    }
-    jvm->DetachCurrentThread();
-    return 0;
-}
-
 // Custom PEB structures for stealth
 typedef struct _UNICODE_STRING_C {
     USHORT Length;
@@ -173,10 +84,6 @@ DWORD WINAPI CheatThread(LPVOID lParam) {
     if (JNIHelper::Initialize()) {
         ModuleManager::Initialize();
         
-        // Start the Macro Input Thread
-        CreateThread(nullptr, 0, MacroInputThread, JNIHelper::vm, 0, nullptr);
-        
-        // FIX: Added a way to cleanly exit the cheat thread (e.g. pressing END key)
         while (!(GetAsyncKeyState(VK_END) & 0x8000)) {
             ModuleManager::OnTick();
             std::this_thread::sleep_for(std::chrono::milliseconds(16)); // ~60 TPS
