@@ -5,6 +5,9 @@
 
 class Macro : public Module {
 private:
+    bool stunSlamEnabled = false;
+    bool spearDashEnabled = false;
+
     int stunSlamState = 0;
     long long stunSlamNextTime = 0;
     char currentAxeKey = '1';
@@ -27,4 +30,10 @@ private:
 public:
     Macro();
     void OnTick() override;
+
+    bool IsStunSlamEnabled() const { return stunSlamEnabled; }
+    void SetStunSlamEnabled(bool e) { stunSlamEnabled = e; }
+    
+    bool IsSpearDashEnabled() const { return spearDashEnabled; }
+    void SetSpearDashEnabled(bool e) { spearDashEnabled = e; }
 };
