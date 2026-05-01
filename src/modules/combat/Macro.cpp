@@ -82,6 +82,7 @@ std::vector<int> Macro::GetItemSlots(void* env_ptr, void* inventory_ptr, const c
             env->ExceptionClear();
             if (item) {
                 jclass itemClass = env->GetObjectClass(item);
+                // method_7866 = getTranslationKey()
                 jmethodID getTranslationKey = env->GetMethodID(itemClass, "method_7866", "()Ljava/lang/String;");
                 env->ExceptionClear();
                 
@@ -164,16 +165,18 @@ void Macro::OnTick() {
                                         env->ExceptionClear();
                                         double fallDistance = 0.0;
                                         if (entityClass) {
+                                            // In 1.21.11, fallDistance is a double (D)
                                             jfieldID fallDistField = env->GetFieldID(entityClass, "field_6017", "D");
                                             env->ExceptionClear();
                                             if (fallDistField) {
                                                 fallDistance = env->GetDoubleField(player, fallDistField);
                                                 env->ExceptionClear();
                                             } else {
+                                                // Fallback to float just in case
                                                 fallDistField = env->GetFieldID(entityClass, "field_6017", "F");
                                                 env->ExceptionClear();
                                                 if (fallDistField) {
-                                                    fallDistance = (float)env->GetDoubleField(player, fallDistField);
+                                                    fallDistance = (float)env->GetFloatField(player, fallDistField);
                                                     env->ExceptionClear();
                                                 }
                                             }
@@ -189,10 +192,7 @@ void Macro::OnTick() {
                                                 currentMaceKey = '1' + maces[0];
                                             } else {
                                                 // Multiple maces found. Apply heuristic:
-                                                // Usually players organize hotbar left-to-right.
-                                                // Let's assume Breach is the primary (leftmost) and Density is secondary (rightmost).
-                                                // Or vice versa based on common PvP layouts.
-                                                // We will assume: Leftmost = Breach, Rightmost = Density
+                                                // Leftmost = Breach, Rightmost = Density
                                                 if (fallDistance <= 9.0) {
                                                     // Want Breach (Leftmost)
                                                     currentMaceKey = '1' + maces.front();
