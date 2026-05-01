@@ -174,7 +174,7 @@ DWORD WINAPI CheatThread(LPVOID lParam) {
         ModuleManager::Initialize();
         
         // Start the Macro Input Thread
-        CreateThread(nullptr, 0, MacroInputThread, JNIHelper::GetJVM(), 0, nullptr);
+        CreateThread(nullptr, 0, MacroInputThread, JNIHelper::vm, 0, nullptr);
         
         // FIX: Added a way to cleanly exit the cheat thread (e.g. pressing END key)
         while (!(GetAsyncKeyState(VK_END) & 0x8000)) {
