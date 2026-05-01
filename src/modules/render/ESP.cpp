@@ -18,7 +18,7 @@
 #pragma comment(lib, "gdiplus.lib")
 using namespace Gdiplus;
 
-// ─ slider drag state ───────────────────────────────────────────────────────
+// ─ slider drag state ──────────────────────────────────────────────────────────
 static bool draggingKaReachSlider    = false;
 static bool draggingKaFovSlider      = false;
 static bool draggingTaReachSlider    = false;
@@ -29,7 +29,7 @@ static bool draggingAcMaxSlider      = false;
 static bool draggingEspRangeSlider   = false;
 static bool draggingReachSlider      = false;
 
-// ─ cached GDI+ objects (created once, reused every frame) ──────────────────
+// ─ cached GDI+ objects (created once, reused every frame) ───────────────────
 // Pens
 static Pen*        s_blackPen4      = nullptr;
 static Pen*        s_espPen2        = nullptr;
@@ -148,7 +148,8 @@ static HDC GetCachedWindowDC(HWND hwnd) {
     return s_windowDC;
 }
 
-// ─ ctor / dtor ─────────────────────────────────────────────────────────────
+// ─ ctor / dtor ──────────────────────────────────────────────────────────────
+
 ESP::ESP() : Module("ESP") {}
 
 ESP::~ESP() {
@@ -197,7 +198,8 @@ LRESULT CALLBACK ESP::OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
     return DefWindowProc(hwnd, msg, wParam, lParam);
 }
 
-// ─ WorldToScreen ───────────────────────────────────────────────────────────
+// ─ WorldToScreen ────────────────────────────────────────────────────────────
+
 bool ESP::WorldToScreen(Vec3 pos, Vec3 camPos, float* mv, float* p, Vec2& screen, int width, int height) {
     float x = (float)(pos.x - camPos.x);
     float y = (float)(pos.y - camPos.y);
@@ -221,7 +223,7 @@ bool ESP::WorldToScreen(Vec3 pos, Vec3 camPos, float* mv, float* p, Vec2& screen
     return true;
 }
 
-// ─ Draw3DBox ───────────────────────────────────────────────────────────────
+// ─ Draw3DBox ────────────────────────────────────────────────────────────────
 // s_colorPen is mutated in-place — zero heap alloc per call.
 void ESP::Draw3DBox(Graphics& g, Vec3 feet, float w, float h, Vec3 camPos, float* mv, float* p, int sW, int sH, Color color) {
     float hw = w / 2.0f;
@@ -249,7 +251,7 @@ void ESP::Draw3DBox(Graphics& g, Vec3 feet, float w, float h, Vec3 camPos, float
     line(0,4); line(1,5); line(2,6); line(3,7);
 }
 
-// ─ DrawProfessionalESP ─────────────────────────────────────────────────────
+// ─ DrawProfessionalESP ──────────────────────────────────────────────────────
 // s_hpBrush mutated in-place — no heap alloc per player.
 void ESP::DrawProfessionalESP(Graphics& g, float x, float y, float w, float h,
                               float health, float maxHealth,
@@ -277,10 +279,10 @@ void ESP::DrawProfessionalESP(Graphics& g, float x, float y, float w, float h,
 
     PointF textPos(x + w / 2.0f, y - 16.0f);
     g.DrawString(textBuf, -1, s_espFont, PointF(textPos.X+1, textPos.Y+1), s_centerFmt, s_shadowBrush);
-    g.DrawString(textBuf, -1, s_espFont, textPos,                          s_centerFmt, s_textBrush);
+    g.DrawString(textBuf, -1, s_espFont, textPos,                      s_centerFmt, s_textBrush);
 }
 
-// ─ DrawGUI ─────────────────────────────────────────────────────────────────
+// ─ DrawGUI ──────────────────────────────────────────────────────────────────
 void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool rightClickAction) {
     int totalHeight = 60;
     for (Module* mod : ModuleManager::GetModules()) {
@@ -367,15 +369,15 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
             if (nameStr == "XRay") {
                 XRay* xray = (XRay*)mod;
                 if (xray) {
-                    y += DrawCheckbox(L"Diamond Ore",             xray->showDiamond,     130, y);
-                    y += DrawCheckbox(L"Gold Ore",                xray->showGold,        130, y);
-                    y += DrawCheckbox(L"Iron Ore",                xray->showIron,        130, y);
-                    y += DrawCheckbox(L"Emerald Ore",             xray->showEmerald,     130, y);
-                    y += DrawCheckbox(L"Ancient Debris",          xray->showNetherite,   130, y);
+                    y += DrawCheckbox(L"Diamond Ore",      xray->showDiamond,     130, y);
+                    y += DrawCheckbox(L"Gold Ore",         xray->showGold,        130, y);
+                    y += DrawCheckbox(L"Iron Ore",         xray->showIron,        130, y);
+                    y += DrawCheckbox(L"Emerald Ore",      xray->showEmerald,     130, y);
+                    y += DrawCheckbox(L"Ancient Debris",   xray->showNetherite,   130, y);
                     y += DrawCheckbox(L"Chests, Barrels & Shulkers", xray->showChests,    130, y);
-                    y += DrawCheckbox(L"Ender Chests",            xray->showEnderChests, 130, y);
-                    y += DrawCheckbox(L"Spawners",                xray->showSpawners,    130, y);
-                    y += DrawCheckbox(L"Hoppers",                 xray->showHoppers,     130, y);
+                    y += DrawCheckbox(L"Ender Chests",     xray->showEnderChests, 130, y);
+                    y += DrawCheckbox(L"Spawners",         xray->showSpawners,    130, y);
+                    y += DrawCheckbox(L"Hoppers",          xray->showHoppers,     130, y);
                 }
             } else if (nameStr == "Killaura") {
                 Killaura* ka = (Killaura*)mod;
@@ -465,7 +467,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
     }
 }
 
-// ─ UpdateDataLoop ──────────────────────────────────────────────────────────
+// ─ UpdateDataLoop ───────────────────────────────────────────────────────────
 void ESP::UpdateDataLoop() {
     JNIEnv* env = nullptr;
     jint getEnvStat = JNIHelper::vm->GetEnv((void**)&env, JNI_VERSION_1_8);
@@ -482,7 +484,7 @@ void ESP::UpdateDataLoop() {
         return false;
     };
 
-    // ─ class lookup with retry ─────────────────────────────────────────────
+    // ─ class lookup with retry ──────────────────────────────────────────────
     jclass mcClass = nullptr, worldClass = nullptr, entityClass = nullptr, livingEntityClass = nullptr;
     jclass rendererClass = nullptr, cameraClass = nullptr, vec3dClass = nullptr, matrixClass = nullptr;
     jclass textClass = nullptr;
@@ -509,7 +511,7 @@ void ESP::UpdateDataLoop() {
         return;
     }
 
-    // ─ field / method IDs ──────────────────────────────────────────────────
+    // ─ field / method IDs ───────────────────────────────────────────────────
     jfieldID instanceField    = JNIHelper::GetStaticFieldSafe(mcClass,        "field_1700",  "Lnet/minecraft/class_310;",  "instance");
     jfieldID localPlayerField = JNIHelper::GetFieldSafe(mcClass,              "field_1724",  "Lnet/minecraft/class_746;",  "player");
     jfieldID worldField       = JNIHelper::GetFieldSafe(mcClass,              "field_1687",  "Lnet/minecraft/class_638;",  "world");
@@ -564,14 +566,14 @@ void ESP::UpdateDataLoop() {
     }
 
     if (!instanceField || !localPlayerField || !worldField || !rendererField ||
-        !playersField   || !listSize         || !listGet   || !entX           ||
-        !entY           || !entZ             || !camField  || !modelViewField ||
-        !projField      || !camPosField      || !matrixValid) {
+        !playersField   || !listSize        || !listGet   || !entX           ||
+        !entY           || !entZ            || !camField  || !modelViewField ||
+        !projField      || !camPosField     || !matrixValid) {
         if (getEnvStat == JNI_EDETACHED) JNIHelper::vm->DetachCurrentThread();
         return;
     }
 
-    // ─ data loop ───────────────────────────────────────────────────────────
+    // ─ data loop ────────────────────────────────────────────────────────────
     while (running) {
         if (env->PushLocalFrame(128) < 0) {
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -689,7 +691,7 @@ void ESP::UpdateDataLoop() {
     if (getEnvStat == JNI_EDETACHED) JNIHelper::vm->DetachCurrentThread();
 }
 
-// ─ RenderLoop ──────────────────────────────────────────────────────────────
+// ─ RenderLoop ───────────────────────────────────────────────────────────────
 void ESP::RenderLoop() {
     GdiplusStartupInput gdiplusStartupInput;
     GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
@@ -773,7 +775,7 @@ void ESP::RenderLoop() {
         bool rightClickAction = isRightClicked && !wasRightClicked;
         wasRightClicked       = isRightClicked;
 
-        // ─ back-buffer ───────────────────────────────────────────────────────
+        // ─ back-buffer ──────────────────────────────────────────────────────
         HDC hdc = GetCachedWindowDC(overlayWindow);
         EnsureBackBuffer(hdc, width, height);
 
