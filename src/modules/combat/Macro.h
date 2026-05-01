@@ -2,6 +2,7 @@
 #include "../Module.h"
 #include <random>
 #include <windows.h>
+#include <vector>
 
 class Macro : public Module {
 private:
@@ -25,7 +26,7 @@ private:
     void SendMouseUpEx();
     long long GetTimeMs();
     
-    int FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKey, const char* enchKey);
+    std::vector<int> GetItemSlots(void* env_ptr, void* inventory_ptr, const char* itemKey);
 
 public:
     Macro();
