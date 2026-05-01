@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <chrono>
 #include <algorithm>
+#include <string>
 
 static std::mt19937 s_macroRng([]() -> uint32_t {
     std::random_device rd;
@@ -63,69 +64,94 @@ int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKe
     jclass invClass = env->GetObjectClass(inventory);
     // method_5438 = getStack(int slot)
     jmethodID getStack = env->GetMethodID(invClass, "method_5438", "(I)Lnet/minecraft/class_1799;");
+    if (env->ExceptionCheck()) { env->ExceptionClear(); }
     if (!getStack) { env->DeleteLocalRef(invClass); return -1; }
 
     for (int i = 0; i < 9; i++) {
         jobject stack = env->CallObjectMethod(inventory, getStack, i);
+        if (env->ExceptionCheck()) { env->ExceptionClear(); continue; }
         if (!stack) continue;
 
         jclass stackClass = env->GetObjectClass(stack);
         // method_7909 = getItem()
         jmethodID getItem = env->GetMethodID(stackClass, "method_7909", "()Lnet/minecraft/class_1792;");
-        if (!getItem) { env->DeleteLocalRef(stackClass); env->DeleteLocalRef(stack); continue; }
+        if (env->ExceptionCheck()) { env->ExceptionClear(); }
+        
+        if (getItem) {
+            jobject item = env->CallObjectMethod(stack, getItem);
+            if (env->ExceptionCheck()) { env->ExceptionClear(); }
+            if (item) {
+                jclass itemClass = env->GetObjectClass(item);
+                // method_7866 = getTranslationKey()
+                jmethodID getTranslationKey = env->GetMethodID(itemClass, "method_7866", "()Ljava/lang/String;");
+                if (env->ExceptionCheck()) { env->ExceptionClear(); }
+                
+                if (getTranslationKey) {
+                    jstring jKey = (jstring)env->CallObjectMethod(item, getTranslationKey);
+                    if (env->ExceptionCheck()) { env->ExceptionClear(); }
+                    if (jKey) {
+                        const char* keyStr = env->GetStringUTFChars(jKey, 0);
+                        bool match = (strstr(keyStr, itemKey) != nullptr);
+                        env->ReleaseStringUTFChars(jKey, keyStr);
+                        env->DeleteLocalRef(jKey);
 
-        jobject item = env->CallObjectMethod(stack, getItem);
-        if (!item) { env->DeleteLocalRef(stackClass); env->DeleteLocalRef(stack); continue; }
-
-        jclass itemClass = env->GetObjectClass(item);
-        // method_7866 = getTranslationKey()
-        jmethodID getTranslationKey = env->GetMethodID(itemClass, "method_7866", "()Ljava/lang/String;");
-        if (!getTranslationKey) { env->DeleteLocalRef(itemClass); env->DeleteLocalRef(item); env->DeleteLocalRef(stackClass); env->DeleteLocalRef(stack); continue; }
-
-        jstring jKey = (jstring)env->CallObjectMethod(item, getTranslationKey);
-        const char* keyStr = env->GetStringUTFChars(jKey, 0);
-        bool match = (strstr(keyStr, itemKey) != nullptr);
-        env->ReleaseStringUTFChars(jKey, keyStr);
-        env->DeleteLocalRef(jKey);
-
-        if (match && enchKey != nullptr) {
-            // Check enchantments if required (e.g. Breach vs Density)
-            // method_7921 = getEnchantments()
-            jmethodID getEnchants = env->GetMethodID(stackClass, "method_7921", "()Lnet/minecraft/class_2499;");
-            if (getEnchants) {
-                jobject nbtList = env->CallObjectMethod(stack, getEnchants);
-                if (nbtList) {
-                    jclass nbtListClass = env->GetObjectClass(nbtList);
-                    // method_10534 = toString() -> easy way to check NBT contents
-                    jmethodID toString = env->GetMethodID(nbtListClass, "toString", "()Ljava/lang/String;");
-                    if (toString) {
-                        jstring jNbtStr = (jstring)env->CallObjectMethod(nbtList, toString);
-                        const char* nbtStr = env->GetStringUTFChars(jNbtStr, 0);
-                        if (strstr(nbtStr, enchKey) == nullptr) {
-                            match = false; // Enchantment not found
+                        if (match && enchKey != nullptr) {
+                            // In 1.21, enchantments are components. method_57356 = getEnchantments() returning class_9304
+                            jmethodID getEnchants = env->GetMethodID(stackClass, "method_57356", "()Lnet/minecraft/class_9304;");
+                            if (env->ExceptionCheck()) { env->ExceptionClear(); }
+                            
+                            if (!getEnchants) {
+                                // Fallback to pre-1.20.5 NBT method
+                                getEnchants = env->GetMethodID(stackClass, "method_7921", "()Lnet/minecraft/class_2499;");
+                                if (env->ExceptionCheck()) { env->ExceptionClear(); }
+                            }
+                            
+                            if (getEnchants) {
+                                jobject enchantsObj = env->CallObjectMethod(stack, getEnchants);
+                                if (env->ExceptionCheck()) { env->ExceptionClear(); }
+                                if (enchantsObj) {
+                                    jclass enchClass = env->GetObjectClass(enchantsObj);
+                                    jmethodID toString = env->GetMethodID(enchClass, "toString", "()Ljava/lang/String;");
+                                    if (env->ExceptionCheck()) { env->ExceptionClear(); }
+                                    if (toString) {
+                                        jstring jStr = (jstring)env->CallObjectMethod(enchantsObj, toString);
+                                        if (env->ExceptionCheck()) { env->ExceptionClear(); }
+                                        if (jStr) {
+                                            const char* str = env->GetStringUTFChars(jStr, 0);
+                                            std::string lowerStr = str;
+                                            std::transform(lowerStr.begin(), lowerStr.end(), lowerStr.begin(), ::tolower);
+                                            std::string lowerEnch = enchKey;
+                                            std::transform(lowerEnch.begin(), lowerEnch.end(), lowerEnch.begin(), ::tolower);
+                                            
+                                            if (lowerStr.find(lowerEnch) == std::string::npos) {
+                                                match = false; // Enchantment not found
+                                            }
+                                            env->ReleaseStringUTFChars(jStr, str);
+                                            env->DeleteLocalRef(jStr);
+                                        } else match = false;
+                                    } else match = false;
+                                    env->DeleteLocalRef(enchClass);
+                                    env->DeleteLocalRef(enchantsObj);
+                                } else match = false;
+                            } else match = false;
                         }
-                        env->ReleaseStringUTFChars(jNbtStr, nbtStr);
-                        env->DeleteLocalRef(jNbtStr);
+
+                        if (match) {
+                            env->DeleteLocalRef(itemClass);
+                            env->DeleteLocalRef(item);
+                            env->DeleteLocalRef(stackClass);
+                            env->DeleteLocalRef(stack);
+                            env->DeleteLocalRef(invClass);
+                            return i; // Found slot 0-8
+                        }
                     }
-                    env->DeleteLocalRef(nbtListClass);
-                    env->DeleteLocalRef(nbtList);
-                } else {
-                    match = false; // No enchantments
                 }
-            } else {
-                match = false;
+                env->DeleteLocalRef(itemClass);
+                env->DeleteLocalRef(item);
             }
         }
-
-        env->DeleteLocalRef(itemClass);
-        env->DeleteLocalRef(item);
         env->DeleteLocalRef(stackClass);
         env->DeleteLocalRef(stack);
-
-        if (match) {
-            env->DeleteLocalRef(invClass);
-            return i; // Found slot 0-8
-        }
     }
     env->DeleteLocalRef(invClass);
     return -1;
@@ -145,66 +171,78 @@ void Macro::OnTick() {
         
         if (env) {
             jclass mcClass = env->FindClass("net/minecraft/class_310");
+            if (env->ExceptionCheck()) { env->ExceptionClear(); }
             if (mcClass) {
                 jmethodID getInstance = env->GetStaticMethodID(mcClass, "method_1551", "()Lnet/minecraft/class_310;");
-                jobject mc = env->CallStaticObjectMethod(mcClass, getInstance);
-                if (mc) {
-                    // field_1724 = player
-                    jfieldID playerField = env->GetFieldID(mcClass, "field_1724", "Lnet/minecraft/class_746;");
-                    jobject player = env->GetObjectField(mc, playerField);
-                    if (player) {
-                        jclass playerClass = env->GetObjectClass(player);
-                        // field_7514 = inventory
-                        jfieldID invField = env->GetFieldID(playerClass, "field_7514", "Lnet/minecraft/class_1661;");
-                        jobject inventory = env->GetObjectField(player, invField);
-                        
-                        if (inventory) {
-                            // --- Dynamic Hotbar Resolution ---
-                            
-                            // Find Axe (any type)
-                            int axeSlot = FindHotbarSlot(env, inventory, "axe", nullptr);
-                            if (axeSlot != -1) currentAxeKey = '1' + axeSlot;
-                            
-                            // Find Spear
-                            int spearSlot = FindHotbarSlot(env, inventory, "spear", nullptr); // Assuming 'spear' is in the translation key
-                            if (spearSlot != -1) currentSpearKey = '1' + spearSlot;
-                            
-                            // Find No-CD item (fallback to Axe if none found)
-                            currentNoCdKey = currentAxeKey; 
+                if (env->ExceptionCheck()) { env->ExceptionClear(); }
+                if (getInstance) {
+                    jobject mc = env->CallStaticObjectMethod(mcClass, getInstance);
+                    if (env->ExceptionCheck()) { env->ExceptionClear(); }
+                    if (mc) {
+                        // field_1724 = player
+                        jfieldID playerField = env->GetFieldID(mcClass, "field_1724", "Lnet/minecraft/class_746;");
+                        if (env->ExceptionCheck()) { env->ExceptionClear(); }
+                        if (playerField) {
+                            jobject player = env->GetObjectField(mc, playerField);
+                            if (env->ExceptionCheck()) { env->ExceptionClear(); }
+                            if (player) {
+                                jclass playerClass = env->GetObjectClass(player);
+                                // field_7514 = inventory
+                                jfieldID invField = env->GetFieldID(playerClass, "field_7514", "Lnet/minecraft/class_1661;");
+                                if (env->ExceptionCheck()) { env->ExceptionClear(); }
+                                if (invField) {
+                                    jobject inventory = env->GetObjectField(player, invField);
+                                    if (env->ExceptionCheck()) { env->ExceptionClear(); }
+                                    
+                                    if (inventory) {
+                                        // --- Dynamic Hotbar Resolution ---
+                                        
+                                        // Find Axe (any type)
+                                        int axeSlot = FindHotbarSlot(env, inventory, "axe", nullptr);
+                                        if (axeSlot != -1) currentAxeKey = '1' + axeSlot;
+                                        
+                                        // Find Spear
+                                        int spearSlot = FindHotbarSlot(env, inventory, "spear", nullptr);
+                                        if (spearSlot != -1) currentSpearKey = '1' + spearSlot;
+                                        
+                                        // Find No-CD item (fallback to Axe if none found)
+                                        currentNoCdKey = currentAxeKey; 
 
-                            // Fall distance check for Mace logic
-                            // field_6017 = fallDistance
-                            jfieldID fallDistField = env->GetFieldID(playerClass, "field_6017", "F");
-                            float fallDistance = 0.0f;
-                            if (fallDistField) {
-                                fallDistance = env->GetFloatField(player, fallDistField);
-                            }
+                                        // Fall distance check for Mace logic
+                                        // field_6017 = fallDistance
+                                        jfieldID fallDistField = env->GetFieldID(playerClass, "field_6017", "F");
+                                        if (env->ExceptionCheck()) { env->ExceptionClear(); }
+                                        float fallDistance = 0.0f;
+                                        if (fallDistField) {
+                                            fallDistance = env->GetFloatField(player, fallDistField);
+                                            if (env->ExceptionCheck()) { env->ExceptionClear(); }
+                                        }
 
-                            int maceSlot = -1;
-                            if (fallDistance < 9.0f) {
-                                // Try to find Breach mace first
-                                maceSlot = FindHotbarSlot(env, inventory, "mace", "breach");
-                                if (maceSlot == -1) {
-                                    // Fallback to any mace
-                                    maceSlot = FindHotbarSlot(env, inventory, "mace", nullptr);
+                                        int maceSlot = -1;
+                                        if (fallDistance <= 9.0f) {
+                                            // <= 9 blocks: Try to find Breach mace first
+                                            maceSlot = FindHotbarSlot(env, inventory, "mace", "breach");
+                                        } else {
+                                            // > 9 blocks: Try to find Density mace first
+                                            maceSlot = FindHotbarSlot(env, inventory, "mace", "density");
+                                        }
+                                        
+                                        // Fallback if specific enchanted mace wasn't found
+                                        if (maceSlot == -1) {
+                                            maceSlot = FindHotbarSlot(env, inventory, "mace", nullptr);
+                                        }
+                                        
+                                        if (maceSlot != -1) currentMaceKey = '1' + maceSlot;
+
+                                        env->DeleteLocalRef(inventory);
+                                    }
                                 }
-                            } else {
-                                // Try to find Density mace first
-                                maceSlot = FindHotbarSlot(env, inventory, "mace", "density");
-                                if (maceSlot == -1) {
-                                    // Fallback to any mace
-                                    maceSlot = FindHotbarSlot(env, inventory, "mace", nullptr);
-                                }
+                                env->DeleteLocalRef(playerClass);
+                                env->DeleteLocalRef(player);
                             }
-                            
-                            if (maceSlot != -1) currentMaceKey = '1' + maceSlot;
-
-                            env->DeleteLocalRef(inventory);
                         }
-                        env->DeleteLocalRef(playerClass);
-                        env->DeleteLocalRef(player);
+                        env->DeleteLocalRef(mc);
                     }
-                    env->DeleteLocalRef(mc);
                 }
                 env->DeleteLocalRef(mcClass);
             }
