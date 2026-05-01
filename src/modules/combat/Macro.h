@@ -1,6 +1,7 @@
 #pragma once
 #include "../Module.h"
 #include <random>
+#include <windows.h> // FIX: Added to define WORD
 
 class Macro : public Module {
 private:
