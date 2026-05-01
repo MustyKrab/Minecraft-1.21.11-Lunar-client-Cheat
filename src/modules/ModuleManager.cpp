@@ -4,6 +4,7 @@
 #include "combat/Reach.h"
 #include "combat/WTap.h"
 #include "combat/AutoClicker.h"
+#include "combat/Macro.h"
 #include "TeleportAura.h"
 #include "FakeLag.h"
 #include "render/ESP.h"
@@ -18,6 +19,7 @@ void ModuleManager::Initialize() {
     modules.push_back(new AutoClicker());
     modules.push_back(new Reach());
     modules.push_back(new WTap());
+    modules.push_back(new Macro());
     modules.push_back(new TeleportAura());
     modules.push_back(new FakeLag());
     modules.push_back(new ESP());
