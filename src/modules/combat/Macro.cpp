@@ -4,6 +4,7 @@
 #include <chrono>
 #include <algorithm>
 #include <string>
+#include <vector>
 
 static std::mt19937 s_macroRng([]() -> uint32_t {
     std::random_device rd;
@@ -55,18 +56,17 @@ void Macro::SendMouseUpEx() {
     SendInput(1, &input, sizeof(INPUT));
 }
 
-// JNI Helper to scan hotbar slots (0-8) for a specific item, optionally checking for an enchantment/name
-int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKey, const char* enchKey) {
+// Returns a list of hotbar slots containing the specified item
+std::vector<int> Macro::GetItemSlots(void* env_ptr, void* inventory_ptr, const char* itemKey) {
     JNIEnv* env = (JNIEnv*)env_ptr;
     jobject inventory = (jobject)inventory_ptr;
-    if (!env || !inventory) return -1;
+    std::vector<int> slots;
+    if (!env || !inventory) return slots;
 
     jclass invClass = env->GetObjectClass(inventory);
     jmethodID getStack = env->GetMethodID(invClass, "method_5438", "(I)Lnet/minecraft/class_1799;");
     env->ExceptionClear();
-    if (!getStack) { env->DeleteLocalRef(invClass); return -1; }
-
-    int fallbackSlot = -1;
+    if (!getStack) { env->DeleteLocalRef(invClass); return slots; }
 
     for (int i = 0; i < 9; i++) {
         jobject stack = env->CallObjectMethod(inventory, getStack, i);
@@ -96,95 +96,11 @@ int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKe
                         std::string lowerItem = itemKey;
                         std::transform(lowerItem.begin(), lowerItem.end(), lowerItem.begin(), ::tolower);
                         
-                        bool isCorrectItem = (lowerStr.find(lowerItem) != std::string::npos);
+                        if (lowerStr.find(lowerItem) != std::string::npos) {
+                            slots.push_back(i);
+                        }
                         env->ReleaseStringUTFChars(jKey, keyStr);
                         env->DeleteLocalRef(jKey);
-
-                        if (isCorrectItem) {
-                            if (enchKey == nullptr) {
-                                env->DeleteLocalRef(itemClass);
-                                env->DeleteLocalRef(item);
-                                env->DeleteLocalRef(stackClass);
-                                env->DeleteLocalRef(stack);
-                                env->DeleteLocalRef(invClass);
-                                return i; // Exact match, no ench required
-                            }
-
-                            if (fallbackSlot == -1) fallbackSlot = i; // Save first matching item as fallback
-
-                            bool hasEnch = false;
-                            std::string lowerEnch = enchKey;
-                            std::transform(lowerEnch.begin(), lowerEnch.end(), lowerEnch.begin(), ::tolower);
-
-                            // 1. Check Enchantments Component (method_57356 -> class_9304)
-                            jmethodID getEnchants = env->GetMethodID(stackClass, "method_57356", "()Lnet/minecraft/class_9304;");
-                            env->ExceptionClear();
-                            if (getEnchants) {
-                                jobject enchantsObj = env->CallObjectMethod(stack, getEnchants);
-                                env->ExceptionClear();
-                                if (enchantsObj) {
-                                    jclass enchClass = env->GetObjectClass(enchantsObj);
-                                    jmethodID toString = env->GetMethodID(enchClass, "toString", "()Ljava/lang/String;");
-                                    env->ExceptionClear();
-                                    if (toString) {
-                                        jstring jStr = (jstring)env->CallObjectMethod(enchantsObj, toString);
-                                        env->ExceptionClear();
-                                        if (jStr) {
-                                            const char* str = env->GetStringUTFChars(jStr, 0);
-                                            std::string enchStr = str;
-                                            std::transform(enchStr.begin(), enchStr.end(), enchStr.begin(), ::tolower);
-                                            if (enchStr.find(lowerEnch) != std::string::npos) {
-                                                hasEnch = true;
-                                            }
-                                            env->ReleaseStringUTFChars(jStr, str);
-                                            env->DeleteLocalRef(jStr);
-                                        }
-                                    }
-                                    env->DeleteLocalRef(enchClass);
-                                    env->DeleteLocalRef(enchantsObj);
-                                }
-                            }
-
-                            // 2. Check Custom Name (method_7964 -> class_2561)
-                            if (!hasEnch) {
-                                jmethodID getName = env->GetMethodID(stackClass, "method_7964", "()Lnet/minecraft/class_2561;");
-                                env->ExceptionClear();
-                                if (getName) {
-                                    jobject nameObj = env->CallObjectMethod(stack, getName);
-                                    env->ExceptionClear();
-                                    if (nameObj) {
-                                        jclass textClass = env->GetObjectClass(nameObj);
-                                        jmethodID getString = env->GetMethodID(textClass, "method_10851", "()Ljava/lang/String;");
-                                        env->ExceptionClear();
-                                        if (getString) {
-                                            jstring jStr = (jstring)env->CallObjectMethod(nameObj, getString);
-                                            env->ExceptionClear();
-                                            if (jStr) {
-                                                const char* str = env->GetStringUTFChars(jStr, 0);
-                                                std::string nameStr = str;
-                                                std::transform(nameStr.begin(), nameStr.end(), nameStr.begin(), ::tolower);
-                                                if (nameStr.find(lowerEnch) != std::string::npos) {
-                                                    hasEnch = true;
-                                                }
-                                                env->ReleaseStringUTFChars(jStr, str);
-                                                env->DeleteLocalRef(jStr);
-                                            }
-                                        }
-                                        env->DeleteLocalRef(textClass);
-                                        env->DeleteLocalRef(nameObj);
-                                    }
-                                }
-                            }
-
-                            if (hasEnch) {
-                                env->DeleteLocalRef(itemClass);
-                                env->DeleteLocalRef(item);
-                                env->DeleteLocalRef(stackClass);
-                                env->DeleteLocalRef(stack);
-                                env->DeleteLocalRef(invClass);
-                                return i; // Exact match with enchantment/name!
-                            }
-                        }
                     }
                 }
                 env->DeleteLocalRef(itemClass);
@@ -194,16 +110,14 @@ int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKe
         env->DeleteLocalRef(stackClass);
         env->DeleteLocalRef(stack);
     }
-    
     env->DeleteLocalRef(invClass);
-    return fallbackSlot; // Return fallback if no exact match found
+    return slots;
 }
 
 void Macro::OnTick() {
     long long currentTime = GetTimeMs();
     JNIEnv* env = nullptr;
     
-    // Only attach JNI if we are actively triggering a macro to save CPU
     if ((stunSlamEnabled && stunSlamState == 0 && (GetAsyncKeyState(VK_XBUTTON2) & 0x8000)) || 
         (spearDashEnabled && spearDashState == 0 && (GetAsyncKeyState('2') & 0x8000))) {
         
@@ -221,7 +135,6 @@ void Macro::OnTick() {
                     jobject mc = env->CallStaticObjectMethod(mcClass, getInstance);
                     env->ExceptionClear();
                     if (mc) {
-                        // field_1724 = player
                         jfieldID playerField = env->GetFieldID(mcClass, "field_1724", "Lnet/minecraft/class_746;");
                         env->ExceptionClear();
                         if (playerField) {
@@ -229,7 +142,6 @@ void Macro::OnTick() {
                             env->ExceptionClear();
                             if (player) {
                                 jclass playerClass = env->GetObjectClass(player);
-                                // field_7514 = inventory
                                 jfieldID invField = env->GetFieldID(playerClass, "field_7514", "Lnet/minecraft/class_1661;");
                                 env->ExceptionClear();
                                 if (invField) {
@@ -237,34 +149,28 @@ void Macro::OnTick() {
                                     env->ExceptionClear();
                                     
                                     if (inventory) {
-                                        // --- Dynamic Hotbar Resolution ---
-                                        
-                                        // Find Axe (any type)
-                                        int axeSlot = FindHotbarSlot(env, inventory, "axe", nullptr);
-                                        if (axeSlot != -1) currentAxeKey = '1' + axeSlot;
+                                        // Find Axe
+                                        std::vector<int> axes = GetItemSlots(env, inventory, "axe");
+                                        if (!axes.empty()) currentAxeKey = '1' + axes[0];
                                         
                                         // Find Spear
-                                        int spearSlot = FindHotbarSlot(env, inventory, "spear", nullptr);
-                                        if (spearSlot != -1) currentSpearKey = '1' + spearSlot;
+                                        std::vector<int> spears = GetItemSlots(env, inventory, "spear");
+                                        if (!spears.empty()) currentSpearKey = '1' + spears[0];
                                         
-                                        // Find No-CD item (fallback to Axe if none found)
                                         currentNoCdKey = currentAxeKey; 
 
-                                        // Fall distance check for Mace logic
-                                        // field_6017 = fallDistance in class_1297 (Entity)
+                                        // Fall distance check
                                         jclass entityClass = env->FindClass("net/minecraft/class_1297");
                                         env->ExceptionClear();
-                                        float fallDistance = 0.0f;
+                                        double fallDistance = 0.0;
                                         if (entityClass) {
-                                            // Try float first (standard Java Edition mapping)
-                                            jfieldID fallDistField = env->GetFieldID(entityClass, "field_6017", "F");
+                                            jfieldID fallDistField = env->GetFieldID(entityClass, "field_6017", "D");
                                             env->ExceptionClear();
                                             if (fallDistField) {
-                                                fallDistance = env->GetFloatField(player, fallDistField);
+                                                fallDistance = env->GetDoubleField(player, fallDistField);
                                                 env->ExceptionClear();
                                             } else {
-                                                // Fallback to double just in case
-                                                fallDistField = env->GetFieldID(entityClass, "field_6017", "D");
+                                                fallDistField = env->GetFieldID(entityClass, "field_6017", "F");
                                                 env->ExceptionClear();
                                                 if (fallDistField) {
                                                     fallDistance = (float)env->GetDoubleField(player, fallDistField);
@@ -274,16 +180,28 @@ void Macro::OnTick() {
                                             env->DeleteLocalRef(entityClass);
                                         }
 
-                                        int maceSlot = -1;
-                                        if (fallDistance <= 9.0f) {
-                                            // <= 9 blocks: Try to find Breach mace first
-                                            maceSlot = FindHotbarSlot(env, inventory, "mace", "breach");
-                                        } else {
-                                            // > 9 blocks: Try to find Density mace first
-                                            maceSlot = FindHotbarSlot(env, inventory, "mace", "density");
-                                        }
+                                        // Find all Maces
+                                        std::vector<int> maces = GetItemSlots(env, inventory, "mace");
                                         
-                                        if (maceSlot != -1) currentMaceKey = '1' + maceSlot;
+                                        if (!maces.empty()) {
+                                            if (maces.size() == 1) {
+                                                // Only one mace, use it regardless of fall distance
+                                                currentMaceKey = '1' + maces[0];
+                                            } else {
+                                                // Multiple maces found. Apply heuristic:
+                                                // Usually players organize hotbar left-to-right.
+                                                // Let's assume Breach is the primary (leftmost) and Density is secondary (rightmost).
+                                                // Or vice versa based on common PvP layouts.
+                                                // We will assume: Leftmost = Breach, Rightmost = Density
+                                                if (fallDistance <= 9.0) {
+                                                    // Want Breach (Leftmost)
+                                                    currentMaceKey = '1' + maces.front();
+                                                } else {
+                                                    // Want Density (Rightmost)
+                                                    currentMaceKey = '1' + maces.back();
+                                                }
+                                            }
+                                        }
 
                                         env->DeleteLocalRef(inventory);
                                     }
