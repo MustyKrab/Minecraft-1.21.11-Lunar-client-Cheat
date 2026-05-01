@@ -17,7 +17,6 @@ static jmethodID listSize, listGet, getHealth, getDoubleValue;
 // cached for GCD block – set once in mappings load, never again
 static jclass    s_dblClass  = nullptr;
 static jmethodID s_dblValMID = nullptr;
-// FIX: cache getId method for entity identity
 static jmethodID getIdMethod;
 
 // ── persistent RNG (seeded once, never re-seeded in hot path) ──────────────
@@ -32,7 +31,6 @@ static float  s_pitchVel  = 0.0f;
 static DWORD  s_nextTickMs = 0;   // earliest ms we are allowed to act again
 
 // PATCH 4 — target-switch re-acquisition cooldown state
-// FIX: use jint identity (entity ID) instead of raw pointer cast to void*
 static jint   s_lastTargetId    = -1;
 static DWORD  s_targetLostMs    = 0;
 static bool   s_targetWasActive = false;
@@ -106,7 +104,6 @@ void Aimbot::OnTick() {
             env->DeleteLocalRef(localDbl);
         }
 
-        // FIX: cache getId method
         getIdMethod = env->GetMethodID(entityClass, "getId", "()I");
 
         aimbot_mappings_loaded = true;
@@ -172,7 +169,7 @@ void Aimbot::OnTick() {
         jobject  bestTarget   = nullptr;
         float    bestAngDist  = fov;
         double   bestDist3D   = 6.0;
-        jint     bestTargetId = -1;   // FIX: use entity ID
+        jint     bestTargetId = -1;
 
         // PATCH 2 — randomised aim-height jitter per scan
         std::uniform_real_distribution<float> heightJitter(0.6f, 1.4f);
@@ -210,7 +207,6 @@ void Aimbot::OnTick() {
                 if (angDist < bestAngDist || (angDist == bestAngDist && dist3D < bestDist3D)) {
                     bestAngDist  = angDist;
                     bestDist3D   = dist3D;
-                    // FIX: get actual entity ID
                     bestTargetId = getIdMethod ? env->CallIntMethod(target, getIdMethod) : -1;
                     if (env->ExceptionCheck()) { env->ExceptionClear(); bestTargetId = -1; }
                     if (bestTarget) env->DeleteLocalRef(bestTarget);
@@ -277,8 +273,16 @@ void Aimbot::OnTick() {
                 }
             }
 
-            yawDiff   -= std::fmod(yawDiff,   gcd);
-            pitchDiff -= std::fmod(pitchDiff, gcd);
+            // FIX: fmod can return negative values if the dividend is negative.
+            // This causes the aim to snap in the opposite direction slightly when crossing the GCD boundary.
+            // We need to ensure the remainder is always positive and subtract it correctly.
+            float yawRem = std::fmod(yawDiff, gcd);
+            if (yawRem < 0) yawRem += gcd;
+            yawDiff -= yawRem;
+
+            float pitchRem = std::fmod(pitchDiff, gcd);
+            if (pitchRem < 0) pitchRem += gcd;
+            pitchDiff -= pitchRem;
 
             // spring-damper velocity model
             float baseSpeed = smoothSpeed;
