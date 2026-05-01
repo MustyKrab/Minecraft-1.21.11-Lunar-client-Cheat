@@ -5,6 +5,7 @@
 #include "../combat/Aimbot.h"
 #include "../combat/Reach.h"
 #include "../combat/AutoClicker.h"
+#include "../combat/Macro.h"
 #include "../TeleportAura.h"
 #include "../FakeLag.h"
 #include "../render/XRay.h"
@@ -292,6 +293,7 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
             else if (n == "TeleportAura")totalHeight += 40   + 10;
             else if (n == "Aimbot")      totalHeight += 40   + 10;
             else if (n == "AutoClicker") totalHeight += 2*40 + 25 + 10;
+            else if (n == "Macro")       totalHeight += 2*25 + 10; // FIX: Added Macro height
             else if (n == "ESP")         totalHeight += 40   + 10;
             else if (n == "Reach")       totalHeight += 40   + 10;
             else if (n == "FakeLag")     totalHeight += 40   + 10;
@@ -432,6 +434,21 @@ void ESP::DrawGUI(Graphics& g, int mouseX, int mouseY, bool clickAction, bool ri
                     if (minCps != origMin) ac->SetMinCps(minCps); 
                     if (maxCps != origMax) ac->SetMaxCps(maxCps); 
                     if (jitter != origJitter) ac->SetJitter(jitter);
+                }
+            } else if (nameStr == "Macro") {
+                // FIX: Added Macro UI controls
+                Macro* macro = (Macro*)mod;
+                if (macro) {
+                    bool stunSlam = macro->IsStunSlamEnabled();
+                    bool spearDash = macro->IsSpearDashEnabled();
+                    bool origStunSlam = stunSlam;
+                    bool origSpearDash = spearDash;
+
+                    y += DrawCheckbox(L"StunSlam (MB5)", stunSlam, 130, y);
+                    y += DrawCheckbox(L"Spear Dash (Key 2)", spearDash, 130, y);
+
+                    if (stunSlam != origStunSlam) macro->SetStunSlamEnabled(stunSlam);
+                    if (spearDash != origSpearDash) macro->SetSpearDashEnabled(spearDash);
                 }
             } else if (nameStr == "ESP") {
                 y += DrawSlider(L"ESP Range", espRange, 10.0f, 200.0f, draggingEspRangeSlider, 130, y);
