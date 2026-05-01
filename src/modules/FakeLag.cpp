@@ -44,7 +44,7 @@ void FakeLag::OnTick() {
 
     // Real FakeLag requires hooking sendPacket via MinHook or a Java agent to queue packets.
     // JNI-only approach can't intercept outgoing packets without bytecode instrumentation.
-    // This counter tracks choke state for UI display purposes.
+    // This counter tracks choke state for GUI display purposes.
     chokedPackets++;
     if (chokedPackets >= chokeLimit) {
         chokedPackets = 0;
