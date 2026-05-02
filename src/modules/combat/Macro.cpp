@@ -338,7 +338,7 @@ void Macro::OnTick() {
             spearDashNextTime = currentTime + GaussianSleep(12.0, 1.0, 10, 15);
             spearDashState = 2;
         }
-        else if (spearDashState == 2 && currentTime >= spearDashNextTime) {
+        else if (stunSlamState == 2 && currentTime >= spearDashNextTime) {
             SendKeyDownEx(currentSpearKey);
             spearDashNextTime = currentTime + GaussianSleep(12.0, 1.0, 10, 15);
             spearDashState = 3;
