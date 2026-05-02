@@ -66,15 +66,12 @@ int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKe
     env->ExceptionClear();
     if (!getStack) { env->DeleteLocalRef(invClass); return -1; }
 
-    int fallbackSlot = -1;
-
     for (int i = 0; i < 9; i++) {
         jobject stack = env->CallObjectMethod(inventory, getStack, i);
         env->ExceptionClear();
         if (!stack) continue;
 
         jclass stackClass = env->GetObjectClass(stack);
-        // Fixed the signature for getItem in 1.21.
         jmethodID getItem = env->GetMethodID(stackClass, "method_7909", "()Lnet/minecraft/class_1792;");
         env->ExceptionClear();
         
@@ -83,12 +80,10 @@ int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKe
             env->ExceptionClear();
             if (item) {
                 jclass itemClass = env->GetObjectClass(item);
-                // Fixed the signature for getTranslationKey in 1.21 to take ItemStack as arg
                 jmethodID getTranslationKey = env->GetMethodID(itemClass, "method_7866", "(Lnet/minecraft/class_1799;)Ljava/lang/String;");
                 env->ExceptionClear();
                 
                 if (getTranslationKey) {
-                    // Pass the stack as an argument
                     jstring jKey = (jstring)env->CallObjectMethod(item, getTranslationKey, stack);
                     env->ExceptionClear();
                     if (jKey) {
@@ -129,7 +124,6 @@ int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKe
                                     env->ExceptionClear();
                                     
                                     if (dataComponentTypesClass) {
-                                        // field_49574 = ENCHANTMENTS
                                         jfieldID enchantmentsField = env->GetStaticFieldID(dataComponentTypesClass, "field_49574", "LNet/minecraft/class_9331;");
                                         env->ExceptionClear();
                                         
@@ -139,7 +133,7 @@ int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKe
                                             
                                             if (enchantmentsType) {
                                                 jclass componentMapClass = env->GetObjectClass(componentMap);
-                                                jmethodID get = env->GetMethodID(componentMapClass, "method_57334", "(Lnet/minecraft/class_9331;)Ljava/lang/Object;");
+                                                jmethodID get = env->GetMethodID(componentMapClass, "method_58694", "(Lnet/minecraft/class_9331;)Ljava/lang/Object;");
                                                 env->ExceptionClear();
                                                 
                                                 if (get) {
