@@ -56,7 +56,6 @@ void Macro::SendMouseUpEx() {
     SendInput(1, &input, sizeof(INPUT));
 }
 
-// Scans hotbar slots (0-8) for a specific item, optionally checking for an enchantment/name
 int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKey, const char* enchKey) {
     JNIEnv* env = (JNIEnv*)env_ptr;
     jobject inventory = (jobject)inventory_ptr;
@@ -66,8 +65,6 @@ int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKe
     jmethodID getStack = env->GetMethodID(invClass, "method_5438", "(I)Lnet/minecraft/class_1799;");
     env->ExceptionClear();
     if (!getStack) { env->DeleteLocalRef(invClass); return -1; }
-
-    int fallbackSlot = -1;
 
     for (int i = 0; i < 9; i++) {
         jobject stack = env->CallObjectMethod(inventory, getStack, i);
@@ -83,11 +80,11 @@ int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKe
             env->ExceptionClear();
             if (item) {
                 jclass itemClass = env->GetObjectClass(item);
-                jmethodID getTranslationKey = env->GetMethodID(itemClass, "method_7866", "()Ljava/lang/String;");
+                jmethodID getTranslationKey = env->GetMethodID(itemClass, "method_7866", "(Lnet/minecraft/class_1799;)Ljava/lang/String;");
                 env->ExceptionClear();
                 
                 if (getTranslationKey) {
-                    jstring jKey = (jstring)env->CallObjectMethod(item, getTranslationKey);
+                    jstring jKey = (jstring)env->CallObjectMethod(item, getTranslationKey, stack);
                     env->ExceptionClear();
                     if (jKey) {
                         const char* keyStr = env->GetStringUTFChars(jKey, 0);
@@ -108,104 +105,83 @@ int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKe
                                 env->DeleteLocalRef(stackClass);
                                 env->DeleteLocalRef(stack);
                                 env->DeleteLocalRef(invClass);
-                                return i; // Exact match, no ench required
+                                return i;
                             }
-
-                            if (fallbackSlot == -1) fallbackSlot = i; // Save first matching item as fallback
 
                             bool hasEnch = false;
                             std::string lowerEnch = enchKey;
                             std::transform(lowerEnch.begin(), lowerEnch.end(), lowerEnch.begin(), ::tolower);
 
-                            // In 1.21.11, the most reliable way to check enchantments is to check the item's hover tooltip lines
-                            // method_56150 = getTooltip(Item.TooltipContext, PlayerEntity, TooltipType) -> List<Text>
-                            jclass tooltipContextClass = env->FindClass("net/minecraft/class_1792$class_9635");
-                            jclass tooltipTypeClass = env->FindClass("net/minecraft/class_1836");
+                            jmethodID getComponents = env->GetMethodID(stackClass, "method_57331", "()Lnet/minecraft/class_9323;");
                             env->ExceptionClear();
                             
-                            if (tooltipContextClass && tooltipTypeClass) {
-                                // Get TooltipContext.DEFAULT
-                                jfieldID defaultContextField = env->GetStaticFieldID(tooltipContextClass, "field_51296", "Lnet/minecraft/class_1792$class_9635;");
+                            if (getComponents) {
+                                jobject componentMap = env->CallObjectMethod(stack, getComponents);
                                 env->ExceptionClear();
-                                jobject defaultContext = nullptr;
-                                if (defaultContextField) {
-                                    defaultContext = env->GetStaticObjectField(tooltipContextClass, defaultContextField);
-                                    env->ExceptionClear();
-                                }
                                 
-                                // Get TooltipType.BASIC
-                                jfieldID basicTypeField = env->GetStaticFieldID(tooltipTypeClass, "field_8949", "Lnet/minecraft/class_1836;");
-                                env->ExceptionClear();
-                                jobject basicType = nullptr;
-                                if (basicTypeField) {
-                                    basicType = env->GetStaticObjectField(tooltipTypeClass, basicTypeField);
-                                    env->ExceptionClear();
-                                }
-                                
-                                if (defaultContext && basicType) {
-                                    jmethodID getTooltip = env->GetMethodID(stackClass, "method_56150", "(Lnet/minecraft/class_1792$class_9635;Lnet/minecraft/class_1657;Lnet/minecraft/class_1836;)Ljava/util/List;");
+                                if (componentMap) {
+                                    jclass dataComponentTypesClass = env->FindClass("net/minecraft/class_9331");
                                     env->ExceptionClear();
                                     
-                                    if (getTooltip) {
-                                        jobject tooltipList = env->CallObjectMethod(stack, getTooltip, defaultContext, nullptr, basicType);
+                                    if (dataComponentTypesClass) {
+                                        jfieldID enchantmentsField = env->GetStaticFieldID(dataComponentTypesClass, "field_49574", "LNet/minecraft/class_9331;");
                                         env->ExceptionClear();
                                         
-                                        if (tooltipList) {
-                                            jclass listClass = env->GetObjectClass(tooltipList);
-                                            jmethodID listSize = env->GetMethodID(listClass, "size", "()I");
-                                            jmethodID listGet = env->GetMethodID(listClass, "get", "(I)Ljava/lang/Object;");
+                                        if (enchantmentsField) {
+                                            jobject enchantmentsType = env->GetStaticObjectField(dataComponentTypesClass, enchantmentsField);
                                             env->ExceptionClear();
                                             
-                                            if (listSize && listGet) {
-                                                int size = env->CallIntMethod(tooltipList, listSize);
+                                            if (enchantmentsType) {
+                                                jclass componentMapClass = env->GetObjectClass(componentMap);
+                                                jmethodID get = env->GetMethodID(componentMapClass, "method_58694", "(Lnet/minecraft/class_9331;)Ljava/lang/Object;");
                                                 env->ExceptionClear();
                                                 
-                                                for (int t = 0; t < size; t++) {
-                                                    jobject textObj = env->CallObjectMethod(tooltipList, listGet, t);
+                                                if (get) {
+                                                    jobject itemEnchantments = env->CallObjectMethod(componentMap, get, enchantmentsType);
                                                     env->ExceptionClear();
-                                                    if (textObj) {
-                                                        jclass textClass = env->GetObjectClass(textObj);
-                                                        jmethodID getString = env->GetMethodID(textClass, "method_10851", "()Ljava/lang/String;");
+                                                    
+                                                    if (itemEnchantments) {
+                                                        jclass itemEnchClass = env->GetObjectClass(itemEnchantments);
+                                                        jmethodID toString = env->GetMethodID(itemEnchClass, "toString", "()Ljava/lang/String;");
                                                         env->ExceptionClear();
                                                         
-                                                        if (getString) {
-                                                            jstring jStr = (jstring)env->CallObjectMethod(textObj, getString);
+                                                        if (toString) {
+                                                            jstring jEnchStr = (jstring)env->CallObjectMethod(itemEnchantments, toString);
                                                             env->ExceptionClear();
-                                                            if (jStr) {
-                                                                const char* str = env->GetStringUTFChars(jStr, 0);
-                                                                std::string tooltipStr = str;
-                                                                std::transform(tooltipStr.begin(), tooltipStr.end(), tooltipStr.begin(), ::tolower);
-                                                                if (tooltipStr.find(lowerEnch) != std::string::npos) {
+                                                            
+                                                            if (jEnchStr) {
+                                                                const char* enchStr = env->GetStringUTFChars(jEnchStr, 0);
+                                                                std::string fullEnchStr = enchStr;
+                                                                std::transform(fullEnchStr.begin(), fullEnchStr.end(), fullEnchStr.begin(), ::tolower);
+                                                                
+                                                                if (fullEnchStr.find(lowerEnch) != std::string::npos) {
                                                                     hasEnch = true;
                                                                 }
-                                                                env->ReleaseStringUTFChars(jStr, str);
-                                                                env->DeleteLocalRef(jStr);
+                                                                env->ReleaseStringUTFChars(jEnchStr, enchStr);
+                                                                env->DeleteLocalRef(jEnchStr);
                                                             }
                                                         }
-                                                        env->DeleteLocalRef(textClass);
-                                                        env->DeleteLocalRef(textObj);
+                                                        env->DeleteLocalRef(itemEnchClass);
+                                                        env->DeleteLocalRef(itemEnchantments);
                                                     }
-                                                    if (hasEnch) break;
                                                 }
+                                                env->DeleteLocalRef(componentMapClass);
                                             }
-                                            env->DeleteLocalRef(listClass);
-                                            env->DeleteLocalRef(tooltipList);
+                                            env->DeleteLocalRef(enchantmentsType);
                                         }
+                                        env->DeleteLocalRef(dataComponentTypesClass);
                                     }
+                                    env->DeleteLocalRef(componentMap);
                                 }
-                                if (defaultContext) env->DeleteLocalRef(defaultContext);
-                                if (basicType) env->DeleteLocalRef(basicType);
-                                env->DeleteLocalRef(tooltipContextClass);
-                                env->DeleteLocalRef(tooltipTypeClass);
                             }
-
+                            
                             if (hasEnch) {
                                 env->DeleteLocalRef(itemClass);
                                 env->DeleteLocalRef(item);
                                 env->DeleteLocalRef(stackClass);
                                 env->DeleteLocalRef(stack);
                                 env->DeleteLocalRef(invClass);
-                                return i; // Exact match with enchantment/name!
+                                return i;
                             }
                         }
                     }
@@ -219,7 +195,7 @@ int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKe
     }
     
     env->DeleteLocalRef(invClass);
-    return fallbackSlot; // Return fallback if no exact match found
+    return -1; // No fallback, return -1 if not found
 }
 
 void Macro::OnTick() {
@@ -244,7 +220,6 @@ void Macro::OnTick() {
                     jobject mc = env->CallStaticObjectMethod(mcClass, getInstance);
                     env->ExceptionClear();
                     if (mc) {
-                        // field_1724 = player
                         jfieldID playerField = env->GetFieldID(mcClass, "field_1724", "Lnet/minecraft/class_746;");
                         env->ExceptionClear();
                         if (playerField) {
@@ -252,7 +227,6 @@ void Macro::OnTick() {
                             env->ExceptionClear();
                             if (player) {
                                 jclass playerClass = env->GetObjectClass(player);
-                                // field_7514 = inventory
                                 jfieldID invField = env->GetFieldID(playerClass, "field_7514", "Lnet/minecraft/class_1661;");
                                 env->ExceptionClear();
                                 if (invField) {
@@ -356,7 +330,6 @@ void Macro::OnTick() {
         stunSlamState = 0;
     }
 
-    // --- SpearDash Attribute Swapping State Machine ---
     if (spearDashEnabled) {
         if (spearDashState == 0 && (GetAsyncKeyState('2') & 0x8000)) {
             SendKeyDownEx(currentNoCdKey);
