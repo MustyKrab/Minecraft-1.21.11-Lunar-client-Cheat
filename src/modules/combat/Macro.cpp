@@ -84,7 +84,7 @@ int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKe
             if (item) {
                 jclass itemClass = env->GetObjectClass(item);
                 // Fixed the signature for getTranslationKey in 1.21 to take ItemStack as arg
-                jmethodID getTranslationKey = env->GetMethodId(itemClass, "method_7866", "(Lnet/minecraft/class_1799;)Ljava/lang/String;");
+                jmethodID getTranslationKey = env->GetMethodID(itemClass, "method_7866", "(Lnet/minecraft/class_1799;)Ljava/lang/String;");
                 env->ExceptionClear();
                 
                 if (getTranslationKey) {
@@ -113,8 +113,6 @@ int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKe
                                 return i;
                             }
 
-                            if (fallbackSlot == -1) fallbackSlot = i;
-
                             bool hasEnch = false;
                             std::string lowerEnch = enchKey;
                             std::transform(lowerEnch.begin(), lowerEnch.end(), lowerEnch.begin(), ::tolower);
@@ -131,7 +129,8 @@ int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKe
                                     env->ExceptionClear();
                                     
                                     if (dataComponentTypesClass) {
-                                        jfieldID enchantmentsField = env->GetStaticFieldID(dataComponentTypesClass, "field_49574", "Lnet/minecraft/class_9331;");
+                                        // field_49574 = ENCHANTMENTS
+                                        jfieldID enchantmentsField = env->GetStaticFieldID(dataComponentTypesClass, "field_49574", "LNet/minecraft/class_9331;");
                                         env->ExceptionClear();
                                         
                                         if (enchantmentsField) {
@@ -149,7 +148,7 @@ int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKe
                                                     
                                                     if (itemEnchantments) {
                                                         jclass itemEnchClass = env->GetObjectClass(itemEnchantments);
-                                                        jmethodID toString = env->GetMethodID(itemEnchClass, "toString", "( Ljava/lang/String;");
+                                                        jmethodID toString = env->GetMethodID(itemEnchClass, "toString", "()Ljava/lang/String;");
                                                         env->ExceptionClear();
                                                         
                                                         if (toString) {
@@ -171,44 +170,45 @@ int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKe
                                                         env->DeleteLocalRef(itemEnchClass);
                                                         env->DeleteLocalRef(itemEnchantments);
                                                     }
-                                                    env->DeleteLocalRef(componentMapClass);
                                                 }
-                                                env->DeleteLocalRef(enchantmentsType);
+                                                env->DeleteLocalRef(componentMapClass);
                                             }
-                                            env->DeleteLocalRef(dataComponentTypesClass);
+                                            env->DeleteLocalRef(enchantmentsType);
                                         }
-                                        env->DeleteLocalRef(componentMap);
+                                        env->DeleteLocalRef(dataComponentTypesClass);
                                     }
+                                    env->DeleteLocalRef(componentMap);
                                 }
-                                
-                                if (hasEnch) {
-                                    env->DeleteLocalRef(itemClass);
-                                    env->DeleteLocalRef(item);
-                                    env->DeleteLocalRef(stackClass);
-                                    env->DeleteLocalRef(stack);
-                                    env->DeleteLocalRef(invClass);
-                                    return i;
-                                }
+                            }
+                            
+                            if (hasEnch) {
+                                env->DeleteLocalRef(itemClass);
+                                env->DeleteLocalRef(item);
+                                env->DeleteLocalRef(stackClass);
+                                env->DeleteLocalRef(stack);
+                                env->DeleteLocalRef(invClass);
+                                return i;
                             }
                         }
                     }
-                    env->DeleteLocalRef(itemClass);
-                    env->DeleteLocalRef(item);
                 }
+                env->DeleteLocalRef(itemClass);
+                env->DeleteLocalRef(item);
             }
-            env->DeleteLocalRef(stackClass);
-            env->DeleteLocalRef(stack);
         }
+        env->DeleteLocalRef(stackClass);
+        env->DeleteLocalRef(stack);
     }
     
     env->DeleteLocalRef(invClass);
-    return fallbackSlot;
+    return -1; // No fallback, return -1 if not found
 }
 
 void Macro::OnTick() {
     long long currentTime = GetTimeMs();
     JNIEnv* env = nullptr;
     
+    // Only attach JNI if we are actively triggering a macro to save CPU
     if ((stunSlamEnabled && stunSlamState == 0 && (GetAsyncKeyState(VK_XBUTTON2) & 0x8000)) || 
         (spearDashEnabled && spearDashState == 0 && (GetAsyncKeyState('2') & 0x8000))) {
         
@@ -240,14 +240,20 @@ void Macro::OnTick() {
                                     env->ExceptionClear();
                                     
                                     if (inventory) {
+                                        // --- Dynamic Hotbar Resolution ---
+                                        
+                                        // Find Axe (any type)
                                         int axeSlot = FindHotbarSlot(env, inventory, "axe", nullptr);
                                         if (axeSlot != -1) currentAxeKey = '1' + axeSlot;
                                         
+                                        // Find Spear
                                         int spearSlot = FindHotbarSlot(env, inventory, "spear", nullptr);
                                         if (spearSlot != -1) currentSpearKey = '1' + spearSlot;
                                         
+                                        // Find No-CD item (fallback to Axe if none found)
                                         currentNoCdKey = currentAxeKey; 
 
+                                        // Fall distance check for Mace logic
                                         double fallDistance = 0.0;
                                         jfieldID fallDistFieldD = env->GetFieldID(playerClass, "field_6017", "D");
                                         env->ExceptionClear();
@@ -265,8 +271,10 @@ void Macro::OnTick() {
 
                                         int maceSlot = -1;
                                         if (fallDistance <= 9.0) {
+                                            // <= 9 blocks: Try to find Breach mace first
                                             maceSlot = FindHotbarSlot(env, inventory, "mace", "breach");
                                         } else {
+                                            // > 9 blocks: Try to find Density mace first
                                             maceSlot = FindHotbarSlot(env, inventory, "mace", "density");
                                         }
                                         
@@ -287,6 +295,7 @@ void Macro::OnTick() {
         }
     }
 
+    // --- StunSlam State Machine ---
     if (stunSlamEnabled) {
         if (stunSlamState == 0 && (GetAsyncKeyState(VK_XBUTTON2) & 0x8000)) {
             SendKeyDownEx(currentAxeKey);
@@ -338,7 +347,7 @@ void Macro::OnTick() {
             spearDashNextTime = currentTime + GaussianSleep(12.0, 1.0, 10, 15);
             spearDashState = 2;
         }
-        else if (stunSlamState == 2 && currentTime >= spearDashNextTime) {
+        else if (spearDashState == 2 && currentTime >= spearDashNextTime) {
             SendKeyDownEx(currentSpearKey);
             spearDashNextTime = currentTime + GaussianSleep(12.0, 1.0, 10, 15);
             spearDashState = 3;
