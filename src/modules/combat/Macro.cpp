@@ -75,7 +75,7 @@ int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKe
         if (!stack) continue;
 
         jclass stackClass = env->GetObjectClass(stack);
-        jmethodID getItem = env->GetMethodID(stackClass, "method_7909", "()Lnet/minecraft/class_1792;");
+        jmethodID getItem = env->GetMethodId(stackClass, "method_7909", "()Lnet/minecraft/class_1792;");
         env->ExceptionClear();
         
         if (getItem) {
