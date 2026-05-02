@@ -74,6 +74,7 @@ int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKe
         if (!stack) continue;
 
         jclass stackClass = env->GetObjectClass(stack);
+        // Fixed the signature for getItem in 1.21.
         jmethodID getItem = env->GetMethodID(stackClass, "method_7909", "()Lnet/minecraft/class_1792;");
         env->ExceptionClear();
         
@@ -82,11 +83,13 @@ int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKe
             env->ExceptionClear();
             if (item) {
                 jclass itemClass = env->GetObjectClass(item);
-                jmethodID getTranslationKey = env->GetMethodID(itemClass, "method_7866", "()Ljava/lang/String;");
+                // Fixed the signature for getTranslationKey in 1.21 to take ItemStack as arg
+                jmethodID getTranslationKey = env->GetMethodId(itemClass, "method_7866", "(Lnet/minecraft/class_1799;)Ljava/lang/String;");
                 env->ExceptionClear();
                 
                 if (getTranslationKey) {
-                    jstring jKey = (jstring)env->CallObjectMethod(item, getTranslationKey);
+                    // Pass the stack as an argument
+                    jstring jKey = (jstring)env->CallObjectMethod(item, getTranslationKey, stack);
                     env->ExceptionClear();
                     if (jKey) {
                         const char* keyStr = env->GetStringUTFChars(jKey, 0);
@@ -146,7 +149,7 @@ int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKe
                                                     
                                                     if (itemEnchantments) {
                                                         jclass itemEnchClass = env->GetObjectClass(itemEnchantments);
-                                                        jmethodID toString = env->GetMethodID(itemEnchClass, "toString", "()Ljava/lang/String;");
+                                                        jmethodID toString = env->GetMethodID(itemEnchClass, "toString", "( Ljava/lang/String;");
                                                         env->ExceptionClear();
                                                         
                                                         if (toString) {
@@ -168,34 +171,34 @@ int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKe
                                                         env->DeleteLocalRef(itemEnchClass);
                                                         env->DeleteLocalRef(itemEnchantments);
                                                     }
+                                                    env->DeleteLocalRef(componentMapClass);
                                                 }
-                                                env->DeleteLocalRef(componentMapClass);
+                                                env->DeleteLocalRef(enchantmentsType);
                                             }
-                                            env->DeleteLocalRef(enchantmentsType);
+                                            env->DeleteLocalRef(dataComponentTypesClass);
                                         }
-                                        env->DeleteLocalRef(dataComponentTypesClass);
+                                        env->DeleteLocalRef(componentMap);
                                     }
-                                    env->DeleteLocalRef(componentMap);
                                 }
-                            }
-                            
-                            if (hasEnch) {
-                                env->DeleteLocalRef(itemClass);
-                                env->DeleteLocalRef(item);
-                                env->DeleteLocalRef(stackClass);
-                                env->DeleteLocalRef(stack);
-                                env->DeleteLocalRef(invClass);
-                                return i;
+                                
+                                if (hasEnch) {
+                                    env->DeleteLocalRef(itemClass);
+                                    env->DeleteLocalRef(item);
+                                    env->DeleteLocalRef(stackClass);
+                                    env->DeleteLocalRef(stack);
+                                    env->DeleteLocalRef(invClass);
+                                    return i;
+                                }
                             }
                         }
                     }
+                    env->DeleteLocalRef(itemClass);
+                    env->DeleteLocalRef(item);
                 }
-                env->DeleteLocalRef(itemClass);
-                env->DeleteLocalRef(item);
             }
+            env->DeleteLocalRef(stackClass);
+            env->DeleteLocalRef(stack);
         }
-        env->DeleteLocalRef(stackClass);
-        env->DeleteLocalRef(stack);
     }
     
     env->DeleteLocalRef(invClass);
