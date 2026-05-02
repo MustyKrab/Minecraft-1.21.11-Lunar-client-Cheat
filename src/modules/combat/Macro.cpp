@@ -1,389 +1,448 @@
-#include "Macro.h"
-#include "../../core/JNIHelper.h"
-#include <windows.h>
-#include <chrono>
-#include <algorithm>
-#include <string>
-#include <vector>
-
-static std::mt19937 s_macroRng([]() -> uint32_t {
-    std::random_device rd;
-    return rd() ^ (uint32_t)(GetTickCount64() * 2654435761ULL);
-}());
-
-Macro::Macro() : Module("Macro") {}
-
-long long Macro::GetTimeMs() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()
-    ).count();
-}
-
-int Macro::GaussianSleep(double mean, double stddev, int min_val, int max_val) {
-    if (stddev <= 0.001) stddev = 0.001;
-    std::normal_distribution<> distr(mean, stddev);
-    int val = (int)std::round(distr(s_macroRng));
-    return std::clamp(val, min_val, max_val);
-}
-
-void Macro::SendKeyDownEx(WORD vKey) {
-    INPUT input = { 0 };
-    input.type = INPUT_KEYBOARD;
-    input.ki.wScan = MapVirtualKey(vKey, MAPVK_VK_TO_VSC);
-    input.ki.dwFlags = KEYEVENTF_SCANCODE;
-    SendInput(1, &input, sizeof(INPUT));
-}
-
-void Macro::SendKeyUpEx(WORD vKey) {
-    INPUT input = { 0 };
-    input.type = INPUT_KEYBOARD;
-    input.ki.wScan = MapVirtualKey(vKey, MAPVK_VK_TO_VSC);
-    input.ki.dwFlags = KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP;
-    SendInput(1, &input, sizeof(INPUT));
-}
-
-void Macro::SendMouseDownEx() {
-    INPUT input = { 0 };
-    input.type = INPUT_MOUSE;
-    input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
-    SendInput(1, &input, sizeof(INPUT));
-}
-
-void Macro::SendMouseUpEx() {
-    INPUT input = { 0 };
-    input.type = INPUT_MOUSE;
-    input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
-    SendInput(1, &input, sizeof(INPUT));
-}
-
-// Scans hotbar slots (0-8) for a specific item, optionally checking for an enchantment/name
-int Macro::FindHotbarSlot(void* env_ptr, void* inventory_ptr, const char* itemKey, const char* enchKey) {
-    JNIEnv* env = (JNIEnv*)env_ptr;
-    jobject inventory = (jobject)inventory_ptr;
-    if (!env || !inventory) return -1;
-
-    jclass invClass = env->GetObjectClass(inventory);
-    jmethodID getStack = env->GetMethodID(invClass, "method_5438", "(I)Lnet/minecraft/class_1799;");
-    env->ExceptionClear();
-    if (!getStack) { env->DeleteLocalRef(invClass); return -1; }
-
-    int fallbackSlot = -1;
-
-    for (int i = 0; i < 9; i++) {
-        jobject stack = env->CallObjectMethod(inventory, getStack, i);
-        env->ExceptionClear();
-        if (!stack) continue;
-
-        jclass stackClass = env->GetObjectClass(stack);
-        jmethodID getItem = env->GetMethodID(stackClass, "method_7909", "()Lnet/minecraft/class_1792;");
-        env->ExceptionClear();
-        
-        if (getItem) {
-            jobject item = env->CallObjectMethod(stack, getItem);
-            env->ExceptionClear();
-            if (item) {
-                jclass itemClass = env->GetObjectClass(item);
-                jmethodID getTranslationKey = env->GetMethodID(itemClass, "method_7866", "()Ljava/lang/String;");
-                env->ExceptionClear();
-                
-                if (getTranslationKey) {
-                    jstring jKey = (jstring)env->CallObjectMethod(item, getTranslationKey);
-                    env->ExceptionClear();
-                    if (jKey) {
-                        const char* keyStr = env->GetStringUTFChars(jKey, 0);
-                        std::string lowerStr = keyStr;
-                        std::transform(lowerStr.begin(), lowerStr.end(), lowerStr.begin(), ::tolower);
-                        
-                        std::string lowerItem = itemKey;
-                        std::transform(lowerItem.begin(), lowerItem.end(), lowerItem.begin(), ::tolower);
-                        
-                        bool isCorrectItem = (lowerStr.find(lowerItem) != std::string::npos);
-                        env->ReleaseStringUTFChars(jKey, keyStr);
-                        env->DeleteLocalRef(jKey);
-
-                        if (isCorrectItem) {
-                            if (enchKey == nullptr) {
-                                env->DeleteLocalRef(itemClass);
-                                env->DeleteLocalRef(item);
-                                env->DeleteLocalRef(stackClass);
-                                env->DeleteLocalRef(stack);
-                                env->DeleteLocalRef(invClass);
-                                return i; // Exact match, no ench required
-                            }
-
-                            if (fallbackSlot == -1) fallbackSlot = i; // Save first matching item as fallback
-
-                            bool hasEnch = false;
-                            std::string lowerEnch = enchKey;
-                            std::transform(lowerEnch.begin(), lowerEnch.end(), lowerEnch.begin(), ::tolower);
-
-                            // In 1.21.11, the most reliable way to check enchantments is to check the item's hover tooltip lines
-                            // method_56150 = getTooltip(Item.TooltipContext, PlayerEntity, TooltipType) -> List<Text>
-                            jclass tooltipContextClass = env->FindClass("net/minecraft/class_1792$class_9635");
-                            jclass tooltipTypeClass = env->FindClass("net/minecraft/class_1836");
-                            env->ExceptionClear();
-                            
-                            if (tooltipContextClass && tooltipTypeClass) {
-                                // Get TooltipContext.DEFAULT
-                                jfieldID defaultContextField = env->GetStaticFieldID(tooltipContextClass, "field_51296", "Lnet/minecraft/class_1792$class_9635;");
-                                env->ExceptionClear();
-                                jobject defaultContext = nullptr;
-                                if (defaultContextField) {
-                                    defaultContext = env->GetStaticObjectField(tooltipContextClass, defaultContextField);
-                                    env->ExceptionClear();
-                                }
-                                
-                                // Get TooltipType.BASIC
-                                jfieldID basicTypeField = env->GetStaticFieldID(tooltipTypeClass, "field_8949", "Lnet/minecraft/class_1836;");
-                                env->ExceptionClear();
-                                jobject basicType = nullptr;
-                                if (basicTypeField) {
-                                    basicType = env->GetStaticObjectField(tooltipTypeClass, basicTypeField);
-                                    env->ExceptionClear();
-                                }
-                                
-                                if (defaultContext && basicType) {
-                                    jmethodID getTooltip = env->GetMethodID(stackClass, "method_56150", "(Lnet/minecraft/class_1792$class_9635;Lnet/minecraft/class_1657;Lnet/minecraft/class_1836;)Ljava/util/List;");
-                                    env->ExceptionClear();
-                                    
-                                    if (getTooltip) {
-                                        jobject tooltipList = env->CallObjectMethod(stack, getTooltip, defaultContext, nullptr, basicType);
-                                        env->ExceptionClear();
-                                        
-                                        if (tooltipList) {
-                                            jclass listClass = env->GetObjectClass(tooltipList);
-                                            jmethodID listSize = env->GetMethodID(listClass, "size", "()I");
-                                            jmethodID listGet = env->GetMethodID(listClass, "get", "(I)Ljava/lang/Object;");
-                                            env->ExceptionClear();
-                                            
-                                            if (listSize && listGet) {
-                                                int size = env->CallIntMethod(tooltipList, listSize);
-                                                env->ExceptionClear();
-                                                
-                                                for (int t = 0; t < size; t++) {
-                                                    jobject textObj = env->CallObjectMethod(tooltipList, listGet, t);
-                                                    env->ExceptionClear();
-                                                    if (textObj) {
-                                                        jclass textClass = env->GetObjectClass(textObj);
-                                                        jmethodID getString = env->GetMethodID(textClass, "method_10851", "()Ljava/lang/String;");
-                                                        env->ExceptionClear();
-                                                        
-                                                        if (getString) {
-                                                            jstring jStr = (jstring)env->CallObjectMethod(textObj, getString);
-                                                            env->ExceptionClear();
-                                                            if (jStr) {
-                                                                const char* str = env->GetStringUTFChars(jStr, 0);
-                                                                std::string tooltipStr = str;
-                                                                std::transform(tooltipStr.begin(), tooltipStr.end(), tooltipStr.begin(), ::tolower);
-                                                                if (tooltipStr.find(lowerEnch) != std::string::npos) {
-                                                                    hasEnch = true;
-                                                                }
-                                                                env->ReleaseStringUTFChars(jStr, str);
-                                                                env->DeleteLocalRef(jStr);
-                                                            }
-                                                        }
-                                                        env->DeleteLocalRef(textClass);
-                                                        env->DeleteLocalRef(textObj);
-                                                    }
-                                                    if (hasEnch) break;
-                                                }
-                                            }
-                                            env->DeleteLocalRef(listClass);
-                                            env->DeleteLocalRef(tooltipList);
-                                        }
-                                    }
-                                }
-                                if (defaultContext) env->DeleteLocalRef(defaultContext);
-                                if (basicType) env->DeleteLocalRef(basicType);
-                                env->DeleteLocalRef(tooltipContextClass);
-                                env->DeleteLocalRef(tooltipTypeClass);
-                            }
-
-                            if (hasEnch) {
-                                env->DeleteLocalRef(itemClass);
-                                env->DeleteLocalRef(item);
-                                env->DeleteLocalRef(stackClass);
-                                env->DeleteLocalRef(stack);
-                                env->DeleteLocalRef(invClass);
-                                return i; // Exact match with enchantment/name!
-                            }
-                        }
-                    }
-                }
-                env->DeleteLocalRef(itemClass);
-                env->DeleteLocalRef(item);
-            }
-        }
-        env->DeleteLocalRef(stackClass);
-        env->DeleteLocalRef(stack);
-    }
-    
-    env->DeleteLocalRef(invClass);
-    return fallbackSlot; // Return fallback if no exact match found
-}
-
-void Macro::OnTick() {
-    long long currentTime = GetTimeMs();
-    JNIEnv* env = nullptr;
-    
-    // Only attach JNI if we are actively triggering a macro to save CPU
-    if ((stunSlamEnabled && stunSlamState == 0 && (GetAsyncKeyState(VK_XBUTTON2) & 0x8000)) || 
-        (spearDashEnabled && spearDashState == 0 && (GetAsyncKeyState('2') & 0x8000))) {
-        
-        if (JNIHelper::vm) {
-            JNIHelper::vm->AttachCurrentThread((void**)&env, nullptr);
-        }
-        
-        if (env) {
-            jclass mcClass = env->FindClass("net/minecraft/class_310");
-            env->ExceptionClear();
-            if (mcClass) {
-                jmethodID getInstance = env->GetStaticMethodID(mcClass, "method_1551", "()Lnet/minecraft/class_310;");
-                env->ExceptionClear();
-                if (getInstance) {
-                    jobject mc = env->CallStaticObjectMethod(mcClass, getInstance);
-                    env->ExceptionClear();
-                    if (mc) {
-                        // field_1724 = player
-                        jfieldID playerField = env->GetFieldID(mcClass, "field_1724", "Lnet/minecraft/class_746;");
-                        env->ExceptionClear();
-                        if (playerField) {
-                            jobject player = env->GetObjectField(mc, playerField);
-                            env->ExceptionClear();
-                            if (player) {
-                                jclass playerClass = env->GetObjectClass(player);
-                                // field_7514 = inventory
-                                jfieldID invField = env->GetFieldID(playerClass, "field_7514", "Lnet/minecraft/class_1661;");
-                                env->ExceptionClear();
-                                if (invField) {
-                                    jobject inventory = env->GetObjectField(player, invField);
-                                    env->ExceptionClear();
-                                    
-                                    if (inventory) {
-                                        // --- Dynamic Hotbar Resolution ---
-                                        
-                                        // Find Axe (any type)
-                                        int axeSlot = FindHotbarSlot(env, inventory, "axe", nullptr);
-                                        if (axeSlot != -1) currentAxeKey = '1' + axeSlot;
-                                        
-                                        // Find Spear
-                                        int spearSlot = FindHotbarSlot(env, inventory, "spear", nullptr);
-                                        if (spearSlot != -1) currentSpearKey = '1' + spearSlot;
-                                        
-                                        // Find No-CD item (fallback to Axe if none found)
-                                        currentNoCdKey = currentAxeKey; 
-
-                                        // Fall distance check for Mace logic
-                                        double fallDistance = 0.0;
-                                        jfieldID fallDistFieldD = env->GetFieldID(playerClass, "field_6017", "D");
-                                        env->ExceptionClear();
-                                        if (fallDistFieldD) {
-                                            fallDistance = env->GetDoubleField(player, fallDistFieldD);
-                                            env->ExceptionClear();
-                                        } else {
-                                            jfieldID fallDistFieldF = env->GetFieldID(playerClass, "field_6017", "F");
-                                            env->ExceptionClear();
-                                            if (fallDistFieldF) {
-                                                fallDistance = (double)env->GetFloatField(player, fallDistFieldF);
-                                                env->ExceptionClear();
-                                            }
-                                        }
-
-                                        int maceSlot = -1;
-                                        if (fallDistance <= 9.0) {
-                                            // <= 9 blocks: Try to find Breach mace first
-                                            maceSlot = FindHotbarSlot(env, inventory, "mace", "breach");
-                                        } else {
-                                            // > 9 blocks: Try to find Density mace first
-                                            maceSlot = FindHotbarSlot(env, inventory, "mace", "density");
-                                        }
-                                        
-                                        if (maceSlot != -1) currentMaceKey = '1' + maceSlot;
-
-                                        env->DeleteLocalRef(inventory);
-                                    }
-                                }
-                                env->DeleteLocalRef(playerClass);
-                                env->DeleteLocalRef(player);
-                            }
-                        }
-                        env->DeleteLocalRef(mc);
-                    }
-                }
-                env->DeleteLocalRef(mcClass);
-            }
-        }
-    }
-
-    // --- StunSlam State Machine ---
-    if (stunSlamEnabled) {
-        if (stunSlamState == 0 && (GetAsyncKeyState(VK_XBUTTON2) & 0x8000)) {
-            SendKeyDownEx(currentAxeKey);
-            stunSlamNextTime = currentTime + GaussianSleep(12.0, 1.0, 10, 15);
-            stunSlamState = 1;
-        }
-        else if (stunSlamState == 1 && currentTime >= stunSlamNextTime) {
-            SendMouseDownEx();
-            stunSlamNextTime = currentTime + GaussianSleep(15.0, 1.5, 12, 18);
-            stunSlamState = 2;
-        }
-        else if (stunSlamState == 2 && currentTime >= stunSlamNextTime) {
-            SendMouseUpEx();
-            stunSlamNextTime = currentTime + GaussianSleep(10.0, 1.0, 8, 13);
-            stunSlamState = 3;
-        }
-        else if (stunSlamState == 3 && currentTime >= stunSlamNextTime) {
-            SendKeyDownEx(currentMaceKey);
-            stunSlamNextTime = currentTime + GaussianSleep(15.0, 1.5, 12, 18);
-            stunSlamState = 4;
-        }
-        else if (stunSlamState == 4 && currentTime >= stunSlamNextTime) {
-            SendMouseDownEx();
-            stunSlamNextTime = currentTime + GaussianSleep(12.0, 1.0, 10, 15);
-            stunSlamState = 5;
-        }
-        else if (stunSlamState == 5 && currentTime >= stunSlamNextTime) {
-            SendMouseUpEx();
-            SendKeyUpEx(currentAxeKey);
-            SendKeyUpEx(currentMaceKey);
-            stunSlamNextTime = currentTime + GaussianSleep(350.0, 25.0, 300, 450);
-            stunSlamState = 6;
-        }
-        else if (stunSlamState == 6 && currentTime >= stunSlamNextTime) {
-            stunSlamState = 0;
-        }
-    } else {
-        stunSlamState = 0;
-    }
-
-    // --- SpearDash Attribute Swapping State Machine ---
-    if (spearDashEnabled) {
-        if (spearDashState == 0 && (GetAsyncKeyState('2') & 0x8000)) {
-            SendKeyDownEx(currentNoCdKey);
-            spearDashNextTime = currentTime + GaussianSleep(12.0, 1.0, 10, 15);
-            spearDashState = 1;
-        }
-        else if (spearDashState == 1 && currentTime >= spearDashNextTime) {
-            SendMouseDownEx();
-            spearDashNextTime = currentTime + GaussianSleep(12.0, 1.0, 10, 15);
-            spearDashState = 2;
-        }
-        else if (spearDashState == 2 && currentTime >= spearDashNextTime) {
-            SendKeyDownEx(currentSpearKey);
-            spearDashNextTime = currentTime + GaussianSleep(12.0, 1.0, 10, 15);
-            spearDashState = 3;
-        }
-        else if (spearDashState == 3 && currentTime >= spearDashNextTime) {
-            SendMouseUpEx();
-            SendKeyUpEx(currentNoCdKey);
-            SendKeyUpEx(currentSpearKey);
-            spearDashNextTime = currentTime + GaussianSleep(250.0, 20.0, 200, 300);
-            spearDashState = 4;
-        }
-        else if (spearDashState == 4 && currentTime >= spearDashNextTime) {
-            spearDashState = 0;
-        }
-    } else {
-        spearDashState = 0;
-    }
-}
+I2luY2x1ZGUgIk1hY3JvLmgiCiNpbmNsdWRlICIuLi8uLi9jb3JlL0pOSUhl
+bHBlci5oIgojaW5jbHVkZSA8d2luZG93cy5oPgojaW5jbHVkZSA8Y2hyb25v
+PgojaW5jbHVkZSA8YWxnb3JpdGhtPgojaW5jbHVkZSA8c3RyaW5nPgojaW5j
+bHVkZSA8dmVjdG9yPgoKc3RhdGljIHN0ZDo6bXQxOTkzNyBzX21hY3JvUm5n
+KFtdKCkgLT4gdWludDMyX3QgewogICAgc3RkOjpyYW5kb21fZGV2aWNlIHJk
+OwogICAgcmV0dXJuIHJkKCkgXiAodWludDMyX3QpKEdldFRpY2tDb3VudDY0
+KCkgKiAyNjU0NDM1NzYxVUxMKTsKfSgpKTsKCk1hY3JvOjpNYWNybygpIDog
+TW9kdWxlKCJNYWNybyIpIHt9Cgpsb25nIGxvbmcgTWFjcm86OkdldFRpbWVN
+cygpIHsKICAgIHJldHVybiBzdGQ6OmNocm9ubzo6ZHVyYXRpb25fY2FzdDxz
+dGQ6OmNocm9ubzo6bWlsbGlzZWNvbmRzPigKICAgICAgICBzdGQ6OmNocm9u
+bzo6c3lzdGVtX2Nsb2NrOjpub3coKS50aW1lX3NpbmNlX2Vwb2NoKCkKICAg
+ICkuY291bnQoKTsKfQoKaW50IE1hY3JvOjpHYXVzc2lhblNsZWVwKGRvdWJs
+ZSBtZWFuLCBkb3VibGUgc3RkZGV2LCBpbnQgbWluX3ZhbCwgaW50IG1heF92
+YWwpIHsKICAgIGlmIChzdGRkZXYgPD0gMC4wMDEpIHN0ZGRldiA9IDAuMDAx
+OwogICAgc3RkOjpub3JtYWxfZGlzdHJpYnV0aW9uPD4gZGlzdHIobWVhbiwg
+c3RkZGV2KTsKICAgIGludCB2YWwgPSAoaW50KXN0ZDo6cm91bmQoZGlzdHIo
+c19tYWNyb1JuZykpOwogICAgcmV0dXJuIHN0ZDo6Y2xhbXAodmFsLCBtaW5f
+dmFsLCBtYXhfdmFsKTsKfQoKdm9pZCBNYWNybzo6U2VuZEtleURvd25FeChX
+T1JEIHZLZXkpIHsKICAgIElOUFVUIGlucHV0ID0geyAwIH07CiAgICBpbnB1
+dC50eXBlID0gSU5QVVRfS0VZQk9BUkQ7CiAgICBpbnB1dC5raS53U2NhbiA9
+IE1hcFZpcnR1YWxLZXkodktleSwgTUFQVktfVktfVE9fVlNDKTsKICAgIGlu
+cHV0LmtpLmR3RmxhZ3MgPSBLRVlFVkVOVEZfU0NBTkNPREU7CiAgICBTZW5k
+SW5wdXQoMSwgJmlucHV0LCBzaXplb2YoSU5QVVQpKTsKfQoKdm9pZCBNYWNy
+bzo6U2VuZEtleVVwRXgoV09SRCB2S2V5KSB7CiAgICBJTlBVVCBpbnB1dCA9
+IHsgMCB9OwogICAgaW5wdXQudHlwZSA9IElOUFVUX0tFWUJPQVJEOwogICAg
+aW5wdXQua2kud1NjYW4gPSBNYXBWaXJ0dWFsS2V5KHZLZXksIE1BUFZLX1ZL
+X1RPX1ZTQyk7CiAgICBpbnB1dC5raS5kd0ZsYWdzID0gS0VZRVZFTlRGX1ND
+QU5DT0RFIHwgS0VZRVZFTlRGX0tFWVVQOwogICAgU2VuZElucHV0KDEsICZp
+bnB1dCwgc2l6ZW9mKElOUFVUKSk7Cn0KCnZvaWQgTWFjcm86OlNlbmRNb3Vz
+ZURvd25FeCgpIHsKICAgIElOUFVUIGlucHV0ID0geyAwIH07CiAgICBpbnB1
+dC50eXBlID0gSU5QVVRfTU9VU0U7CiAgICBpbnB1dC5taS5kd0ZsYWdzID0g
+TU9VU0VFVkVOVEZfTEVGVERPV047CiAgICBTZW5kSW5wdXQoMSwgJmlucHV0
+LCBzaXplb2YoSU5QVVQpKTsKfQoKdm9pZCBNYWNybzo6U2VuZE1vdXNlVXBF
+eCgpIHsKICAgIElOUFVUIGlucHV0ID0geyAwIH07CiAgICBpbnB1dC50eXBl
+ID0gSU5QVVRfTU9VU0U7CiAgICBpbnB1dC5taS5kd0ZsYWdzID0gTU9VU0VF
+VkVOVEZfTEVGVFVQOwogICAgU2VuZElucHV0KDEsICZpbnB1dCwgc2l6ZW9m
+KElOUFVUKSk7Cn0KCi8vIFNjYW5zIGhvdGJhciBzbG90cyAoMC04KSBmb3Ig
+YSBzcGVjaWZpYyBpdGVtLCBvcHRpb25hbGx5IGNoZWNraW5nIGZvciBhbiBl
+bmNoYW50bWVudC9uYW1lCmludCBNYWNybzo6RmluZEhvdGJhclNsb3Qodm9p
+ZCogZW52X3B0ciwgdm9pZCogaW52ZW50b3J5X3B0ciwgY29uc3QgY2hhciog
+aXRlbUtleSwgY29uc3QgY2hhciogZW5jaEtleSkgewogICAgSk5JRW52KiBl
+bnYgPSAoSk5JRW52KillbnZfcHRyOwogICAgam9iamVjdCBpbnZlbnRvcnkg
+PSAoam9iamVjdClpbnZlbnRvcnlfcHRyOwogICAgaWYgKCFlbnYgfHwgIWlu
+dmVudG9yeSkgcmV0dXJuIC0xOwoKICAgIGpjbGFzcyBpbnZDbGFzcyA9IGVu
+di0+R2V0T2JqZWN0Q2xhc3MoaW52ZW50b3J5KTsKICAgIGptZXRob2RJRCBn
+ZXRTdGFjayA9IGVudi0+R2V0TWV0aG9kSUQoaW52Q2xhc3MsICJtZXRob2Rf
+NTQzOCIsICIoSSlMbmV0L21pbmVjcmFmdC9jbGFzc18xNzk5OyIpOwogICAg
+ZW52LT5FeGNlcHRpb25DbGVhcigpOwogICAgaWYgKCFnZXRTdGFjaykgeyBl
+bnYtPkRlbGV0ZUxvY2FsUmVmKGludkNsYXNzKTsgcmV0dXJuIC0xOyB9Cgog
+ICAgaW50IGZhbGxiYWNrU2xvdCA9IC0xOwoKICAgIGZvciAoaW50IGkgPSAw
+OyBpIDwgOTsgaSsrKSB7CiAgICAgICAgam9iamVjdCBzdGFjayA9IGVudi0+
+Q2FsbE9iamVjdE1ldGhvZChpbnZlbnRvcnksIGdldFN0YWNrLCBpKTsKICAg
+ICAgICBlbnYtPkV4Y2VwdGlvbkNsZWFyKCk7CiAgICAgICAgaWYgKCFzdGFj
+aykgY29udGludWU7CgogICAgICAgIGpjbGFzcyBzdGFja0NsYXNzID0gZW52
+LT5HZXRPYmplY3RDbGFzcyhzdGFjayk7CiAgICAgICAgam1ldGhvZElEIGdl
+dEl0ZW0gPSBlbnYtPkdldE1ldGhvZElEKHN0YWNrQ2xhc3MsICJtZXRob2Rf
+NzkwOSIsICIoKUxuZXQvbWluZWNyYWZ0L2NsYXNzXzE3OTI7Iik7CiAgICAg
+ICAgZW52LT5FeGNlcHRpb25DbGVhcigpOwogICAgICAgIAogICAgICAgIGlm
+IChnZXRJdGVtKSB7CiAgICAgICAgICAgIGpvYmplY3QgaXRlbSA9IGVudi0+
+Q2FsbE9iamVjdE1ldGhvZChzdGFjaywgZ2V0SXRlbSk7CiAgICAgICAgICAg
+IGVudi0+RXhjZXB0aW9uQ2xlYXIoKTsKICAgICAgICAgICAgaWYgKGl0ZW0p
+IHsKICAgICAgICAgICAgICAgIGpjbGFzcyBpdGVtQ2xhc3MgPSBlbnYtPkdl
+dE9iamVjdENsYXNzKGl0ZW0pOwogICAgICAgICAgICAgICAgam1ldGhvZElE
+IGdldFRyYW5zbGF0aW9uS2V5ID0gZW52LT5HZXRNZXRob2RJRChpdGVtQ2xh
+c3MsICJtZXRob2RfNzg2NiIsICIoKUxqYXZhL2xhbmcvU3RyaW5nOyIpOwog
+ICAgICAgICAgICAgICAgZW52LT5FeGNlcHRpb25DbGVhcigpOwogICAgICAg
+ICAgICAgICAgCiAgICAgICAgICAgICAgICBpZiAoZ2V0VHJhbnNsYXRpb25L
+ZXkpIHsKICAgICAgICAgICAgICAgICAgICBqc3RyaW5nIGpLZXkgPSAoanN0
+cmluZyllbnYtPkNhbGxPYmplY3RNZXRob2QoaXRlbSwgZ2V0VHJhbnNsYXRp
+b25LZXkpOwogICAgICAgICAgICAgICAgICAgIGVudi0+RXhjZXB0aW9uQ2xl
+YXIoKTsKICAgICAgICAgICAgICAgICAgICBpZiAoaktleSkgewogICAgICAg
+ICAgICAgICAgICAgICAgICBjb25zdCBjaGFyKiBrZXlTdHIgPSBlbnYtPkdl
+dFN0cmluZ1VURkNoYXJzKGpLZXksIDApOwogICAgICAgICAgICAgICAgICAg
+ICAgICBzdGQ6OnN0cmluZyBsb3dlclN0ciA9IGtleVN0cjsKICAgICAgICAg
+ICAgICAgICAgICAgICAgc3RkOjp0cmFuc2Zvcm0obG93ZXJTdHIuYmVnaW4o
+KSwgbG93ZXJTdHIuZW5kKCksIGxvd2VyU3RyLmJlZ2luKCksIDo6dG9sb3dl
+cik7CiAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAg
+ICAgICAgICBzdGQ6OnN0cmluZyBsb3dlckl0ZW0gPSBpdGVtS2V5OwogICAg
+ICAgICAgICAgICAgICAgICAgICBzdGQ6OnRyYW5zZm9ybShsb3dlckl0ZW0u
+YmVnaW4oKSwgbG93ZXJJdGVtLmVuZCgpLCBsb3dlckl0ZW0uYmVnaW4oKSwg
+Ojp0b2xvd2VyKTsKICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAg
+ICAgICAgICAgICAgICAgIGJvb2wgaXNDb3JyZWN0SXRlbSA9IChsb3dlclN0
+ci5maW5kKGxvd2VySXRlbSkgIT0gc3RkOjpzdHJpbmc6Om5wb3MpOwogICAg
+ICAgICAgICAgICAgICAgICAgICBlbnYtPlJlbGVhc2VTdHJpbmdVVEZDaGFy
+cyhqS2V5LCBrZXlTdHIpOwogICAgICAgICAgICAgICAgICAgICAgICBlbnYt
+PkRlbGV0ZUxvY2FsUmVmKGpLZXkpOwoKICAgICAgICAgICAgICAgICAgICAg
+ICAgaWYgKGlzQ29ycmVjdEl0ZW0pIHsKICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgIGlmIChlbmNoS2V5ID09IG51bGxwdHIpIHsKICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICBlbnYtPkRlbGV0ZUxvY2FsUmVmKGl0ZW1D
+bGFzcyk7CiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgZW52LT5E
+ZWxldGVMb2NhbFJlZihpdGVtKTsKICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICBlbnYtPkRlbGV0ZUxvY2FsUmVmKHN0YWNrQ2xhc3MpOwogICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgIGVudi0+RGVsZXRlTG9jYWxS
+ZWYoc3RhY2spOwogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGVu
+di0+RGVsZXRlTG9jYWxSZWYoaW52Q2xhc3MpOwogICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgIHJldHVybiBpOyAvLyBFeGFjdCBtYXRjaCwgbm8g
+ZW5jaCByZXF1aXJlZAogICAgICAgICAgICAgICAgICAgICAgICAgICAgfQoK
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgIGlmIChmYWxsYmFja1Nsb3Qg
+PT0gLTEpIGZhbGxiYWNrU2xvdCA9IGk7IC8vIFNhdmUgZmlyc3QgbWF0Y2hp
+bmcgaXRlbSBhcyBmYWxsYmFjawoKICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgIGJvb2wgaGFzRW5jaCA9IGZhbHNlOwogICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgc3RkOjpzdHJpbmcgbG93ZXJFbmNoID0gZW5jaEtleTsKICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgIHN0ZDo6dHJhbnNmb3JtKGxvd2Vy
+RW5jaC5iZWdpbigpLCBsb3dlckVuY2guZW5kKCksIGxvd2VyRW5jaC5iZWdp
+bigpLCA6OnRvbG93ZXIpOwoKICAgICAgICAgICAgICAgICAgICAgICAgICAg
+IC8vIEluIDEuMjEuMTEsIHRoZSBtb3N0IHJlbGlhYmxlIHdheSB0byBjaGVj
+ayBlbmNoYW50bWVudHMgaXMgdG8gY2hlY2krdGhlIGl0ZW0ncyBob3ZlciB0
+b29sdGlwIGxpbmVzCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAvLyBt
+ZXRob2RfNTYxNTAgPSBnZXRUb29sdGlwKEl0ZW0uVG9vbHRpcENvbnRleHQs
+IFBsYXllckVudGl0eSwgVG9vbHRpcFR5cGUpIC0+IExpc3Q8VGV4dD4KICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgIGpjbGFzcyB0b29sdGlwQ29udGV4
+dENsYXNzID0gZW52LT5GaW5kQ2xhc3MoIm5ldC9taW5lY3JhZnQvY2xhc3Nf
+MTc5MiRjbGFzc185NjM1Iik7CiAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICBqY2xhc3MgdG9vbHRpcFR5cGVDbGFzcyA9IGVudi0+RmluZENsYXNzKCJu
+ZXQvbWluZWNyYWZ0L2NsYXNzXzE4MzYiKTsKICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgIGVudi0+RXhjZXB0aW9uQ2xlYXIoKTsKICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAg
+aWYgKHRvb2x0aXBDb250ZXh0Q2xhc3MgJiYgdG9vbHRpcFR5cGVDbGFzcykg
+ewogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIC8vIEdldCBUb29s
+dGlwQ29udGV4dC5ERUZBVUxUCiAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgamZpZWxkSUQgZGVmYXVsdENvbnRleHRGaWVsZCA9IGVudi0+R2V0
+U3RhdGljRmllbGRJRCh0b29sdGlwQ29udGV4dENsYXNzLCAiZmllbGRfNTEy
+OTYiLCAiTG5ldC9taW5lY3JhZnQvY2xhc3NfMTc5MiRjbGFzc185NjM1OyIp
+OwogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGVudi0+RXhjZXB0
+aW9uQ2xlYXIoKTsKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBq
+b2JqZWN0IGRlZmF1bHRDb250ZXh0ID0gbnVsbHB0cjsKICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICBpZiAoZGVmYXVsdENvbnRleHRGaWVsZCkg
+ewogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBkZWZhdWx0
+Q29udGV4dCA9IGVudi0+R2V0U3RhdGljT2JqZWN0RmllbGQodG9vbHRpcENv
+bnRleHRDbGFzcywgZGVmYXVsdENvbnRleHRGaWVsZCk7CiAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgIGVudi0+RXhjZXB0aW9uQ2xlYXIo
+KTsKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICB9CiAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgLy8gR2V0IFRvb2x0aXBUeXBlLkJBU0lDCiAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgamZpZWxkSUQgYmFzaWNUeXBlRmll
+bGQgPSBlbnYtPkdldFN0YXRpY0ZpZWxkSUQodG9vbHRpcFR5cGVDbGFzcywg
+ImZpZWxkXzg5NDkiLCAiTG5ldC9taW5lY3JhZnQvY2xhc3NfMTgzNjsiKTsK
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBlbnYtPkV4Y2VwdGlv
+bkNsZWFyKCk7CiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgam9i
+amVjdCBiYXNpY1R5cGUgPSBudWxscHRyOwogICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgIGlmIChiYXNpY1R5cGVGaWVsZCkgewogICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICBiYXNpY1R5cGUgPSBlbnYtPkdl
+dFN0YXRpY09iamVjdEZpZWxkKHRvb2x0aXBUeXBlQ2xhc3MsIGJhc2ljVHlw
+ZUZpZWxkKTsKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ZW52LT5FeGNlcHRpb25DbGVhcigpOwogICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgIH0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAK
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBpZiAoZGVmYXVsdENv
+bnRleHQgJiYgYmFzaWNUeXBlKSB7CiAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgIGptZXRob2RJRCBnZXRUb29sdGlwID0gZW52LT5HZXRN
+ZXRob2RJRChzdGFja0NsYXNzLCAibWV0aG9kXzU2MTUwIiwgIihMbmV0L21p
+bmVjcmFmdC9jbGFzc18xNzkyJGNsYXNzXzk2MzU7TG5ldC9taW5lY3JhZnQv
+Y2xhc3NfMTY1NztMbmV0L21pbmVjcmFmdC9jbGFzc18xODM2OylMamF2YS91
+dGlsL0xpc3Q7Iik7CiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgIGVudi0+RXhjZXB0aW9uQ2xlYXIoKTsKICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgIGlmIChnZXRUb29sdGlwKSB7CiAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICBqb2JqZWN0IHRvb2x0aXBMaXN0ID0g
+ZW52LT5DYWxsT2JqZWN0TWV0aG9kKHN0YWNrLCBnZXRUb29sdGlwLCBkZWZh
+dWx0Q29udGV4dCwgbnVsbHB0ciwgYmFzaWNUeXBlKTsKICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgIGVudi0+RXhjZXB0aW9uQ2xl
+YXIoKTsKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+IAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgaWYg
+KHRvb2x0aXBMaXN0KSB7CiAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgamNsYXNzIGxpc3RDbGFzcyA9IGVudi0+R2V0T2Jq
+ZWN0Q2xhc3ModG9vbHRpcExpc3QpOwogICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgIGptZXRob2RJRCBsaXN0U2l6ZSA9IGVu
+di0+R2V0TWV0aG9kSUQobGlzdENsYXNzLCAic2l6ZSIsICIoKUkiKTsKICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBqbWV0
+aG9kSUQgbGlzdEdldCA9IGVudi0+R2V0TWV0aG9kSUQobGlzdENsYXNzLCAi
+Z2V0IiwgIihJKUxqYXZhL2xhbmcvT2JqZWN0OyIpOwogICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGVudi0+RXhjZXB0aW9u
+Q2xlYXIoKTsKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICBpZiAobGlzdFNpemUgJiYgbGlzdEdldCkgewogICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBpbnQgc2l6
+ZSA9IGVudi0+Q2FsbEludE1ldGhvZCh0b29sdGlwTGlzdCwgbGlzdFNpemUp
+OwogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICBlbnYtPkV4Y2VwdGlvbkNsZWFyKCk7CiAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBmb3IgKGludCB0
+ID0gMDsgdCA8IHNpemU7IHQrKykgewogICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgam9iamVjdCB0ZXh0T2Jq
+ID0gZW52LT5DYWxsT2JqZWN0TWV0aG9kKHRvb2x0aXBMaXN0LCBsaXN0R2V0
+LCB0KTsKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgIGVudi0+RXhjZXB0aW9uQ2xlYXIoKTsKICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGlm
+ICh0ZXh0T2JqKSB7CiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgamNsYXNzIHRleHRDbGFzcyA9IGVu
+di0+R2V0T2JqZWN0Q2xhc3ModGV4dE9iaik7CiAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgam1ldGhv
+ZElEIGdldFN0cmluZyA9IGVudi0+R2V0TWV0aG9kSUQodGV4dENsYXNzLCAi
+bWV0aG9kXzEwODUxIiwgIigpTGphdmEvbGFuZy9TdHJpbmc7Iik7CiAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgZW52LT5FeGNlcHRpb25DbGVhcigpOwogICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgIGlmIChnZXRTdHJpbmcpIHsKICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAganN0cmlu
+ZyBqU3RyID0gKGpzdHJpbmcpZW52LT5DYWxsT2JqZWN0TWV0aG9kKHRleHRP
+YmosIGdldFN0cmluZyk7CiAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGVudi0+RXhjZXB0aW9u
+Q2xlYXIoKTsKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgaWYgKGpTdHIpIHsKICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgIGNvbnN0IGNoYXIqIHN0ciA9IGVudi0+R2V0U3RyaW5nVVRG
+Q2hhcnMoalN0ciwgMCk7CiAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBzdGQ6OnN0cmlu
+ZyB0b29sdGlwU3RyID0gc3RyOwogICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgc3RkOjp0
+cmFuc2Zvcm0odG9vbHRpcFN0ci5iZWdpbigpLCB0b29sdGlwU3RyLmVuZCgp
+LCB0b29sdGlwU3RyLmJlZ2luKCksIDo6dG9sb3dlcik7CiAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICBpZiAodG9vbHRpcFN0ci5maW5kKGxvd2VyRW5jaCkgIT0gc3Rk
+OjpzdHJpbmc6Om5wb3MpIHsKICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBoYXNF
+bmNoID0gdHJ1ZTsKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgIGVudi0+UmVsZWFzZVN0cmluZ1VURkNoYXJzKGpTdHIsIHN0cik7
+CiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICBlbnYtPkRlbGV0ZUxvY2FsUmVmKGpTdHIp
+OwogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgfQogICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGVu
+di0+RGVsZXRlTG9jYWxSZWYodGV4dENsYXNzKTsKICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBlbnYt
+PkRlbGV0ZUxvY2FsUmVmKHRleHRPYmopOwogICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgfQogICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgaWYg
+KGhhc0VuY2gpIGJyZWFrOwogICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgfQogICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgIGVudi0+RGVsZXRlTG9jYWxSZWYobGlz
+dENsYXNzKTsKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICBlbnYtPkRlbGV0ZUxvY2FsUmVmKHRvb2x0aXBMaXN0KTsKICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIH0KICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgfQogICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICBpZiAoZGVmYXVsdENvbnRleHQpIGVudi0+RGVsZXRlTG9jYWxS
+ZWYoZGVmYXVsdENvbnRleHQpOwogICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgIGlmIChiYXNpY1R5cGUpIGVudi0+RGVsZXRlTG9jYWxSZWYoYmFz
+aWNUeXBlKTsKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBlbnYt
+PkRlbGV0ZUxvY2FsUmVmKHRvb2x0aXBDb250ZXh0Q2xhc3MpOwogICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgIGVudi0+RGVsZXRlTG9jYWxSZWYo
+dG9vbHRpcFR5cGVDbGFzcyk7CiAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICB9CgogICAgICAgICAgICAgICAgICAgICAgICAgICAgaWYgKGhhc0VuY2gp
+IHsKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBlbnYtPkRlbGV0
+ZUxvY2FsUmVmKGl0ZW1DbGFzcyk7CiAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgZW52LT5EZWxldGVMb2NhbFJlZihpdGVtKTsKICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICBlbnYtPkRlbGV0ZUxvY2FsUmVmKHN0
+YWNrQ2xhc3MpOwogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGVu
+di0+RGVsZXRlTG9jYWxSZWYoc3RhY2spOwogICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgIGVudi0+RGVsZXRlTG9jYWxSZWYoaW52Q2xhc3MpOwog
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIHJldHVybiBpOyAvLyBF
+eGFjdCBtYXRjaCB3aXRoIGVuY2hhbnRtZW50L25hbWUhCiAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgICAgICAgICAgICAgIH0K
+ICAgICAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgICAgICB9CiAgICAg
+ICAgICAgICAgICBlbnYtPkRlbGV0ZUxvY2FsUmVmKGl0ZW1DbGFzcyk7CiAg
+ICAgICAgICAgICAgICBlbnYtPkRlbGV0ZUxvY2FsUmVmKGl0ZW0pOwogICAg
+ICAgICAgICB9CiAgICAgICAgfQogICAgICAgIGVudi0+RGVsZXRlTG9jYWxS
+ZWYoc3RhY2tDbGFzcyk7CiAgICAgICAgZW52LT5EZWxldGVMb2NhbFJlZihz
+dGFjayk7CiAgICB9CiAgICAKICAgIGVudi0+RGVsZXRlTG9jYWxSZWYoaW52
+Q2xhc3MpOwogICAgcmV0dXJuIGZhbGxiYWNrU2xvdDsgLy8gUmV0dXJuIGZh
+bGxiYWNrIGlmIG5vIGV4YWN0IG1hdGNoIGZvdW5kCn0KCnZvaWQgTWFjcm86
+Ok9uVGljaygpIHsKICAgIGxvbmcgbG9uZyBjdXJyZW50VGltZSA9IEdldFRp
+bWVNcygpOwogICAgSk5JRW52KiBlbnYgPSBudWxscHRyOwogICAgCiAgICAv
+LyBPbmx5IGF0dGFjaCBKTkkgaWYgd2UgYXJlIGFjdGl2ZWx5IHRyaWdnZXJp
+bmcgYSBtYWNybyB0byBzYXZlIENQVQogICAgaWYgKChzdHVuU2xhbUVuYWJs
+ZWQgJiYgc3R1blNsYW1TdGF0ZSA9PSAwICYmIChHZXRBc3luY0tleVN0YXRl
+KFZLX1hCVVRUT04yKSAmIDB4ODAwMCkpIHx8IAogICAgICAgIChzcGVhckRh
+c2hFbmFibGVkICYmIHNwZWFyRGFzaFN0YXRlID09IDAgJiYgKEdldEFzeW5j
+S2V5U3RhdGUoJzInKSAmIDB4ODAwMCkpKSB7CiAgICAgICAgCiAgICAgICAg
+aWYgKEpOSUhlbHBlcjo6dm0pIHsKICAgICAgICAgICAgSk5JSGVscGVyOjp2
+bS0+QXR0YWNoQ3VycmVudFRocmVhZCgodm9pZCoqKSZlbnYsIG51bGxwdHIp
+OwogICAgICAgIH0KICAgICAgICAKICAgICAgICBpZiAoZW52KSB7CiAgICAg
+ICAgICAgIGpjbGFzcyBtY0NsYXNzID0gZW52LT5GaW5kQ2xhc3MoIm5ldC9t
+aW5lY3JhZnQvY2xhc3NfMzEwIik7CiAgICAgICAgICAgIGVudi0+RXhjZXB0
+aW9uQ2xlYXIoKTsKICAgICAgICAgICAgaWYgKG1jQ2xhc3MpIHsKICAgICAg
+ICAgICAgICAgIGptZXRob2RJRCBnZXRJbnN0YW5jZSA9IGVudi0+R2V0U3Rh
+dGljTWV0aG9kSUQobWNDbGFzcywgIm1ldGhvZF8xNTUxIiwgIigpTG5ldC9t
+aW5lY3JhZnQvY2xhc3NfMzEwOyIpOwogICAgICAgICAgICAgICAgZW52LT5F
+eGNlcHRpb25DbGVhcigpOwogICAgICAgICAgICAgICAgaWYgKGdldEluc3Rh
+bmNlKSB7CiAgICAgICAgICAgICAgICAgICAgam9iamVjdCBtYyA9IGVudi0+
+Q2FsbFN0YXRpY09iamVjdE1ldGhvZChtY0NsYXNzLCBnZXRJbnN0YW5jZSk7
+CiAgICAgICAgICAgICAgICAgICAgZW52LT5FeGNlcHRpb25DbGVhcigpOwog
+ICAgICAgICAgICAgICAgICAgIGlmIChtYykgewogICAgICAgICAgICAgICAg
+ICAgICAgICAvLyBmaWVsZF8xNzI0ID0gcGxheWVyCiAgICAgICAgICAgICAg
+ICAgICAgICAgIGpmaWVsZElEIHBsYXllckZpZWxkID0gZW52LT5HZXRGaWVs
+ZElEKG1jQ2xhc3MsICJmaWVsZF8xNzI0IiwgIkxuZXQvbWluZWNyYWZ0L2Ns
+YXNzXzc0NjsiKTsKICAgICAgICAgICAgICAgICAgICAgICAgZW52LT5FeGNl
+cHRpb25DbGVhcigpOwogICAgICAgICAgICAgICAgICAgICAgICBpZiAocGxh
+eWVyRmllbGQpIHsKICAgICAgICAgICAgICAgICAgICAgICAgICAgIGpvYmpl
+Y3QgcGxheWVyID0gZW52LT5HZXRPYmplY3RGaWVsZChtYywgcGxheWVyRmll
+bGQpOwogICAgICAgICAgICAgICAgICAgICAgICAgICAgZW52LT5FeGNlcHRp
+b25DbGVhcigpOwogICAgICAgICAgICAgICAgICAgICAgICAgICAgaWYgKHBs
+YXllcikgewogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGpjbGFz
+cyBwbGF5ZXJDbGFzcyA9IGVudi0+R2V0T2JqZWN0Q2xhc3MocGxheWVyKTsK
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAvLyBmaWVsZF83NTE0
+ID0gaW52ZW50b3J5CiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+amZpZWxkSUQgaW52RmllbGQgPSBlbnYtPkdldEZpZWxkSUQocGxheWVyQ2xh
+c3MsICJmaWVsZF83NTE0IiwgIkxuZXQvbWluZWNyYWZ0L2NsYXNzXzE2NjE7
+Iik7CiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgZW52LT5FeGNl
+cHRpb25DbGVhcigpOwogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+IGlmIChpbnZGaWVsZCkgewogICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICBqb2JqZWN0IGludmVudG9yeSA9IGVudi0+R2V0T2JqZWN0Rmll
+bGQocGxheWVyLCBpbnZGaWVsZCk7CiAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgIGVudi0+RXhjZXB0aW9uQ2xlYXIoKTsKICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgIGlmIChpbnZlbnRvcnkpIHsKICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIC8vIC0tLSBEeW5hbWlj
+IEhvdGJhciBSZXNvbHV0aW9uIC0tLQogICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAvLyBGaW5kIEF4ZSAoYW55IHR5cGUpCiAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBpbnQgYXhlU2xvdCA9
+IEZpbmRIb3RiYXJTbG90KGVudiwgaW52ZW50b3J5LCAiYXhlIiwgbnVsbHB0
+cik7CiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBp
+ZiAoYXhlU2xvdCAhPSAtMSkgY3VycmVudEF4ZUtleSA9ICcxJyArIGF4ZVNs
+b3Q7CiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAK
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIC8vIEZp
+bmQgU3BlYXIKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgIGludCBzcGVhclNsb3QgPSBGaW5kSG90YmFyU2xvdChlbnYsIGludmVu
+dG9yeSwgInNwZWFyIiwgbnVsbHB0cik7CiAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICBpZiAoc3BlYXJTbG90ICE9IC0xKSBjdXJy
+ZW50U3BlYXJLZXkgPSAnMScgKyBzcGVhclNsb3Q7CiAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgIC8vIEZpbmQgTm8tQ0QgaXRlbSAoZmFs
+bGJhY2sgdG8gQXhlIGlmIG5vbmUgZm91bmQpCiAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICBjdXJyZW50Tm9DZEtleSA9IGN1cnJl
+bnRBeGVLZXk7IAoKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgIC8vIEZhbGwgZGlzdGFuY2UgY2hlY2sgZm9yIE1hY2UgbG9naWMK
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGRvdWJs
+ZSBmYWxsRGlzdGFuY2UgPSAwLjA7CiAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICBqZmllbGRJRCBmYWxsRGlzdEZpZWxkRCA9IGVu
+di0+R2V0RmllbGRJRChwbGF5ZXJDbGFzcywgImZpZWxkXzYwMTciLCAiRCIp
+OwogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgZW52
+LT5FeGNlcHRpb25DbGVhcigpOwogICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgaWYgKGZhbGxEaXN0RmllbGREKSB7CiAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgZmFsbERpc3Rh
+bmNlID0gZW52LT5HZXREb3VibGVGaWVsZChwbGF5ZXIsIGZhbGxEaXN0Rmll
+bGREKTsKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICBlbnYtPkV4Y2VwdGlvbkNsZWFyKCk7CiAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICB9IGVsc2UgewogICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGpmaWVsZElEIGZhbGxE
+aXN0RmllbGRGID0gZW52LT5HZXRGaWVsZElEKHBsYXllckNsYXNzLCAiZmll
+bGRfNjAxNyIsICJGIik7CiAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgZW52LT5FeGNlcHRpb25DbGVhcigpOwogICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGlmIChmYWxs
+RGlzdEZpZWxkRikgewogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICBmYWxsRGlzdGFuY2UgPSAoZG91YmxlKWVudi0+
+R2V0RmxvYXRGaWVsZChwbGF5ZXIsIGZhbGxEaXN0RmllbGRGKTsKICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgZW52
+LT5FeGNlcHRpb25DbGVhcigpOwogICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgIH0KCiAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICBpbnQgbWFjZVNsb3QgPSAtMTsKICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgIGlmIChmYWxsRGlzdGFuY2Ug
+PD0gOS4wKSB7CiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgLy8gPD0gOSBibG9ja3M6IFRyeSB0byBmaW5kIEJyZWFjaCBt
+YWNlIGZpcnN0CiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgbWFjZVNsb3QgPSBGaW5kSG90YmFyU2xvdChlbnYsIGludmVu
+dG9yeSwgIm1hY2UiLCAiYnJlYWNoIik7CiAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICB9IGVsc2UgewogICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgIC8vID4gOSBibG9ja3M6IFRy
+eSB0byBmaW5kIERlbnNpdHkgbWFjZSBmaXJzdAogICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgIG1hY2VTbG90ID0gRmluZEhv
+dGJhclNsb3QoZW52LCBpbnZlbnRvcnksICJtYWNlIiwgImRlbnNpdHkiKTsK
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIH0KICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgaWYgKG1hY2VTbG90
+ICE9IC0xKSBjdXJyZW50TWFjZUtleSA9ICcxJyArIG1hY2VTbG90OwoKICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGVudi0+RGVs
+ZXRlTG9jYWxSZWYoaW52ZW50b3J5KTsKICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgfQogICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgIH0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBlbnYtPkRl
+bGV0ZUxvY2FsUmVmKHBsYXllckNsYXNzKTsKICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICBlbnYtPkRlbGV0ZUxvY2FsUmVmKHBsYXllcik7CiAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgICAgICAg
+ICAgICAgIH0KICAgICAgICAgICAgICAgICAgICAgICAgZW52LT5EZWxldGVM
+b2NhbFJlZihtYyk7CiAgICAgICAgICAgICAgICAgICAgfQogICAgICAgICAg
+ICAgICAgfQogICAgICAgICAgICAgICAgZW52LT5EZWxldGVMb2NhbFJlZiht
+Y0NsYXNzKTsKICAgICAgICAgICAgfQogICAgICAgIH0KICAgIH0KCiAgICAv
+LyAtLS0gU3R1blNsYW0gU3RhdGUgTWFjaGluZSAtLS0KICAgIGlmIChzdHVu
+U2xhbUVuYWJsZWQpIHsKICAgICAgICBpZiAoc3R1blNsYW1TdGF0ZSA9PSAw
+ICYmIChHZXRBc3luY0tleVN0YXRlKFZLX1hCVVRUT04yKSAmIDB4ODAwMCkp
+IHsKICAgICAgICAgICAgU2VuZEtleURvd25FeChjdXJyZW50QXhlS2V5KTsK
+ICAgICAgICAgICAgc3R1blNsYW1OZXh0VGltZSA9IGN1cnJlbnRUaW1lICsg
+R2F1c3NpYW5TbGVlcCgxMi4wLCAxLjAsIDEwLCAxNSk7CiAgICAgICAgICAg
+IHN0dW5TbGFtU3RhdGUgPSAxOwogICAgICAgIH0KICAgICAgICBlbHNlIGlm
+IChzdHVuU2xhbVN0YXRlID09IDEgJiYgY3VycmVudFRpbWUgPj0gc3R1blNs
+YW1OZXh0VGltZSkgewogICAgICAgICAgICBTZW5kTW91c2VEb3duRXgoKTsK
+ICAgICAgICAgICAgc3R1blNsYW1OZXh0VGltZSA9IGN1cnJlbnRUaW1lICsg
+R2F1c3NpYW5TbGVlcCgxNS4wLCAxLjUsIDEyLCAxOCk7CiAgICAgICAgICAg
+IHN0dW5TbGFtU3RhdGUgPSAyOwogICAgICAgIH0KICAgICAgICBlbHNlIGlm
+IChzdHVuU2xhbVN0YXRlID09IDIgJiYgY3VycmVudFRpbWUgPj0gc3R1blNs
+YW1OZXh0VGltZSkgewogICAgICAgICAgICBTZW5kTW91c2VVcEV4KCk7CiAg
+ICAgICAgICAgIHN0dW5TbGFtTmV4dFRpbWUgPSBjdXJyZW50VGltZSArIEdh
+dXNzaWFuU2xlZXAoMTAuMCwgMS4wLCA4LCAxMyk7CiAgICAgICAgICAgIHN0
+dW5TbGFtU3RhdGUgPSAzOwogICAgICAgIH0KICAgICAgICBlbHNlIGlmIChz
+dHVuU2xhbVN0YXRlID09IDMgJiYgY3VycmVudFRpbWUgPj0gc3R1blNsYW1O
+ZXh0VGltZSkgewogICAgICAgICAgICBTZW5kS2V5RG93bkV4KGN1cnJlbnRN
+YWNlS2V5KTsKICAgICAgICAgICAgc3R1blNsYW1OZXh0VGltZSA9IGN1cnJl
+bnRUaW1lICsgR2F1c3NpYW5TbGVlcCgxNS4wLCAxLjUsIDEyLCAxOCk7CiAg
+ICAgICAgICAgIHN0dW5TbGFtU3RhdGUgPSA0OwogICAgICAgIH0KICAgICAg
+ICBlbHNlIGlmIChzdHVuU2xhbVN0YXRlID09IDQgJiYgY3VycmVudFRpbWUg
+Pj0gc3R1blNsYW1OZXh0VGltZSkgewogICAgICAgICAgICBTZW5kTW91c2VE
+b3duRXgoKTsKICAgICAgICAgICAgc3R1blNsYW1OZXh0VGltZSA9IGN1cnJl
+bnRUaW1lICsgR2F1c3NpYW5TbGVlcCgxMi4wLCAxLjAsIDEwLCAxNSk7CiAg
+ICAgICAgICAgIHN0dW5TbGFtU3RhdGUgPSA1OwogICAgICAgIH0KICAgICAg
+ICBlbHNlIGlmIChzdHVuU2xhbVN0YXRlID09IDUgJiYgY3VycmVudFRpbWUg
+Pj0gc3R1blNsYW1OZXh0VGltZSkgewogICAgICAgICAgICBTZW5kTW91c2VV
+cEV4KCk7CiAgICAgICAgICAgIFNlbmRLZXlVcEV4KGN1cnJlbnRBeGVLZXkp
+OwogICAgICAgICAgICBTZW5kS2V5VXBFeChjdXJyZW50TWFjZUtleSk7CiAg
+ICAgICAgICAgIHN0dW5TbGFtTmV4dFRpbWUgPSBjdXJyZW50VGltZSArIEdh
+dXNzaWFuU2xlZXAoMzUwLjAsIDI1LjAsIDMwMCwgNDUwKTsKICAgICAgICAg
+ICAgc3R1blNsYW1TdGF0ZSA9IDY7CiAgICAgICAgfQogICAgICAgIGVsc2Ug
+aWYgKHN0dW5TbGFtU3RhdGUgPT0gNiAmJiBjdXJyZW50VGltZSA+PSBzdHVu
+U2xhbU5leHRUaW1lKSB7CiAgICAgICAgICAgIHN0dW5TbGFtU3RhdGUgPSAw
+OwogICAgICAgIH0KICAgIH0gZWxzZSB7CiAgICAgICAgc3R1blNsYW1TdGF0
+ZSA9IDA7CiAgICB9CgogICAgLy8gLS0tIFNwZWFyRGFzaCBBdHRyaWJ1dGUg
+U3dhcHBpbmcgU3RhdGUgTWFjaGluZSAtLS0KICAgIGlmIChzcGVhckRhc2hF
+bmFibGVkKSB7CiAgICAgICAgaWYgKHNwZWFyRGFzaFN0YXRlID09IDAgJiYg
+KEdldEFzeW5jS2V5U3RhdGUoJzInKSAmIDB4ODAwMCkpIHsKICAgICAgICAg
+ICAgU2VuZEtleURvd25FeChjdXJyZW50Tm9DZEtleSk7CiAgICAgICAgICAg
+IHNwZWFyRGFzaE5leHRUaW1lID0gY3VycmVudFRpbWUgKyBHYXVzc2lhblNs
+ZWVwKDEyLjAsIDEuMCwgMTAsIDE1KTsKICAgICAgICAgICAgc3BlYXJEYXNo
+U3RhdGUgPSAxOwogICAgICAgIH0KICAgICAgICBlbHNlIGlmIChzcGVhckRh
+c2hTdGF0ZSA9PSAxICYmIGN1cnJlbnRUaW1lID49IHNwZWFyRGFzaE5leHRU
+aW1lKSB7CiAgICAgICAgICAgIFNlbmRNb3VzZURvd25FeCgpOwogICAgICAg
+ICAgICBzcGVhckRhc2hOZXh0VGltZSA9IGN1cnJlbnRUaW1lICsgR2F1c3Np
+YW5TbGVlcCgxMi4wLCAxLjAsIDEwLCAxNSk7CiAgICAgICAgICAgIHNwZWFy
+RGFzaFN0YXRlID0gMjsKICAgICAgICB9CiAgICAgICAgZWxzZSBpZiAoc3Bl
+YXJEYXNoU3RhdGUgPT0gMiAmJiBjdXJyZW50VGltZSA+PSBzcGVhckRhc2hO
+ZXh0VGltZSkgewogICAgICAgICAgICBTZW5kS2V5RG93bkV4KGN1cnJlbnRT
+cGVhcktleSk7CiAgICAgICAgICAgIHNwZWFyRGFzaE5leHRUaW1lID0gY3Vy
+cmVudFRpbWUgKyBHYXVzc2lhblNsZWVwKDEyLjAsIDEuMCwgMTAsIDE1KTsK
+ICAgICAgICAgICAgc3BlYXJEYXNoU3RhdGUgPSAzOwogICAgICAgIH0KICAg
+ICAgICBlbHNlIGlmIChzcGVhckRhc2hTdGF0ZSA9PSAzICYmIGN1cnJlbnRU
+aW1lID49IHNwZWFyRGFzaE5leHRUaW1lKSB7CiAgICAgICAgICAgIFNlbmRN
+b3VzZVVwRXgoKTsKICAgICAgICAgICAgU2VuZEtleVVwRXgoY3VycmVudE5v
+Q2RLZXkpOwogICAgICAgICAgICBTZW5kS2V5VXBFeChjdXJyZW50U3BlYXJL
+ZXkpOwogICAgICAgICAgICBzcGVhckRhc2hOZXh0VGltZSA9IGN1cnJlbnRU
+aW1lICsgR2F1c3NpYW5TbGVlcCgyNTAuMCwgMjAuMCwgMjAwLCAzMDApOwog
+ICAgICAgICAgICBzcGVhckRhc2hTdGF0ZSA9IDQ7CiAgICAgICAgfQogICAg
+ICAgIGVsc2UgaWYgKHNwZWFyRGFzaFN0YXRlID09IDQgJiYgY3VycmVudFRp
+bWUgPj0gc3BlYXJEYXNoTmV4dFRpbWUpIHsKICAgICAgICAgICAgc3BlYXJE
+YXNoU3RhdGUgPSAwOwogICAgICAgIH0KICAgIH0gZWxzZSB7CiAgICAgICAg
+c3BlYXJEYXNoU3RhdGUgPSAwOwogICAgfQp9Cg==
